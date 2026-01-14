@@ -47,4 +47,26 @@ export function safeSheetName(name: string) {
   return cleaned.slice(0, 31) || "Sheet";
 }
 
+export function uniqueSheetName(rawName: string, used: Set<string>) {
+  const cleaned = rawName.replace(/[\[\]\:\*\?\/\\]/g, " ").replace(/\s+/g, " ").trim() || "Sheet";
+  const base = cleaned.slice(0, 31);
+  if (!used.has(base)) {
+    used.add(base);
+    return base;
+  }
+
+  // Ensure suffix survives the 31-char limit (avoid truncating away uniqueness).
+  for (let i = 2; i < 10000; i++) {
+    const suffix = ` ${i}`;
+    const maxBase = Math.max(1, 31 - suffix.length);
+    const candidate = `${cleaned.slice(0, maxBase).trimEnd()}${suffix}`;
+    if (!used.has(candidate)) {
+      used.add(candidate);
+      return candidate;
+    }
+  }
+
+  throw new Error("לא ניתן ליצור שם גליון ייחודי.");
+}
+
 
