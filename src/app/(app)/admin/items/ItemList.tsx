@@ -191,7 +191,7 @@ export default function ItemList({
               </div>
 
               <div>
-                <label className="text-sm font-bold text-zinc-400 mb-3 block">סוג פריט</label>
+                <label className="text-sm font-bold text-zinc-400 mb-3 block">סמן אם רלוונטי לפריט</label>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <label className="flex items-center gap-3 p-3 rounded-xl border border-zinc-800 bg-zinc-950 cursor-pointer hover:border-zinc-700 transition-colors">
                     <input
