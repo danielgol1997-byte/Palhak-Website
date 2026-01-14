@@ -1,6 +1,6 @@
-import UnitTemplatesPage, { dynamic } from "../../unit-templates/page";
+import UnitTemplatesPage from "../../unit-templates/page";
 
-export { dynamic };
+export const dynamic = "force-dynamic";
 
 export default async function InventoryUnitTemplatesPage({
   searchParams,

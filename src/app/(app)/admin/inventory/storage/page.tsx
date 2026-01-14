@@ -1,6 +1,6 @@
-import StoragePage, { dynamic } from "../../storage/page";
+import StoragePage from "../../storage/page";
 
-export { dynamic };
+export const dynamic = "force-dynamic";
 
 export default async function InventoryStoragePage() {
   return StoragePage();
