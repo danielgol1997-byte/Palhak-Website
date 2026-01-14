@@ -151,7 +151,7 @@ export default function ItemList({
       )}
 
       <div className="mt-8 border-t border-zinc-800 pt-8">
-        <Pagination page={page} totalPages={totalPages} basePath="/admin/items" searchParams={initialSearchParams} />
+        <Pagination page={page} totalPages={totalPages} searchParams={initialSearchParams} />
       </div>
 
       {editingItem && (

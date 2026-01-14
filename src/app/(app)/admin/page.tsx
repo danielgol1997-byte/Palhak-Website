@@ -8,11 +8,8 @@ export default function AdminPage() {
 
       <section className="grid gap-4 sm:grid-cols-2">
         {[
-          { href: "/admin/departments", title: "מחלקות", desc: "ניהול מחלקות ושיוך חלוקות." },
-          { href: "/admin/positions", title: "תפקידים", desc: "תפקידים לפי מחלקה." },
-          { href: "/admin/items", title: "פריטים", desc: "ניהול פריטי ציוד במערכת." },
-          { href: "/admin/unit-templates", title: "יחידות", desc: "הוסף יחידה והגדר תכולה." },
-          { href: "/admin/storage", title: "מלאי", desc: "צפייה ועריכת מלאי במחסן." },
+          { href: "/admin/org/departments", title: "מחלקות / תפקידים", desc: "ניהול מחלקות ותפקידים לפי מחלקה." },
+          { href: "/admin/inventory/storage", title: "מלאי / פריטים / יחידות", desc: "מלאי במחסן, ניהול פריטים, וניהול יחידות." },
           { href: "/admin/users", title: "משתמשים", desc: "ניהול משתמשים ותפקידים." },
           { href: "/admin/requests", title: "בקשות", desc: "ניהול בקשות ציוד והעברות." },
           { href: "/admin/weapons-and-sights", title: "נשקים וצלמים", desc: "מעקב אחר נשקים וצלמים מוקצים." },

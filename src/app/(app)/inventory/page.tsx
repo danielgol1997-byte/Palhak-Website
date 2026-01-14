@@ -138,7 +138,6 @@ export default async function InventoryPage({
             <Pagination
               page={q.page}
               totalPages={totalPages}
-              basePath="/inventory"
               searchParams={resolvedSearchParams}
             />
           </div>

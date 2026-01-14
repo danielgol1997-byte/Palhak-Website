@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 export function Pagination({
   page,
@@ -8,10 +11,13 @@ export function Pagination({
 }: {
   page: number;
   totalPages: number;
-  basePath: string;
+  basePath?: string;
   searchParams: Record<string, string | string[] | undefined>;
 }) {
   if (totalPages <= 1) return null;
+
+  const pathname = usePathname();
+  const resolvedBasePath = basePath ?? pathname;
 
   const toFirst = () => {
     const usp = new URLSearchParams();
@@ -21,7 +27,7 @@ export function Pagination({
       if (val !== undefined) usp.set(k, val);
     }
     usp.set("page", "1");
-    return `${basePath}?${usp.toString()}`;
+    return `${resolvedBasePath}?${usp.toString()}`;
   };
 
   const toPage = (p: number) => {
@@ -31,7 +37,7 @@ export function Pagination({
       if (val !== undefined) usp.set(k, val);
     }
     usp.set("page", String(p));
-    return `${basePath}?${usp.toString()}`;
+    return `${resolvedBasePath}?${usp.toString()}`;
   };
 
   return (
