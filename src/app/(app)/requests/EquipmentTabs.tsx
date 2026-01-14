@@ -93,7 +93,7 @@ export function EquipmentTabs(props: EquipmentTabsProps) {
                 relative overflow-hidden rounded-2xl border-2 p-4 transition-all duration-300 cursor-pointer
                 ${isActive 
                   ? `${tab.activeColor} scale-105 shadow-2xl` 
-                  : `bg-gradient-to-br ${tab.color} hover:scale-105 opacity-40 hover:opacity-60`
+                  : `bg-gradient-to-br ${tab.color} hover:scale-105 opacity-70 hover:opacity-90`
                 }
               `}
             >
