@@ -74,14 +74,14 @@ export async function handleTransferItemAction(formData: FormData) {
     const now = new Date();
 
     if (parsed.data.action === "ACCEPT") {
-      // Accept: Move in-transit (PENDING_APPROVAL) assignments from sender -> recipient.
+      // Accept: Move in-transit (PENDING_APPROVAL) assignments from approving admin -> recipient.
       // This keeps transfers fully reversible (admin can later reset/deny and we can restore sender).
-      const senderId = requestItem.request.requesterId;
+      const adminId = requestItem.resolvedById ?? requestItem.request.requesterId;
       let remaining = requestItem.quantity;
 
       const pending = await tx.assignment.findMany({
         where: {
-          userId: senderId,
+          userId: adminId,
           equipmentItemId: requestItem.equipmentItemId,
           status: AssignmentStatus.PENDING_APPROVAL,
           active: true,
@@ -167,13 +167,13 @@ export async function handleTransferItemAction(formData: FormData) {
         },
       });
     } else {
-      // Reject: Restore sender in-transit assignments back to ASSIGNED, then update status.
-      const senderId = requestItem.request.requesterId;
+      // Reject: Keep items with the approving admin (assign them back), then update status.
+      const adminId = requestItem.resolvedById ?? requestItem.request.requesterId;
       let remaining = requestItem.quantity;
 
       const pending = await tx.assignment.findMany({
         where: {
-          userId: senderId,
+          userId: adminId,
           equipmentItemId: requestItem.equipmentItemId,
           status: AssignmentStatus.PENDING_APPROVAL,
           active: true,
@@ -191,7 +191,7 @@ export async function handleTransferItemAction(formData: FormData) {
           await tx.assignment.update({ where: { id: a.id }, data: { quantity: a.quantity - remaining } });
           await tx.assignment.create({
             data: {
-              userId: senderId,
+              userId: adminId,
               equipmentItemId: requestItem.equipmentItemId,
               quantity: remaining,
               status: AssignmentStatus.ASSIGNED,
@@ -208,10 +208,10 @@ export async function handleTransferItemAction(formData: FormData) {
       }
 
       if (remaining > 0) {
-        // Legacy fallback: recreate for sender if older flow deleted rows
+        // Legacy fallback: recreate for admin if older flow deleted rows
         await tx.assignment.create({
           data: {
-            userId: senderId,
+            userId: adminId,
             equipmentItemId: requestItem.equipmentItemId,
             quantity: remaining,
             status: AssignmentStatus.ASSIGNED,
