@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
-import { AuditEntity, RequestItemStatus } from "@prisma/client";
+import { AssignmentStatus, AuditEntity, RequestItemStatus } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
 
@@ -71,64 +71,78 @@ export async function handleTransferItemAction(formData: FormData) {
       throw new Error("פריט זה לא ממתין לקליטה.");
     }
 
-    if (parsed.data.action === "ACCEPT") {
-      // Accept: Create assignment for recipient
-      // Note: Items were already unassigned from sender when admin approved the transfer
-      
-      // Check if recipient already has this item (for non-serialized, combine quantities)
-      if (requestItem.serialNumber) {
-        // Serialized: always create new assignment
-        await tx.assignment.create({
-          data: {
-            userId: session.user.id,
-            equipmentItemId: requestItem.equipmentItemId,
-            quantity: requestItem.quantity,
-            status: "ASSIGNED",
-            active: true,
-            assignedById: requestItem.resolvedById,
-            assignedAt: new Date(),
-            serialNumber: requestItem.serialNumber,
-            clothingSize: requestItem.clothingSize,
-            shoeSize: requestItem.shoeSize,
-          },
-        });
-      } else {
-        // Non-serialized: check for existing assignment and combine
-        const existingAssignment = await tx.assignment.findFirst({
-          where: {
-            userId: session.user.id,
-            equipmentItemId: requestItem.equipmentItemId,
-            status: "ASSIGNED",
-            active: true,
-            serialNumber: null,
-          },
-        });
+    const now = new Date();
 
-        if (existingAssignment) {
-          // Update existing
+    if (parsed.data.action === "ACCEPT") {
+      // Accept: Move in-transit (PENDING_APPROVAL) assignments from sender -> recipient.
+      // This keeps transfers fully reversible (admin can later reset/deny and we can restore sender).
+      const senderId = requestItem.request.requesterId;
+      let remaining = requestItem.quantity;
+
+      const pending = await tx.assignment.findMany({
+        where: {
+          userId: senderId,
+          equipmentItemId: requestItem.equipmentItemId,
+          status: AssignmentStatus.PENDING_APPROVAL,
+          active: true,
+          ...(requestItem.serialNumber ? { serialNumber: requestItem.serialNumber } : { serialNumber: null }),
+        },
+        orderBy: [{ assignedAt: "asc" }],
+      });
+
+      for (const a of pending) {
+        if (remaining <= 0) break;
+        if (a.quantity <= remaining) {
           await tx.assignment.update({
-            where: { id: existingAssignment.id },
+            where: { id: a.id },
             data: {
-              quantity: existingAssignment.quantity + requestItem.quantity,
+              userId: session.user.id,
+              status: AssignmentStatus.ASSIGNED,
+              assignedAt: now,
+              assignedById: requestItem.resolvedById,
             },
           });
+          remaining -= a.quantity;
         } else {
-          // Create new
+          // Split sender pending approval
+          await tx.assignment.update({
+            where: { id: a.id },
+            data: { quantity: a.quantity - remaining },
+          });
           await tx.assignment.create({
             data: {
               userId: session.user.id,
               equipmentItemId: requestItem.equipmentItemId,
-              quantity: requestItem.quantity,
-              status: "ASSIGNED",
+              quantity: remaining,
+              status: AssignmentStatus.ASSIGNED,
               active: true,
               assignedById: requestItem.resolvedById,
-              assignedAt: new Date(),
-              serialNumber: null,
-              clothingSize: requestItem.clothingSize,
-              shoeSize: requestItem.shoeSize,
+              assignedAt: now,
+              serialNumber: a.serialNumber,
+              clothingSize: a.clothingSize,
+              shoeSize: a.shoeSize,
             },
           });
+          remaining = 0;
         }
+      }
+
+      if (remaining > 0) {
+        // Legacy fallback: if sender assignments were previously deleted (older data), create for recipient.
+        await tx.assignment.create({
+          data: {
+            userId: session.user.id,
+            equipmentItemId: requestItem.equipmentItemId,
+            quantity: remaining,
+            status: AssignmentStatus.ASSIGNED,
+            active: true,
+            assignedById: requestItem.resolvedById,
+            assignedAt: now,
+            serialNumber: requestItem.serialNumber ?? null,
+            clothingSize: requestItem.clothingSize,
+            shoeSize: requestItem.shoeSize,
+          },
+        });
       }
 
       // Update request item status
@@ -136,7 +150,7 @@ export async function handleTransferItemAction(formData: FormData) {
         where: { id: parsed.data.requestItemId },
         data: {
           status: RequestItemStatus.ACCEPTED,
-          recipientAcceptedAt: new Date(),
+          recipientAcceptedAt: now,
           recipientNotes: parsed.data.recipientNotes || null,
         },
       });
@@ -153,7 +167,64 @@ export async function handleTransferItemAction(formData: FormData) {
         },
       });
     } else {
-      // Reject: Update status and add notes
+      // Reject: Restore sender in-transit assignments back to ASSIGNED, then update status.
+      const senderId = requestItem.request.requesterId;
+      let remaining = requestItem.quantity;
+
+      const pending = await tx.assignment.findMany({
+        where: {
+          userId: senderId,
+          equipmentItemId: requestItem.equipmentItemId,
+          status: AssignmentStatus.PENDING_APPROVAL,
+          active: true,
+          ...(requestItem.serialNumber ? { serialNumber: requestItem.serialNumber } : { serialNumber: null }),
+        },
+        orderBy: [{ assignedAt: "asc" }],
+      });
+
+      for (const a of pending) {
+        if (remaining <= 0) break;
+        if (a.quantity <= remaining) {
+          await tx.assignment.update({ where: { id: a.id }, data: { status: AssignmentStatus.ASSIGNED } });
+          remaining -= a.quantity;
+        } else {
+          await tx.assignment.update({ where: { id: a.id }, data: { quantity: a.quantity - remaining } });
+          await tx.assignment.create({
+            data: {
+              userId: senderId,
+              equipmentItemId: requestItem.equipmentItemId,
+              quantity: remaining,
+              status: AssignmentStatus.ASSIGNED,
+              active: true,
+              assignedById: a.assignedById,
+              assignedAt: now,
+              serialNumber: a.serialNumber,
+              clothingSize: a.clothingSize,
+              shoeSize: a.shoeSize,
+            },
+          });
+          remaining = 0;
+        }
+      }
+
+      if (remaining > 0) {
+        // Legacy fallback: recreate for sender if older flow deleted rows
+        await tx.assignment.create({
+          data: {
+            userId: senderId,
+            equipmentItemId: requestItem.equipmentItemId,
+            quantity: remaining,
+            status: AssignmentStatus.ASSIGNED,
+            active: true,
+            assignedById: requestItem.resolvedById,
+            assignedAt: now,
+            serialNumber: requestItem.serialNumber ?? null,
+            clothingSize: requestItem.clothingSize,
+            shoeSize: requestItem.shoeSize,
+          },
+        });
+      }
+
       await tx.requestItem.update({
         where: { id: parsed.data.requestItemId },
         data: {
