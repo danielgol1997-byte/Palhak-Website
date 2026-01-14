@@ -8,7 +8,14 @@ export const dynamic = "force-dynamic";
 export default async function UsersPage() {
   await requireRole(Role.ADMIN);
 
+  const hiddenInactiveNames = ["ציון ציוני", "ישראל כהן"];
+
   const users = await prisma.user.findMany({
+    where: {
+      NOT: {
+        AND: [{ active: false }, { name: { in: hiddenInactiveNames } }],
+      },
+    },
     orderBy: { name: "asc" },
     select: {
       id: true,

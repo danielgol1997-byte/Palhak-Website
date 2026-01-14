@@ -13,7 +13,18 @@ export default async function AppLayout({
   const session = await getServerSession(authOptions);
 
   return (
-    <div className="min-h-dvh bg-zinc-950 text-zinc-50">
+    <div className="relative min-h-dvh bg-zinc-950 text-zinc-50">
+      {/* Background image layer (faded/low-contrast) */}
+      <div
+        className="pointer-events-none absolute inset-0 -z-10 bg-cover bg-center opacity-[0.14] grayscale-[0.15] contrast-75 saturate-75"
+        style={{ backgroundImage: "url(/bg.jpg)" }}
+        aria-hidden="true"
+      />
+      {/* Soft vignette so content stays readable */}
+      <div
+        className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b from-zinc-950/70 via-zinc-950/60 to-zinc-950"
+        aria-hidden="true"
+      />
       <header className="sticky top-0 z-20 border-b border-zinc-800 bg-zinc-900/90 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-3 min-w-0">
