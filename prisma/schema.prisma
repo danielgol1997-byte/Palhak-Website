@@ -1,0 +1,444 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id                String           @id @default(cuid())
+  name              String
+  email             String           @unique
+  emailVerified     DateTime?
+  role              Role             @default(USER)
+  active            Boolean          @default(true)
+  onboardedAt       DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  firstName         String?
+  lastName          String?
+  personalNumber    String?          @unique
+  phoneNumber       String?
+  shirtSize         ClothingSize?
+  pantsSize         ClothingSize?
+  shoeSize          ShoeSize?
+  weapon            Weapon?
+  weaponItemId      String?
+  accounts          Account[]
+  assignmentsGiven     Assignment[]     @relation("AssignedBy")
+  assignments          Assignment[]
+  auditLogs            AuditLog[]       @relation("AuditActor")
+  requests             Request[]        @relation("RequestRequester")
+  requestsResolved     Request[]        @relation("RequestResolvedBy")
+  requestsReceived     Request[]        @relation("RequestRecipient")
+  requestItemsResolved RequestItem[]    @relation("RequestItemResolvedBy")
+  sessions             Session[]
+  transfersApproved    Transfer[]       @relation("TransferApprovedBy")
+  transfersFrom        Transfer[]       @relation("TransferFrom")
+  transfersTo          Transfer[]       @relation("TransferTo")
+  userDepartments      UserDepartment[]
+  userPositions        UserPosition[]
+
+  @@index([role])
+  @@index([active])
+}
+
+model Department {
+  id              String               @id @default(cuid())
+  name            String               @unique
+  active          Boolean              @default(true)
+  sortOrder       Int                  @default(0)
+  divisions       DepartmentDivision[]
+  positions       Position[]
+  userDepartments UserDepartment[]
+
+  @@index([active, sortOrder])
+}
+
+model DepartmentDivision {
+  departmentId String
+  division     Division
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@id([departmentId, division])
+  @@index([division])
+}
+
+model Position {
+  id            String         @id @default(cuid())
+  departmentId  String
+  name          String
+  active        Boolean        @default(true)
+  sortOrder     Int            @default(0)
+  department    Department     @relation(fields: [departmentId], references: [id])
+  userPositions UserPosition[]
+
+  @@unique([departmentId, name])
+  @@index([departmentId, active, sortOrder])
+}
+
+model UserDepartment {
+  userId       String
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, departmentId])
+  @@index([departmentId])
+}
+
+model UserPosition {
+  userId     String
+  positionId String
+  position   Position @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, positionId])
+  @@index([positionId])
+}
+
+model EquipmentCategory {
+  id        String          @id @default(cuid())
+  division  Division
+  name      String
+  active    Boolean         @default(true)
+  sortOrder Int             @default(0)
+  items     EquipmentItem[]
+
+  @@unique([division, name])
+  @@index([division, active, sortOrder])
+}
+
+model EquipmentItem {
+  id                 String             @id @default(cuid())
+  categoryId         String
+  name               String
+  active             Boolean            @default(true)
+  isWeapon           Boolean            @default(false)
+  isSight            Boolean            @default(false)
+  isClothing         Boolean            @default(false)
+  isShoe             Boolean            @default(false)
+  assignments        Assignment[]
+  category           EquipmentCategory  @relation(fields: [categoryId], references: [id])
+  requestItems       RequestItem[]
+  storageInventories StorageInventory[]
+  transferItems      TransferItem[]
+  unitTemplateItems  UnitTemplateItem[]
+
+  @@unique([categoryId, name])
+  @@index([categoryId, active])
+}
+
+model UnitTemplate {
+  id            String             @id @default(cuid())
+  name          String             @unique
+  active        Boolean            @default(true)
+  transferItems TransferItem[]
+  items         UnitTemplateItem[]
+
+  @@index([active])
+}
+
+model UnitTemplateItem {
+  unitTemplateId   String
+  equipmentItemId  String
+  quantityRequired Int
+  equipmentItem    EquipmentItem @relation(fields: [equipmentItemId], references: [id])
+  unitTemplate     UnitTemplate  @relation(fields: [unitTemplateId], references: [id], onDelete: Cascade)
+
+  @@id([unitTemplateId, equipmentItemId])
+  @@index([equipmentItemId])
+}
+
+model Assignment {
+  id              String           @id @default(cuid())
+  userId          String
+  equipmentItemId String
+  quantity        Int
+  status          AssignmentStatus @default(ASSIGNED)
+  active          Boolean          @default(true)
+  assignedById    String?
+  assignedAt      DateTime         @default(now())
+  serialNumber    String?
+  clothingSize    ClothingSize?
+  shoeSize        ShoeSize?
+  assignedBy      User?            @relation("AssignedBy", fields: [assignedById], references: [id])
+  equipmentItem   EquipmentItem    @relation(fields: [equipmentItemId], references: [id])
+  user            User             @relation(fields: [userId], references: [id])
+
+  @@index([userId, equipmentItemId])
+  @@index([equipmentItemId])
+  @@index([status])
+  @@index([active])
+}
+
+model StorageLocation {
+  id          String             @id @default(cuid())
+  name        String             @unique
+  active      Boolean            @default(true)
+  inventories StorageInventory[]
+
+  @@index([active])
+}
+
+model StorageInventory {
+  id              String          @id @default(cuid())
+  locationId      String
+  equipmentItemId String
+  quantity        Int
+  equipmentItem   EquipmentItem   @relation(fields: [equipmentItemId], references: [id])
+  location        StorageLocation @relation(fields: [locationId], references: [id])
+
+  @@unique([locationId, equipmentItemId])
+  @@index([equipmentItemId])
+}
+
+model Transfer {
+  id           String         @id @default(cuid())
+  fromUserId   String
+  toUserId     String
+  status       TransferStatus @default(PENDING_COMMANDER_APPROVAL)
+  createdAt    DateTime       @default(now())
+  approvedById String?
+  approvedAt   DateTime?
+  receivedAt   DateTime?
+  rejectedAt   DateTime?
+  cancelledAt  DateTime?
+  approvedBy   User?          @relation("TransferApprovedBy", fields: [approvedById], references: [id])
+  fromUser     User           @relation("TransferFrom", fields: [fromUserId], references: [id])
+  toUser       User           @relation("TransferTo", fields: [toUserId], references: [id])
+  items        TransferItem[]
+
+  @@index([fromUserId, createdAt])
+  @@index([toUserId, createdAt])
+  @@index([status, createdAt])
+}
+
+model TransferItem {
+  id              String        @id @default(cuid())
+  transferId      String
+  equipmentItemId String
+  quantity        Int
+  unitTemplateId  String?
+  equipmentItem   EquipmentItem @relation(fields: [equipmentItemId], references: [id])
+  transfer        Transfer      @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  unitTemplate    UnitTemplate? @relation(fields: [unitTemplateId], references: [id])
+
+  @@index([transferId])
+  @@index([equipmentItemId])
+  @@index([unitTemplateId])
+}
+
+model Request {
+  id           String        @id @default(cuid())
+  requesterId  String
+  type         RequestType
+  priority     Priority      @default(MEDIUM)
+  status       RequestStatus @default(OPEN)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  viewedAt     DateTime?
+  userNotes    String?
+  adminNotes   String?
+  resolvedAt   DateTime?
+  resolvedById String?
+  recipientId  String?       // For TRANSFER requests - who receives the equipment
+  requester    User          @relation("RequestRequester", fields: [requesterId], references: [id])
+  resolvedBy   User?         @relation("RequestResolvedBy", fields: [resolvedById], references: [id])
+  recipient    User?         @relation("RequestRecipient", fields: [recipientId], references: [id])
+  items        RequestItem[]
+
+  @@index([requesterId, createdAt])
+  @@index([status, createdAt])
+  @@index([priority])
+  @@index([recipientId])
+}
+
+model RequestItem {
+  id                   String            @id @default(cuid())
+  requestId            String
+  equipmentItemId      String
+  quantity             Int
+  status               RequestItemStatus @default(PENDING)
+  serialNumber         String?
+  clothingSize         ClothingSize?
+  shoeSize             ShoeSize?
+  resolvedAt           DateTime?
+  resolvedById         String?
+  recipientNotes       String?           // Notes from recipient if they reject
+  recipientAcceptedAt  DateTime?         // When recipient accepted the transfer
+  equipmentItem        EquipmentItem     @relation(fields: [equipmentItemId], references: [id])
+  request              Request           @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  resolvedBy           User?             @relation("RequestItemResolvedBy", fields: [resolvedById], references: [id])
+
+  @@index([requestId])
+  @@index([equipmentItemId])
+}
+
+model AuditLog {
+  id           String      @id @default(cuid())
+  actorId      String?
+  entity       AuditEntity
+  entityId     String
+  action       String
+  beforeJson   Json?
+  afterJson    Json?
+  metadataJson Json?
+  createdAt    DateTime    @default(now())
+  actor        User?       @relation("AuditActor", fields: [actorId], references: [id])
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  USER
+}
+
+enum Division {
+  COMBAT
+  LOGISTICS
+  MEDICAL
+}
+
+enum AssignmentStatus {
+  ASSIGNED
+  MISSING
+  DAMAGED
+  STOLEN
+  USED
+  PENDING_APPROVAL
+}
+
+enum TransferStatus {
+  PENDING_COMMANDER_APPROVAL
+  PENDING_RECEIVER_CONFIRMATION
+  COMPLETED
+  REJECTED
+  CANCELLED
+}
+
+enum RequestType {
+  NEW_EQUIPMENT
+  RETURN_EQUIPMENT
+  MISSING
+  DAMAGED
+  STOLEN
+  USED
+  ADMIN_ASSIGNMENT
+  TRANSFER
+}
+
+enum RequestStatus {
+  OPEN
+  IN_PROGRESS
+  FULFILLED
+  DENIED
+  CANCELLED
+  PARTIALLY_FULFILLED
+}
+
+enum RequestItemStatus {
+  PENDING
+  FULFILLED
+  DENIED
+  CANCELLED
+  AWAITING_ACCEPTANCE  // Transfer approved by admin, waiting for recipient
+  ACCEPTED             // Transfer accepted by recipient
+  REJECTED_BY_RECIPIENT // Transfer rejected by recipient
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum ClothingSize {
+  XS
+  S
+  M
+  L
+  XL
+  XXL
+  XXXL
+}
+
+enum ShoeSize {
+  SIZE_36
+  SIZE_37
+  SIZE_38
+  SIZE_39
+  SIZE_40
+  SIZE_41
+  SIZE_42
+  SIZE_43
+  SIZE_44
+  SIZE_45
+  SIZE_46
+  SIZE_47
+  SIZE_48
+}
+
+enum Weapon {
+  M16
+  TAVOR
+}
+
+enum AuditEntity {
+  USER
+  DEPARTMENT
+  POSITION
+  CATEGORY
+  ITEM
+  UNIT_TEMPLATE
+  ASSIGNMENT
+  TRANSFER
+  REQUEST
+  STORAGE_LOCATION
+  STORAGE_INVENTORY
+  REQUEST_ITEM
+}
