@@ -1,6 +1,6 @@
-import ItemsPage, { dynamic } from "../../items/page";
+import ItemsPage from "../../items/page";
 
-export { dynamic };
+export const dynamic = "force-dynamic";
 
 export default async function InventoryItemsPage({
   searchParams,
