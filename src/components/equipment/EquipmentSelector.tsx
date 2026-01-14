@@ -102,7 +102,7 @@ export function EquipmentSelector({
       isShoe: item.isShoe,
     };
 
-    onItemsChange([...selectedItems, newItem]);
+    onItemsChange([newItem, ...selectedItems]);
   };
 
   const handleAddUnit = (unit: UnitTemplate) => {
@@ -123,7 +123,7 @@ export function EquipmentSelector({
       };
     });
 
-    onItemsChange([...selectedItems, ...unitItems]);
+    onItemsChange([...unitItems, ...selectedItems]);
     setExpandedUnits((prev) => new Set([...prev, unit.id]));
   };
 
@@ -189,18 +189,6 @@ export function EquipmentSelector({
 
   return (
     <div className="space-y-6">
-      {/* Search and Filters */}
-      <div>
-        <label className="text-sm font-bold text-zinc-400 mb-2 block">חיפוש פריט או יחידה</label>
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="חפש לפי שם פריט, קטגוריה או יחידה..."
-          className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-sm text-zinc-50 placeholder:text-zinc-600 focus:ring-2 focus:ring-zinc-500 outline-none transition-all"
-        />
-      </div>
-
       {/* Division Filters */}
       <div>
         <label className="text-sm font-bold text-zinc-400 mb-2 block">סינון לפי חטיבה</label>
@@ -250,6 +238,18 @@ export function EquipmentSelector({
             {divisionLabel(Division.MEDICAL)}
           </button>
         </div>
+      </div>
+
+      {/* Search */}
+      <div>
+        <label className="text-sm font-bold text-zinc-400 mb-2 block">חיפוש פריט או יחידה</label>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="חפש לפי שם פריט, קטגוריה או יחידה..."
+          className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-sm text-zinc-50 placeholder:text-zinc-600 focus:ring-2 focus:ring-zinc-500 outline-none transition-all"
+        />
       </div>
 
       {/* Toggle between Items and Units */}

@@ -64,6 +64,7 @@ export function TransferForm({ currentUserId, userAssignments, availableUnits, a
   const [search, setSearch] = useState("");
   const [selectedDivision, setSelectedDivision] = useState<Division | "ALL">("ALL");
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
+  const [showUnits, setShowUnits] = useState(false);
   const [recipientId, setRecipientId] = useState("");
   const [userNotes, setUserNotes] = useState("");
   const [unitNotes, setUnitNotes] = useState<string>("");
@@ -159,12 +160,12 @@ export function TransferForm({ currentUserId, userAssignments, availableUnits, a
         
         const itemId = `${item.id}_${assignment.serialNumber}`;
         if (!selectedItems.find(si => si.id === itemId)) {
-          setSelectedItems(prev => [...prev, {
+          setSelectedItems(prev => [{
             ...item,
             id: itemId,
             quantity: 1,
             serialNumber: assignment.serialNumber,
-          }]);
+          }, ...prev]);
         }
       });
     } else {
@@ -179,13 +180,13 @@ export function TransferForm({ currentUserId, userAssignments, availableUnits, a
         } else {
           // Only 1 available, add it directly
           const firstAssignment = userHas && userHas.length > 0 ? userHas[0] : null;
-          setSelectedItems(prev => [...prev, {
+          setSelectedItems(prev => [{
             ...item,
             quantity: 1,
             serialNumber: null,
             clothingSize: firstAssignment?.clothingSize || null,
             shoeSize: firstAssignment?.shoeSize || null,
-          }]);
+          }, ...prev]);
         }
       }
     }
@@ -198,13 +199,13 @@ export function TransferForm({ currentUserId, userAssignments, availableUnits, a
     const userHas = userItemsMap.get(item.id);
     const firstAssignment = userHas && userHas.length > 0 ? userHas[0] : null;
     
-    setSelectedItems(prev => [...prev, {
+    setSelectedItems(prev => [{
       ...item,
       quantity,
       serialNumber: null,
       clothingSize: firstAssignment?.clothingSize || null,
       shoeSize: firstAssignment?.shoeSize || null,
-    }]);
+    }, ...prev]);
     
     setQuantityPrompt(null);
   };
@@ -264,7 +265,7 @@ export function TransferForm({ currentUserId, userAssignments, availableUnits, a
       setUnitNotes(`הפריטים הבאים חסרים אצלך ולא יכללו בבקשת ההעברה:\n${missingItems.join('\n')}`);
     }
 
-    setSelectedItems(prev => [...prev, ...addedItems]);
+    setSelectedItems(prev => [...addedItems, ...prev]);
   };
 
   const handleUpdateQuantity = (itemId: string, quantity: number) => {
@@ -399,82 +400,136 @@ export function TransferForm({ currentUserId, userAssignments, availableUnits, a
         )}
       </div>
 
-      {/* Search and Filter */}
+      {/* Equipment Selection */}
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-sm">
-        <div className="space-y-4">
-          <div>
-            <label className="text-sm font-bold text-zinc-400 mb-2 block">חיפוש פריטים</label>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="חפש בציוד המוקצה..."
-              className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-sm text-zinc-50 placeholder:text-zinc-600 focus:ring-2 focus:ring-zinc-500 outline-none"
-            />
-          </div>
+        <p className="text-sm text-zinc-400 mb-4">בחר פריטים להעברה</p>
 
-          <div>
-            <label className="text-sm font-bold text-zinc-400 mb-2 block">סינון לפי חלוקה</label>
-            <div className="flex gap-2">
+        {/* Division Filters */}
+        <div className="mb-4">
+          <label className="text-sm font-bold text-zinc-400 mb-2 block">סינון לפי חטיבה</label>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedDivision("ALL")}
+              className={`flex-1 h-10 px-4 rounded-xl text-xs font-bold transition-all ${
+                selectedDivision === "ALL"
+                  ? "bg-zinc-50 text-zinc-950"
+                  : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
+              }`}
+            >
+              הכל
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedDivision(Division.LOGISTICS)}
+              className={`flex-1 h-10 px-4 rounded-xl text-xs font-bold transition-all ${
+                selectedDivision === Division.LOGISTICS
+                  ? "bg-blue-600 text-white"
+                  : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
+              }`}
+            >
+              {divisionLabel(Division.LOGISTICS)}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedDivision(Division.COMBAT)}
+              className={`flex-1 h-10 px-4 rounded-xl text-xs font-bold transition-all ${
+                selectedDivision === Division.COMBAT
+                  ? "bg-red-600 text-white"
+                  : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
+              }`}
+            >
+              {divisionLabel(Division.COMBAT)}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedDivision(Division.MEDICAL)}
+              className={`flex-1 h-10 px-4 rounded-xl text-xs font-bold transition-all ${
+                selectedDivision === Division.MEDICAL
+                  ? "bg-emerald-600 text-white"
+                  : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
+              }`}
+            >
+              {divisionLabel(Division.MEDICAL)}
+            </button>
+          </div>
+        </div>
+
+        {/* Search */}
+        <div className="mb-4">
+          <label className="text-sm font-bold text-zinc-400 mb-2 block">חיפוש פריטים</label>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="חפש בציוד המוקצה..."
+            className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-sm text-zinc-50 placeholder:text-zinc-600 focus:ring-2 focus:ring-zinc-500 outline-none"
+          />
+        </div>
+
+        {/* Toggle between Items and Units */}
+        {availableUnits.length > 0 && (
+          <div className="mb-4">
+            <div className="flex gap-2 border-b border-zinc-800">
               <button
                 type="button"
-                onClick={() => setSelectedDivision("ALL")}
-                className={`flex-1 h-10 px-4 rounded-xl text-xs font-bold transition-all ${
-                  selectedDivision === "ALL"
-                    ? "bg-zinc-50 text-zinc-950"
-                    : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
+                onClick={() => setShowUnits(false)}
+                className={`px-4 py-2 text-sm font-bold transition-all ${
+                  !showUnits
+                    ? "text-zinc-50 border-b-2 border-zinc-50"
+                    : "text-zinc-500 hover:text-zinc-300"
                 }`}
               >
-                הכל
+                פריטים ({filteredItems.length})
               </button>
               <button
                 type="button"
-                onClick={() => setSelectedDivision(Division.LOGISTICS)}
-                className={`flex-1 h-10 px-4 rounded-xl text-xs font-bold transition-all ${
-                  selectedDivision === Division.LOGISTICS
-                    ? "bg-blue-600 text-white"
-                    : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
+                onClick={() => setShowUnits(true)}
+                className={`px-4 py-2 text-sm font-bold transition-all ${
+                  showUnits
+                    ? "text-zinc-50 border-b-2 border-zinc-50"
+                    : "text-zinc-500 hover:text-zinc-300"
                 }`}
               >
-                {divisionLabel(Division.LOGISTICS)}
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedDivision(Division.COMBAT)}
-                className={`flex-1 h-10 px-4 rounded-xl text-xs font-bold transition-all ${
-                  selectedDivision === Division.COMBAT
-                    ? "bg-red-600 text-white"
-                    : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
-                }`}
-              >
-                {divisionLabel(Division.COMBAT)}
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedDivision(Division.MEDICAL)}
-                className={`flex-1 h-10 px-4 rounded-xl text-xs font-bold transition-all ${
-                  selectedDivision === Division.MEDICAL
-                    ? "bg-emerald-600 text-white"
-                    : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
-                }`}
-              >
-                {divisionLabel(Division.MEDICAL)}
+                יחידות ({availableUnits.length})
               </button>
             </div>
           </div>
-        </div>
-      </div>
+        )}
 
-      {/* Items and Units */}
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-sm">
-        <div className="space-y-6">
-          {/* Individual Items */}
-          <div>
-            <label className="text-sm font-bold text-zinc-400 mb-2 block">
-              פריטים זמינים ({filteredItems.length})
-            </label>
-            <div className="rounded-xl border border-zinc-800 bg-zinc-950 max-h-64 overflow-y-auto scrollbar-hide">
-              {filteredItems.length === 0 ? (
+        {/* Available Items or Units List */}
+        <div>
+          <label className="text-sm font-bold text-zinc-400 mb-2 block">
+            {showUnits ? "בחר יחידה להוספה" : "בחר פריטים להוספה"}
+          </label>
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950 max-h-64 overflow-y-auto scrollbar-hide">
+            {showUnits && availableUnits.length > 0 ? (
+              availableUnits.length === 0 ? (
+                <div className="py-8 text-center text-sm text-zinc-500">לא נמצאו יחידות</div>
+              ) : (
+                availableUnits.map((unit) => (
+                  <button
+                    key={unit.id}
+                    type="button"
+                    onClick={() => handleAddUnit(unit)}
+                    className="w-full px-4 py-3 text-right border-b border-zinc-800 last:border-0 hover:bg-zinc-900 transition-all"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-bold text-sm text-zinc-50">{unit.name}</div>
+                        <div className="text-xs text-zinc-500 mt-0.5">
+                          {unit.items.length} פריטים ביחידה
+                        </div>
+                      </div>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-500">
+                        <path d="M12 5v14M5 12h14" />
+                      </svg>
+                    </div>
+                  </button>
+                ))
+              )
+            ) : (
+              filteredItems.length === 0 ? (
                 <div className="py-8 text-center text-sm text-zinc-500">אין ציוד מוקצה</div>
               ) : (
                 filteredItems.map((item) => {
@@ -490,18 +545,17 @@ export function TransferForm({ currentUserId, userAssignments, availableUnits, a
                       className="w-full px-4 py-3 text-right border-b border-zinc-800 last:border-0 hover:bg-zinc-900 transition-all"
                     >
                       <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-bold text-sm text-zinc-50 flex items-center gap-2">
-                            {item.name}
-                            {isSerial && (
-                              <span className="px-2 py-0.5 rounded-full bg-orange-900/20 text-orange-400 border border-orange-900/40 text-xs font-bold">
-                                צ
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-xs text-zinc-500 mt-0.5">
-                            {divisionLabel(item.category.division)} · 
-                            {isSerial ? ` ${userHas?.length || 0} יח׳` : ` כמות: ${totalQty}`}
+                        <div className="flex items-center gap-2">
+                          {isSerial && (
+                            <span className="flex-shrink-0 px-2 py-0.5 rounded-full bg-orange-900/20 text-orange-400 border border-orange-900/40 text-xs font-bold">
+                              צ
+                            </span>
+                          )}
+                          <div>
+                            <div className="font-bold text-sm text-zinc-50">{item.name}</div>
+                            <div className="text-xs text-zinc-500 mt-0.5">
+                              {divisionLabel(item.category.division)} · זמין: {getAvailableQuantity(item.id)}
+                            </div>
                           </div>
                         </div>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-500">
@@ -511,39 +565,8 @@ export function TransferForm({ currentUserId, userAssignments, availableUnits, a
                     </button>
                   );
                 })
-              )}
-            </div>
-          </div>
-
-          {/* Units */}
-          <div>
-            <label className="text-sm font-bold text-zinc-400 mb-2 block">
-              יחידות ({availableUnits.length})
-            </label>
-            <div className="rounded-xl border border-zinc-800 bg-zinc-950 max-h-64 overflow-y-auto scrollbar-hide">
-              {availableUnits.length === 0 ? (
-                <div className="py-8 text-center text-sm text-zinc-500">אין יחידות זמינות</div>
-              ) : (
-                availableUnits.map((unit) => (
-                  <button
-                    key={unit.id}
-                    type="button"
-                    onClick={() => handleAddUnit(unit)}
-                    className="w-full px-4 py-3 text-right border-b border-zinc-800 last:border-0 hover:bg-zinc-900 transition-all"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-bold text-sm text-zinc-50">{unit.name}</div>
-                        <div className="text-xs text-zinc-500 mt-0.5">{unit.items.length} פריטים</div>
-                      </div>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-500">
-                        <path d="M12 5v14M5 12h14" />
-                      </svg>
-                    </div>
-                  </button>
-                ))
-              )}
-            </div>
+              )
+            )}
           </div>
         </div>
       </div>

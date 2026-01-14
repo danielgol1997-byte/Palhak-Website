@@ -62,6 +62,7 @@ export function RequestForm({ items, unitTemplates, userAssignments, pendingDecl
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showUnits, setShowUnits] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -292,7 +293,7 @@ export function RequestForm({ items, unitTemplates, userAssignments, pendingDecl
       newItem.shoeSize = userSizes.shoeSize;
     }
     
-    setSelectedItems((prev) => [...prev, newItem]);
+    setSelectedItems((prev) => [newItem, ...prev]);
     setSearch("");
     setShowDropdown(false);
     setSuccessMessage(null);
@@ -313,7 +314,7 @@ export function RequestForm({ items, unitTemplates, userAssignments, pendingDecl
     });
 
     if (newItems.length > 0) {
-      setSelectedItems((prev) => [...prev, ...newItems]);
+      setSelectedItems((prev) => [...newItems, ...prev]);
       setSuccessMessage(`נוספו ${newItems.length} פריטים מתבנית "${template.name}"`);
       setErrorMessage(null);
     } else {
@@ -470,16 +471,70 @@ export function RequestForm({ items, unitTemplates, userAssignments, pendingDecl
         </div>
       )}
 
-      {/* Search and Filter with Dropdown */}
-      <div>
-        <p className="text-sm text-zinc-400 mb-3">
+      {/* Equipment Selection */}
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+        <p className="text-sm text-zinc-400 mb-4">
           חפש והוסף פריטים לבקשה
           {(requestType === RequestType.STOLEN || requestType === RequestType.DAMAGED || requestType === RequestType.MISSING) && (
             <span className="mr-2 text-amber-400">· רק פריטים מהמלאי האישי שלך ללא הצהרות ממתינות יוצגו</span>
           )}
         </p>
-        <div className="flex gap-2 mb-2">
-          <div className="relative flex-1">
+
+        {/* Division Filters */}
+        <div className="mb-4">
+          <label className="text-sm font-bold text-zinc-400 mb-2 block">סינון לפי חטיבה</label>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedDivision("ALL")}
+              className={`flex-1 h-10 px-4 rounded-xl text-xs font-bold transition-all ${
+                selectedDivision === "ALL"
+                  ? "bg-zinc-50 text-zinc-950"
+                  : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
+              }`}
+            >
+              הכל
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedDivision(Division.LOGISTICS)}
+              className={`flex-1 h-10 px-4 rounded-xl text-xs font-bold transition-all ${
+                selectedDivision === Division.LOGISTICS
+                  ? "bg-blue-600 text-white"
+                  : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
+              }`}
+            >
+              {divisionLabel(Division.LOGISTICS)}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedDivision(Division.COMBAT)}
+              className={`flex-1 h-10 px-4 rounded-xl text-xs font-bold transition-all ${
+                selectedDivision === Division.COMBAT
+                  ? "bg-red-600 text-white"
+                  : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
+              }`}
+            >
+              {divisionLabel(Division.COMBAT)}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedDivision(Division.MEDICAL)}
+              className={`flex-1 h-10 px-4 rounded-xl text-xs font-bold transition-all ${
+                selectedDivision === Division.MEDICAL
+                  ? "bg-emerald-600 text-white"
+                  : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
+              }`}
+            >
+              {divisionLabel(Division.MEDICAL)}
+            </button>
+          </div>
+        </div>
+
+        {/* Search */}
+        <div className="mb-4">
+          <label className="text-sm font-bold text-zinc-400 mb-2 block">חיפוש פריטים</label>
+          <div className="relative">
             <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none z-10">
               <svg
                 width="14"
@@ -541,22 +596,115 @@ export function RequestForm({ items, unitTemplates, userAssignments, pendingDecl
               </div>
             )}
           </div>
-          <select
-            className="h-12 rounded-xl border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-50 outline-none focus:ring-2 focus:ring-zinc-500 transition-all cursor-pointer min-w-[120px]"
-            value={selectedDivision}
-            onChange={(e) => setSelectedDivision(e.target.value as Division | "ALL")}
-          >
-            <option value="ALL">כל החלוקות</option>
-            {Object.values(Division).map((d) => (
-              <option key={d} value={d}>
-                {divisionLabel(d)}
-              </option>
-            ))}
-          </select>
         </div>
-        <p className="text-xs text-zinc-600">
-          לחץ על שדה החיפוש לפתיחת רשימת הפריטים או התחל להקליד לסינון
-        </p>
+
+        {/* Toggle between Items and Units */}
+        {unitTemplates.length > 0 && requestType === RequestType.NEW_EQUIPMENT && (
+          <div className="mb-4">
+            <div className="flex gap-2 border-b border-zinc-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowUnits(false);
+                  setShowDropdown(true);
+                }}
+                className={`px-4 py-2 text-sm font-bold transition-all ${
+                  !showUnits
+                    ? "text-zinc-50 border-b-2 border-zinc-50"
+                    : "text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                פריטים ({availableItems.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowUnits(true);
+                  setShowDropdown(true);
+                }}
+                className={`px-4 py-2 text-sm font-bold transition-all ${
+                  showUnits
+                    ? "text-zinc-50 border-b-2 border-zinc-50"
+                    : "text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                יחידות ({unitTemplates.length})
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Available Items or Units List */}
+        <div>
+          <label className="text-sm font-bold text-zinc-400 mb-2 block">
+            {showUnits ? "בחר יחידה להוספה" : "בחר פריטים להוספה"}
+          </label>
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950 max-h-64 overflow-y-auto scrollbar-hide">
+            {showUnits && unitTemplates.length > 0 && requestType === RequestType.NEW_EQUIPMENT ? (
+              unitTemplates.length === 0 ? (
+                <div className="py-8 text-center text-sm text-zinc-500">לא נמצאו יחידות</div>
+              ) : (
+                unitTemplates.map((template) => (
+                  <button
+                    key={template.id}
+                    type="button"
+                    onClick={() => handleSelectUnitTemplate(template.id)}
+                    className="w-full px-4 py-3 text-right border-b border-zinc-800 last:border-0 hover:bg-zinc-900 transition-all"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-bold text-sm text-zinc-50">{template.name}</div>
+                        <div className="text-xs text-zinc-500 mt-0.5">
+                          {divisionLabel(template.division)} · {template.items.length} פריטים
+                        </div>
+                      </div>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-500">
+                        <path d="M12 5v14M5 12h14" />
+                      </svg>
+                    </div>
+                  </button>
+                ))
+              )
+            ) : (
+              availableItems.length === 0 ? (
+                <div className="py-8 text-center text-sm text-zinc-500">לא נמצאו פריטים</div>
+              ) : (
+                availableItems.map((item) => {
+                  const needsSerial = item.isWeapon || item.isSight;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => handleSelectItem(item)}
+                      className="w-full px-4 py-3 text-right border-b border-zinc-800 last:border-0 hover:bg-zinc-900 transition-all"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {needsSerial && (
+                            <span className="flex-shrink-0 px-2 py-0.5 rounded-full bg-orange-900/20 text-orange-400 border border-orange-900/40 text-xs font-bold">
+                              צ
+                            </span>
+                          )}
+                          <div>
+                            <div className="font-bold text-sm text-zinc-50">
+                              {('displayName' in item) ? (item as any).displayName : item.name}
+                            </div>
+                            <div className="text-xs text-zinc-500 mt-0.5">
+                              {divisionLabel(item.category.division)}
+                            </div>
+                          </div>
+                        </div>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-500">
+                          <path d="M12 5v14M5 12h14" />
+                        </svg>
+                      </div>
+                    </button>
+                  );
+                })
+              )
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Selected Items */}
@@ -698,49 +846,6 @@ export function RequestForm({ items, unitTemplates, userAssignments, pendingDecl
         </div>
       )}
 
-      {/* Quick Select Unit Template */}
-      {unitTemplates.length > 0 && requestType === RequestType.NEW_EQUIPMENT && (
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-950/50 p-5">
-          <p className="text-sm text-zinc-400 mb-3">
-            או בחר תבנית יחידה כדי להוסיף את כל הפריטים הנדרשים בבת אחת
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {unitTemplates.map((template) => (
-              <button
-                key={template.id}
-                type="button"
-                onClick={() => handleSelectUnitTemplate(template.id)}
-                className="group h-auto rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-right transition-all hover:border-zinc-700 hover:bg-zinc-800 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1">
-                    <div className="text-sm font-bold text-zinc-50 mb-1">
-                      {template.name}
-                    </div>
-                    <div className="text-xs text-zinc-500">
-                      {divisionLabel(template.division)} • {template.items.length} פריטים
-                    </div>
-                  </div>
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-800 text-zinc-400 transition-colors group-hover:bg-zinc-700 group-hover:text-zinc-50">
-                    <svg
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M12 5v14M5 12h14" />
-                    </svg>
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Notes Field */}
       {selectedItems.length > 0 && (
