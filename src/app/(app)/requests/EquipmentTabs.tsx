@@ -83,24 +83,36 @@ export function EquipmentTabs(props: EquipmentTabsProps) {
     <div className="flex flex-col gap-6">
       {/* Tabs */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`
-              relative overflow-hidden rounded-2xl border-2 p-4 transition-all duration-200 cursor-pointer
-              ${activeTab === tab.id ? tab.activeColor : `bg-gradient-to-br ${tab.color} hover:scale-105`}
-            `}
-          >
-            <div className="flex flex-col items-center gap-2">
-              <span className="text-2xl">{tab.icon}</span>
-              <span className="text-xs font-bold text-center leading-tight">{tab.label}</span>
-            </div>
-            {activeTab === tab.id && (
-              <div className="absolute bottom-0 left-0 right-0 h-1 bg-current opacity-50" />
-            )}
-          </button>
-        ))}
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`
+                relative overflow-hidden rounded-2xl border-2 p-4 transition-all duration-300 cursor-pointer
+                ${isActive 
+                  ? `${tab.activeColor} scale-105 shadow-2xl` 
+                  : `bg-gradient-to-br ${tab.color} hover:scale-105 opacity-40 hover:opacity-60`
+                }
+              `}
+            >
+              {/* Shimmer effect for active tab */}
+              {isActive && (
+                <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+              )}
+              
+              <div className={`flex flex-col items-center gap-2 relative z-10 ${isActive ? '' : ''}`}>
+                <span className={`text-2xl transition-all duration-300 ${isActive ? 'scale-110' : ''}`}>{tab.icon}</span>
+                <span className={`text-xs font-bold text-center leading-tight transition-all duration-300 ${isActive ? 'scale-105' : ''}`}>{tab.label}</span>
+              </div>
+              
+              {isActive && (
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-current opacity-50" />
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* Tab Content */}
