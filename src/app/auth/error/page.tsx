@@ -11,13 +11,12 @@ function errorToHebrew(code: string | null): string {
   }
 }
 
-export default async function AuthErrorPage({
+export default function AuthErrorPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: { error?: string };
 }) {
-  const params = await searchParams;
-  const message = errorToHebrew(params.error ?? null);
+  const message = errorToHebrew(searchParams.error ?? null);
 
   return (
     <div className="min-h-dvh bg-zinc-50 text-zinc-950">

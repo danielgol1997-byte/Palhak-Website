@@ -36,18 +36,18 @@ export function SimpleTable<Row extends Record<string, any>>({
   }, [params]);
 
   return (
-    <div className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white">
+    <div className="overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-900/50 backdrop-blur-sm">
       <table className="min-w-full text-sm">
-        <thead className="bg-zinc-50">
+        <thead className="bg-zinc-900/80 text-zinc-400">
           <tr>
             {columns.map((c) => {
               const active = sort?.field === c.id;
               const dir = active ? sort?.dir : null;
               return (
-                <th key={c.id} className="whitespace-nowrap px-3 py-3 text-right font-semibold">
+                <th key={c.id} className="whitespace-nowrap px-4 py-3 text-right font-medium">
                   <button
                     type="button"
-                    className="inline-flex items-center gap-2"
+                    className="inline-flex items-center gap-2 hover:text-zinc-200 transition-colors"
                     onClick={() => {
                       const usp = new URLSearchParams(params.toString());
                       const nextDir = active && dir === "asc" ? "desc" : "asc";
@@ -64,19 +64,19 @@ export function SimpleTable<Row extends Record<string, any>>({
             })}
           </tr>
         </thead>
-        <tbody>
+        <tbody className="divide-y divide-zinc-800">
           {rows.map((r, idx) => (
-            <tr key={r.id ?? idx} className="border-t border-zinc-200">
+            <tr key={r.id ?? idx} className="hover:bg-zinc-800/50 transition-colors group">
               {columns.map((c) => {
                 const value = r[c.id];
                 const displayValue = value === null || value === undefined ? "" : String(value);
                 
                 return (
-                  <td key={c.id} className="px-3 py-3 align-top">
+                  <td key={c.id} className="px-4 py-3 align-top text-zinc-300">
                     {c.clickToFilter ? (
                       <button
                         type="button"
-                        className="w-full text-right hover:underline"
+                        className="w-full text-right hover:text-white hover:underline decoration-zinc-600 underline-offset-4"
                         onClick={() => {
                           if (value === null || value === undefined || value === "") return;
                           const next: TableFilter[] = [
@@ -102,8 +102,11 @@ export function SimpleTable<Row extends Record<string, any>>({
           ))}
           {rows.length === 0 ? (
             <tr>
-              <td className="px-3 py-6 text-center text-zinc-600" colSpan={columns.length}>
-                אין נתונים.
+              <td className="px-3 py-12 text-center text-zinc-500" colSpan={columns.length}>
+                <div className="flex flex-col items-center gap-2">
+                  <span className="text-lg">📭</span>
+                  <span>אין נתונים להצגה</span>
+                </div>
               </td>
             </tr>
           ) : null}

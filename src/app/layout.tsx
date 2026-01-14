@@ -10,8 +10,8 @@ const heebo = Heebo({
 });
 
 export const metadata: Metadata = {
-  title: "פלוגת״ק — ניהול ציוד",
-  description: "מערכת ניהול ציוד ביחידה",
+  title: "אשר",
+  description: "מערכת ניהול ציוד מתקדמת",
 };
 
 export default function RootLayout({
