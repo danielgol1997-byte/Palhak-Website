@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
-import { AssignmentStatus, Priority, Role, RequestItemStatus, RequestType } from "@prisma/client";
+import { AssignmentStatus, Prisma, Priority, Role, RequestItemStatus, RequestType } from "@prisma/client";
 import { AuditEntity } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
@@ -160,7 +160,7 @@ function statusFromRequestType(t: any): "MISSING" | "DAMAGED" | "STOLEN" | "USED
   }
 }
 
-async function getYamahLocationId(tx: typeof prisma) {
+async function getYamahLocationId(tx: Prisma.TransactionClient) {
   const yamah = await tx.storageLocation.findFirst({
     where: { name: "ימ״ח", active: true },
     select: { id: true },
@@ -169,7 +169,7 @@ async function getYamahLocationId(tx: typeof prisma) {
   return yamah.id;
 }
 
-async function adjustStorageInventory(tx: typeof prisma, equipmentItemId: string, delta: number) {
+async function adjustStorageInventory(tx: Prisma.TransactionClient, equipmentItemId: string, delta: number) {
   if (delta === 0) return;
   const yamahId = await getYamahLocationId(tx);
 
@@ -201,7 +201,9 @@ async function adjustStorageInventory(tx: typeof prisma, equipmentItemId: string
  * This enables changing decisions on already-closed requests (approve->deny, etc.)
  * while keeping assignments + inventory consistent.
  */
-async function reverseRequestItemSideEffects(tx: typeof prisma, request: any, requestItem: any) {
+async function reverseRequestItemSideEffects(tx: Prisma.TransactionClient, request: any, requestItem: any) {
+  // NOTE: tx is a Prisma.TransactionClient when called inside prisma.$transaction.
+  // This function is intentionally typed broadly for request/requestItem to avoid over-select churn.
   const markStatus = statusFromRequestType(request.type);
   const isDeclaration =
     request.type === RequestType.DAMAGED ||
@@ -470,14 +472,6 @@ export async function handleRequestItemAction(formData: FormData) {
   if (!parsed.success) throw new Error("נתונים לא תקינים.");
 
   await prisma.$transaction(async (tx) => {
-    const didReverseBeforeAction = (() => {
-      // For non-RESET actions, we now allow changing decisions on non-pending items by reversing first.
-      // This flag is for audit visibility only.
-      const action = parsed.data.action;
-      if (action === "RESET") return false;
-      return true;
-    })();
-
     const request = await tx.request.findUnique({
       where: { id: parsed.data.requestId },
       include: {
