@@ -24,7 +24,8 @@ export function styleHeaderRow(ws: ExcelJS.Worksheet, headers: string[]) {
 }
 
 export function autosizeColumns(ws: ExcelJS.Worksheet, maxWidth = 60) {
-  ws.columns?.forEach((col) => {
+  (ws.columns ?? []).forEach((col) => {
+    if (!col) return;
     let max = 10;
     col.eachCell({ includeEmpty: true }, (cell) => {
       const v = cell.value;
