@@ -22,8 +22,8 @@ async function freshReset() {
 
     console.log(`✅ Found Yamach storage location: ${yamah.name}\n`);
 
-    // Perform reset in transaction
-    const result = await prisma.$transaction(async (tx) => {
+    // First transaction: Delete all data
+    const deleteResult = await prisma.$transaction(async (tx) => {
       // Delete all request items first (foreign key constraint)
       const requestItems = await tx.requestItem.deleteMany({});
       console.log(`🗑️  Deleted ${requestItems.count} request items`);
@@ -59,50 +59,59 @@ async function freshReset() {
       });
       console.log(`🗑️  Deleted ${auditLogs.count} related audit logs`);
 
-      // Get all active equipment items
-      const allItems = await tx.equipmentItem.findMany({
-        where: { active: true },
-        select: {
-          id: true,
-          name: true,
-        },
-      });
-
-      console.log(`\n📦 Setting inventory to 100 for ${allItems.length} items...`);
-
-      // Set all inventory to 100
-      let processed = 0;
-      for (const item of allItems) {
-        await tx.storageInventory.upsert({
-          where: {
-            locationId_equipmentItemId: {
-              locationId: yamah.id,
-              equipmentItemId: item.id,
-            },
-          },
-          create: {
-            locationId: yamah.id,
-            equipmentItemId: item.id,
-            quantity: 100,
-          },
-          update: {
-            quantity: 100,
-          },
-        });
-        processed++;
-      }
-
-      console.log(`✅ Set inventory to 100 for ${processed} items`);
-
       return {
         requestItems: requestItems.count,
         requests: requests.count,
         assignments: assignments.count,
         transfers: deletedTransfers,
         auditLogs: auditLogs.count,
-        inventoryItems: processed,
       };
+    }, {
+      timeout: 30000, // 30 second timeout
     });
+
+    // Get all active equipment items
+    const allItems = await prisma.equipmentItem.findMany({
+      where: { active: true },
+      select: {
+        id: true,
+        name: true,
+      },
+    });
+
+    console.log(`\n📦 Setting inventory to 100 for ${allItems.length} items...`);
+
+    // Second operation: Set all inventory to 100 (outside transaction to avoid timeout)
+    let processed = 0;
+    for (const item of allItems) {
+      await prisma.storageInventory.upsert({
+        where: {
+          locationId_equipmentItemId: {
+            locationId: yamah.id,
+            equipmentItemId: item.id,
+          },
+        },
+        create: {
+          locationId: yamah.id,
+          equipmentItemId: item.id,
+          quantity: 100,
+        },
+        update: {
+          quantity: 100,
+        },
+      });
+      processed++;
+      if (processed % 20 === 0) {
+        console.log(`   Processed ${processed}/${allItems.length} items...`);
+      }
+    }
+
+    console.log(`✅ Set inventory to 100 for ${processed} items`);
+
+    const result = {
+      ...deleteResult,
+      inventoryItems: processed,
+    };
 
     console.log("\n✅ Fresh reset completed successfully!");
     console.log("\n📊 Summary:");
