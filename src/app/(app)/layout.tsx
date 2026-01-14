@@ -16,7 +16,7 @@ export default async function AppLayout({
     <div className="relative min-h-dvh bg-zinc-950 text-zinc-50">
       {/* Background image layer (faded/low-contrast) */}
       <div
-        className="pointer-events-none absolute inset-0 -z-10 bg-cover bg-center opacity-[0.14] grayscale-[0.15] contrast-75 saturate-75"
+        className="pointer-events-none absolute inset-0 -z-10 bg-cover bg-center opacity-[0.3] grayscale-[0.15] contrast-75 saturate-75"
         style={{ backgroundImage: "url(/bg.jpg)" }}
         aria-hidden="true"
       />
