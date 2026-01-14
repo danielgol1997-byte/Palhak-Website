@@ -42,17 +42,6 @@ export const authOptions: NextAuthOptions = {
     signIn: "/auth",
     error: "/auth/error",
   },
-  cookies: {
-    sessionToken: {
-      name: `next-auth.session-token`,
-      options: {
-        httpOnly: true,
-        sameSite: 'lax',
-        path: '/',
-        secure: false, // Set to false for localhost
-      },
-    },
-  },
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID ?? "",
