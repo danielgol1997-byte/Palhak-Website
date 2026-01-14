@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { prisma } from "@/lib/prisma";
 import { requireAdminExportSession } from "../../_lib/adminExportAuth";
-import { autosizeColumns, safeSheetName, styleHeaderRow } from "../../_lib/xlsxStyle";
+import { autosizeColumns, styleHeaderRow, uniqueSheetName } from "../../_lib/xlsxStyle";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -41,31 +41,58 @@ export async function GET() {
 
   const headers = ["פריט", "כמות", "סטטוס", "מספר סידורי", "תאריך שיוך", "הוקצה ע״י", "מידה (בגד)", "מידה (נעל)"];
 
-  const usedNames = new Map<string, number>();
+  const usedNames = new Set<string>();
+  const EXCEL_MAX_SHEETS = 255;
 
-  for (const u of users) {
-    const base = safeSheetName(`${u.name}${u.personalNumber ? ` (${u.personalNumber})` : ""}`);
-    const n = (usedNames.get(base) ?? 0) + 1;
-    usedNames.set(base, n);
-    const sheetName = n === 1 ? base : safeSheetName(`${base} ${n}`);
-
-    const ws = wb.addWorksheet(sheetName);
-    styleHeaderRow(ws, headers);
-
-    for (const a of u.assignments) {
-      ws.addRow([
-        a.equipmentItem.name,
-        a.quantity,
-        a.status,
-        a.serialNumber ?? "",
-        a.assignedAt ? a.assignedAt.toISOString() : "",
-        a.assignedBy?.name ?? "",
-        a.clothingSize ?? "",
-        a.shoeSize ?? "",
-      ]);
+  // If we exceed Excel sheet limits, fall back to a single "All" sheet (still filterable).
+  if (users.length > EXCEL_MAX_SHEETS) {
+    const ws = wb.addWorksheet("ציוד - כולם");
+    styleHeaderRow(ws, ["שם חייל", "מספר אישי", ...headers]);
+    for (const u of users) {
+      for (const a of u.assignments) {
+        ws.addRow([
+          u.name,
+          u.personalNumber ?? "",
+          a.equipmentItem.name,
+          a.quantity,
+          a.status,
+          a.serialNumber ?? "",
+          a.assignedAt ? a.assignedAt.toISOString() : "",
+          a.assignedBy?.name ?? "",
+          a.clothingSize ?? "",
+          a.shoeSize ?? "",
+        ]);
+      }
     }
-
     autosizeColumns(ws);
+  } else if (users.length === 0) {
+    const ws = wb.addWorksheet("אין נתונים");
+    styleHeaderRow(ws, ["הודעה"]);
+    ws.addRow(["אין משתמשים פעילים לייצוא."]);
+    autosizeColumns(ws);
+  } else {
+    for (const u of users) {
+      const raw = `${u.name}${u.personalNumber ? ` (${u.personalNumber})` : ""}`;
+      const sheetName = uniqueSheetName(raw, usedNames);
+
+      const ws = wb.addWorksheet(sheetName);
+      styleHeaderRow(ws, headers);
+
+      for (const a of u.assignments) {
+        ws.addRow([
+          a.equipmentItem.name,
+          a.quantity,
+          a.status,
+          a.serialNumber ?? "",
+          a.assignedAt ? a.assignedAt.toISOString() : "",
+          a.assignedBy?.name ?? "",
+          a.clothingSize ?? "",
+          a.shoeSize ?? "",
+        ]);
+      }
+
+      autosizeColumns(ws);
+    }
   }
 
   const buf = Buffer.from((await wb.xlsx.writeBuffer()) as ArrayBuffer);
