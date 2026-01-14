@@ -444,11 +444,6 @@ export async function handleRequestItemAction(formData: FormData) {
             }
           }
         } else if (request.type === RequestType.TRANSFER) {
-          // #region agent log
-          const fs = require('fs');
-          fs.appendFileSync('/Users/daniel/Desktop/Cursor projects/Palhak website/.cursor/debug.log', JSON.stringify({location:'actions.ts:445',message:'Transfer approval flow',data:{requestType:request.type,requesterId:request.requesterId,recipientId:request.recipientId},timestamp:Date.now(),sessionId:'debug-session',runId:'approve',hypothesisId:'D'})+'\n');
-          // #endregion
-          
           // For TRANSFER: unassign from sender, set status to AWAITING_ACCEPTANCE
           // Do NOT create assignment to recipient yet - that happens when they accept
           if (!request.recipientId) throw new Error("מקבל להעברה לא נמצא.");
@@ -835,6 +830,7 @@ export async function handleRequestItemAction(formData: FormData) {
       type: true,
       status: true,
       priority: true,
+      userNotes: true,
       adminNotes: true,
       viewedAt: true,
       resolvedAt: true,

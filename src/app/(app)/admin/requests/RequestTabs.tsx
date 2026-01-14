@@ -16,7 +16,9 @@ interface Request {
   status: RequestStatus;
   priority: Priority;
   adminNotes: string | null;
+  userNotes: string | null;
   viewedAt: Date | null;
+  resolvedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   requester: {
@@ -28,25 +30,30 @@ interface Request {
       status: string;
     }[];
   };
+  resolvedBy: {
+    id: string;
+    name: string;
+  } | null;
   recipient?: {
     id: string;
     name: string;
-    personalNumber: string;
+    personalNumber: string | null;
   } | null;
   items: {
     id: string;
     quantity: number;
     status: string;
-    serialNumber?: string | null;
-    clothingSize?: string | null;
-    shoeSize?: string | null;
+    serialNumber: string | null;
+    clothingSize: string | null;
+    shoeSize: string | null;
+    recipientNotes?: string | null;
     equipmentItem: {
       id: string;
       name: string;
-      isWeapon?: boolean;
-      isSight?: boolean;
-      isClothing?: boolean;
-      isShoe?: boolean;
+      isWeapon: boolean;
+      isSight: boolean;
+      isClothing: boolean;
+      isShoe: boolean;
       category: {
         division: Division;
       };
@@ -182,30 +189,33 @@ export function RequestTabs({
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Tabs */}
-      <div className="flex gap-2 border-b border-zinc-800">
+      {/* Tabs - Scrollable on mobile */}
+      <div className="flex gap-2 border-b border-zinc-800 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`px-6 py-3 text-sm font-bold transition-all cursor-pointer relative ${
+            className={`px-4 sm:px-6 py-3 text-xs sm:text-sm font-bold transition-all cursor-pointer relative whitespace-nowrap flex-shrink-0 ${
               activeTab === tab.id
                 ? "text-zinc-50"
                 : "text-zinc-500 hover:text-zinc-300"
             }`}
           >
-            {tab.label}
-            {tab.count > 0 && (
-              <span
-                className={`mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold ${
-                  activeTab === tab.id
-                    ? "bg-zinc-50 text-zinc-950"
-                    : "bg-zinc-800 text-zinc-400"
-                }`}
-              >
-                {tab.count}
-              </span>
-            )}
+            <span className="flex items-center gap-2">
+              <span className="hidden sm:inline">{tab.label}</span>
+              <span className="sm:hidden">{tab.label.split(' ')[0]}</span>
+              {tab.count > 0 && (
+                <span
+                  className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold ${
+                    activeTab === tab.id
+                      ? "bg-zinc-50 text-zinc-950"
+                      : "bg-zinc-800 text-zinc-400"
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              )}
+            </span>
             {activeTab === tab.id && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-zinc-50" />
             )}

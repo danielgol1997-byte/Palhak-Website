@@ -25,7 +25,7 @@ export async function GET(req: Request) {
     ...(q.q
       ? {
           OR: [
-            { equipmentItem: { name: { contains: q.q, mode: "insensitive" as const } } },
+            { items: { some: { equipmentItem: { name: { contains: q.q, mode: "insensitive" as const } } } } },
             { requester: { name: { contains: q.q, mode: "insensitive" as const } } },
           ],
         }
@@ -42,24 +42,30 @@ export async function GET(req: Request) {
       type: true,
       status: true,
       priority: true,
-      quantity: true,
       requester: { select: { name: true, email: true } },
-      equipmentItem: { select: { name: true } },
+      items: {
+        select: {
+          quantity: true,
+          equipmentItem: { select: { name: true } },
+        },
+      },
     },
   });
 
   const csv = toCsv(
-    rows.map((r) => ({
-      מזהה: r.id,
-      "נוצר בתאריך": r.createdAt.toISOString(),
-      "שם חייל": r.requester.name,
-      "מייל חייל": r.requester.email,
-      פריט: r.equipmentItem.name,
-      כמות: r.quantity,
-      סוג: requestTypeLabel(r.type),
-      סטטוס: requestStatusLabel(r.status),
-      עדיפות: priorityLabel(r.priority),
-    })),
+    rows.flatMap((r) =>
+      r.items.map((item) => ({
+        מזהה: r.id,
+        "נוצר בתאריך": r.createdAt.toISOString(),
+        "שם חייל": r.requester.name,
+        "מייל חייל": r.requester.email,
+        פריט: item.equipmentItem.name,
+        כמות: item.quantity,
+        סוג: requestTypeLabel(r.type),
+        סטטוס: requestStatusLabel(r.status),
+        עדיפות: priorityLabel(r.priority),
+      })),
+    ),
     [
       "מזהה",
       "נוצר בתאריך",

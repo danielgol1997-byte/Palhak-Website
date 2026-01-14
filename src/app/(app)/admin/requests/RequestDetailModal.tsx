@@ -30,7 +30,7 @@ interface Request {
   recipient?: {
     id: string;
     name: string;
-    personalNumber: string;
+    personalNumber: string | null;
   } | null;
   resolvedBy: {
     id: string;
@@ -277,22 +277,22 @@ export function RequestDetailModal({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
       <div
         className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-4xl rounded-3xl bg-zinc-900 p-8 shadow-2xl overflow-hidden border border-zinc-800 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-start justify-between mb-6">
-          <div>
-            <h3 className="text-2xl font-bold text-zinc-50">פרטי בקשה</h3>
-            <div className="mt-1 text-sm text-zinc-400">
+      <div className="relative w-full max-w-4xl rounded-2xl sm:rounded-3xl bg-zinc-900 p-4 sm:p-8 shadow-2xl overflow-hidden border border-zinc-800 animate-in fade-in zoom-in duration-200 max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
+        <div className="flex items-start justify-between mb-4 sm:mb-6">
+          <div className="flex-1 min-w-0 pr-2">
+            <h3 className="text-xl sm:text-2xl font-bold text-zinc-50 truncate">פרטי בקשה</h3>
+            <div className="mt-1 text-xs sm:text-sm text-zinc-400">
               {requestTypeLabel(request.type)} · {request.items.length} פריטים
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-zinc-50 cursor-pointer"
+            className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-zinc-50 cursor-pointer flex-shrink-0"
           >
             <svg
               width="24"
@@ -309,11 +309,11 @@ export function RequestDetailModal({
           </button>
         </div>
 
-        <div className="grid gap-5">
-          <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-4 sm:gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
               <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">מבקש</div>
-              <div className="text-sm font-medium text-zinc-50">{request.requester.name}</div>
+              <div className="text-sm font-medium text-zinc-50 break-words">{request.requester.name}</div>
             </div>
             <div>
               <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">כמות כוללת</div>
@@ -376,10 +376,11 @@ export function RequestDetailModal({
             </div>
           )}
 
-          {/* Items List with Individual Actions */}
+          {/* Items List with Individual Actions - Mobile Responsive */}
           <div>
             <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-3">פריטים</div>
-            <div className="rounded-xl border border-zinc-800 overflow-hidden">
+            {/* Desktop Table */}
+            <div className="hidden sm:block rounded-xl border border-zinc-800 overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="bg-zinc-950 text-xs font-bold text-zinc-500 uppercase tracking-wider">
@@ -415,7 +416,6 @@ export function RequestDetailModal({
                               מידת נעליים: <span className="font-bold">{item.shoeSize.replace('SIZE_', '')}</span>
                             </div>
                           )}
-                          {/* Show serial number from request item (for fulfilled items) or from assignment (for declarations/returns) */}
                           {(item.serialNumber || 
                             (item.equipmentItem.isWeapon || item.equipmentItem.isSight) && 
                             request.type !== RequestType.NEW_EQUIPMENT) && (
@@ -428,8 +428,6 @@ export function RequestDetailModal({
                               </span>
                             </div>
                           )}
-                          
-                          {/* Transfer documentation */}
                           {request.type === RequestType.TRANSFER && (
                             <>
                               {item.resolvedAt && item.resolvedBy && (
@@ -455,7 +453,6 @@ export function RequestDetailModal({
                               )}
                             </>
                           )}
-                          
                           {!item.clothingSize && !item.shoeSize && !item.serialNumber && 
                            !(item.equipmentItem.isWeapon || item.equipmentItem.isSight) && 
                            request.type !== RequestType.TRANSFER && <span>-</span>}
@@ -527,6 +524,134 @@ export function RequestDetailModal({
                 </tbody>
               </table>
             </div>
+            
+            {/* Mobile Card Layout */}
+            <div className="sm:hidden space-y-3">
+              {request.items.map((item) => (
+                <div key={item.id} className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-bold text-zinc-50 break-words">{item.equipmentItem.name}</div>
+                      <div className="text-xs text-zinc-400 mt-1">{divisionLabel(item.equipmentItem.category.division)}</div>
+                    </div>
+                    <div className="flex-shrink-0 mr-2">
+                      <span className={`inline-flex px-2 py-1 rounded-full text-xs font-bold border ${getItemStatusColor(item.status)}`}>
+                        {requestItemStatusLabel(item.status, request.type)}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="text-zinc-500">כמות:</span>
+                      <span className="text-zinc-50 font-bold mr-1">{item.quantity}</span>
+                    </div>
+                    {item.clothingSize && (
+                      <div>
+                        <span className="text-zinc-500">מידת בגד:</span>
+                        <span className="text-zinc-50 font-bold mr-1">{item.clothingSize}</span>
+                      </div>
+                    )}
+                    {item.shoeSize && (
+                      <div>
+                        <span className="text-zinc-500">מידת נעליים:</span>
+                        <span className="text-zinc-50 font-bold mr-1">{item.shoeSize.replace('SIZE_', '')}</span>
+                      </div>
+                    )}
+                    {(item.serialNumber || 
+                      (item.equipmentItem.isWeapon || item.equipmentItem.isSight) && 
+                      request.type !== RequestType.NEW_EQUIPMENT) && (
+                      <div className="col-span-2">
+                        <span className="text-zinc-500">מספר סידורי:</span>
+                        <span className="text-zinc-50 font-bold font-mono mr-1">
+                          {(() => {
+                            const foundAssignment = request.requester.assignments?.find(a => a.equipmentItemId === item.equipmentItem.id);
+                            return item.serialNumber || foundAssignment?.serialNumber || "לא זמין";
+                          })()}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {request.type === RequestType.TRANSFER && (
+                    <div className="pt-2 border-t border-zinc-800 space-y-2 text-xs">
+                      {item.resolvedAt && item.resolvedBy && (
+                        <div className="text-amber-300">
+                          אושר ע״י {item.resolvedBy.name}
+                          <div className="text-zinc-500 text-[10px]">
+                            {new Date(item.resolvedAt).toLocaleString("he-IL")}
+                          </div>
+                        </div>
+                      )}
+                      {item.recipientAcceptedAt && (
+                        <div className="text-emerald-300">
+                          נקלט ע״י {request.recipient?.name}
+                          <div className="text-zinc-500 text-[10px]">
+                            {new Date(item.recipientAcceptedAt).toLocaleString("he-IL")}
+                          </div>
+                        </div>
+                      )}
+                      {item.recipientNotes && (
+                        <div className="text-blue-300">
+                          הערות מקבל: {item.recipientNotes}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  <div className="flex gap-2 pt-2 border-t border-zinc-800 flex-wrap">
+                    {item.status !== "FULFILLED" && (
+                      <button
+                        onClick={() => handleItemAction(item.id, "FULFILL")}
+                        disabled={isProcessing}
+                        className={`flex-1 min-w-[80px] px-3 py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer disabled:opacity-50 ${
+                          item.status === "FULFILLED"
+                            ? "bg-green-900/40 text-green-300 border-green-900/60"
+                            : "bg-green-900/20 text-green-400 border-green-900/40 hover:bg-green-900/40"
+                        }`}
+                      >
+                        {getApproveLabel()}
+                      </button>
+                    )}
+                    {item.status !== "DENIED" && (
+                      <button
+                        onClick={() => handleItemAction(item.id, "DENY")}
+                        disabled={isProcessing}
+                        className={`flex-1 min-w-[80px] px-3 py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer disabled:opacity-50 ${
+                          item.status === "DENIED"
+                            ? "bg-red-900/40 text-red-300 border-red-900/60"
+                            : "bg-red-900/20 text-red-400 border-red-900/40 hover:bg-red-900/40"
+                        }`}
+                      >
+                        {getDenyLabel()}
+                      </button>
+                    )}
+                    {item.status !== "CANCELLED" && (
+                      <button
+                        onClick={() => handleItemAction(item.id, "CANCEL")}
+                        disabled={isProcessing}
+                        className={`px-3 py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer disabled:opacity-50 ${
+                          item.status === "CANCELLED"
+                            ? "bg-zinc-700 text-zinc-400 border-zinc-600"
+                            : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:bg-zinc-700"
+                        }`}
+                      >
+                        ביטול
+                      </button>
+                    )}
+                    {item.status !== "PENDING" && (
+                      <button
+                        onClick={() => handleItemAction(item.id, "RESET")}
+                        disabled={isProcessing}
+                        className="px-3 py-2 rounded-lg text-xs font-bold bg-blue-900/20 text-blue-400 border border-blue-900/40 hover:bg-blue-900/40 transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        ↺
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* User Notes (Read-only) */}
@@ -559,7 +684,7 @@ export function RequestDetailModal({
           {/* Priority Selection */}
           <div>
             <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-3">עדיפות</div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 overflow-x-auto">
               {Object.values(Priority).map((priority) => (
                 <button
                   key={priority}
@@ -607,7 +732,7 @@ export function RequestDetailModal({
 
           {/* Resolved By Info for Closed Requests */}
           {request.resolvedAt && request.resolvedBy && (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
                 <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">תאריך סגירה</div>
                 <div className="text-sm font-medium text-zinc-50">
@@ -631,12 +756,12 @@ export function RequestDetailModal({
 
       {/* Quantity Modal */}
       {quantityModal && (
-        <div className="absolute inset-0 flex items-center justify-center z-50">
+        <div className="absolute inset-0 flex items-center justify-center z-50 p-4">
           <div
             className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm"
             onClick={() => setQuantityModal(null)}
           />
-          <div className="relative w-full max-w-md rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200">
+          <div className="relative w-full max-w-md rounded-2xl sm:rounded-3xl bg-zinc-900 p-4 sm:p-8 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
             <div className="mb-6">
               <h3 className="text-2xl font-bold text-zinc-50 mb-2">
                 {quantityModal.requiresSerialNumber 

@@ -179,12 +179,6 @@ export default async function RequestsPage({
     const allItemsPending = r.items.every(item => item.status === "PENDING");
     return r.status === RequestStatus.OPEN && allItemsPending;
   });
-
-  // #region agent log
-  const fs = require('fs');
-  const transferTypeRequests = regularRequests.filter(r => r.type === "TRANSFER");
-  fs.appendFileSync('/Users/daniel/Desktop/Cursor projects/Palhak website/.cursor/debug.log', JSON.stringify({location:'page.tsx:173',message:'Transfer filtering',data:{totalRegularRequests:regularRequests.length,transferTypeCount:transferTypeRequests.length,transferTypes:transferTypeRequests.map(r => ({id:r.id,type:r.type,status:r.status}))},timestamp:Date.now(),sessionId:'debug-session',runId:'page-load',hypothesisId:'A'})+'\n');
-  // #endregion
   
   // Show ALL transfer requests for documentation purposes, regardless of status
   const transferRequests = regularRequests.filter((r) => r.type === "TRANSFER");

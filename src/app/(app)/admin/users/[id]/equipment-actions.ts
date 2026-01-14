@@ -27,7 +27,7 @@ export async function adminAssignEquipmentAction(formData: FormData) {
   });
   
   if (!parsed.success) {
-    const firstError = parsed.error.errors[0];
+    const firstError = parsed.error.issues[0];
     throw new Error(firstError?.message || "נתונים לא תקינים.");
   }
 
@@ -206,7 +206,7 @@ export async function adminUnassignEquipmentAction(formData: FormData) {
   });
   
   if (!parsed.success) {
-    const firstError = parsed.error.errors[0];
+    const firstError = parsed.error.issues[0];
     throw new Error(firstError?.message || "נתונים לא תקינים.");
   }
 
