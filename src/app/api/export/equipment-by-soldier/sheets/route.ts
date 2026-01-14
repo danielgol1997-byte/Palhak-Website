@@ -12,7 +12,8 @@ export async function GET() {
   if (!auth.ok) return auth.response;
 
   const users = await prisma.user.findMany({
-    where: { active: true, role: "USER" },
+    // Include ALL active users (including admins/super-admins)
+    where: { active: true },
     orderBy: [{ name: "asc" }],
     select: {
       name: true,
