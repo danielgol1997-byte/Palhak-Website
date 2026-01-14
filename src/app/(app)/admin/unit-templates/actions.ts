@@ -128,25 +128,10 @@ export async function setUnitTemplateItemsAction(formData: FormData) {
       where: { id: parsed.data.unitTemplateId },
       select: {
         id: true,
-        division: true,
         items: { select: { equipmentItemId: true, quantityRequired: true } },
       },
     });
     if (!tpl) throw new Error("יחידה לא נמצאה.");
-
-    // Validate all items belong to same division
-    if (items.length) {
-      const dbItems = await tx.equipmentItem.findMany({
-        where: { id: { in: items.map((i) => i.equipmentItemId) } },
-        select: { id: true, category: { select: { division: true } } },
-      });
-      const divMap = new Map(dbItems.map((i) => [i.id, i.category.division] as const));
-      for (const row of items) {
-        const d = divMap.get(row.equipmentItemId);
-        if (!d) throw new Error("פריט לא תקין.");
-        if (d !== tpl.division) throw new Error("תכולת יחידה חייבת להיות באותה חלוקה.");
-      }
-    }
 
     const before = tpl.items;
 

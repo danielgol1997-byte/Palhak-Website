@@ -222,3 +222,4 @@ The פלוגת״ק Equipment Management System is **fully mobile compatible** an
 
 ✅ **APPROVED FOR MOBILE USE**
 
+

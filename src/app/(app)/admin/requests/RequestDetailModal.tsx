@@ -30,7 +30,7 @@ interface Request {
   recipient?: {
     id: string;
     name: string;
-    personalNumber: string;
+    personalNumber: string | null;
   } | null;
   resolvedBy: {
     id: string;

@@ -14,7 +14,7 @@ export function HomeTile({ href, title, icon }: HomeTileProps) {
   const [rotate, setRotate] = useState({ x: 0, y: 0 });
   const [glimmer, setGlimmer] = useState({ x: 0, y: 0, opacity: 0 });
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleMouseMove = (e: React.MouseEvent<HTMLElement>) => {
     if (!containerRef.current) return;
 
     const rect = containerRef.current.getBoundingClientRect();

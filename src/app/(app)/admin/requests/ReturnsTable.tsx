@@ -11,6 +11,7 @@ interface Request {
   status: RequestStatus;
   priority: Priority;
   adminNotes: string | null;
+  userNotes: string | null;
   viewedAt: Date | null;
   resolvedAt: Date | null;
   createdAt: Date;
@@ -28,13 +29,25 @@ interface Request {
     id: string;
     name: string;
   } | null;
+  recipient?: {
+    id: string;
+    name: string;
+    personalNumber: string | null;
+  } | null;
   items: {
     id: string;
     quantity: number;
     status: string;
+    serialNumber: string | null;
+    clothingSize: string | null;
+    shoeSize: string | null;
     equipmentItem: {
       id: string;
       name: string;
+      isWeapon: boolean;
+      isSight: boolean;
+      isClothing: boolean;
+      isShoe: boolean;
       category: {
         division: Division;
       };

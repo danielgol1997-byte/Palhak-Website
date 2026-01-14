@@ -47,8 +47,8 @@ interface User {
 interface SelectedItem extends Item {
   quantity: number;
   serialNumber?: string | null;
-  clothingSize?: ClothingSize;
-  shoeSize?: ShoeSize;
+  clothingSize?: ClothingSize | null;
+  shoeSize?: ShoeSize | null;
 }
 
 interface TransferFormProps {

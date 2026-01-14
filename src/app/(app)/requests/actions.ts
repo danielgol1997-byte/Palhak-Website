@@ -67,22 +67,9 @@ export async function createRequestAction(formData: FormData) {
     recipientId: formData.get("recipientId") || undefined,
     items: JSON.parse(itemsJson),
   });
-  
-  // #region agent log
-  const fs = require('fs');
-  const itemsRaw = formData.get("items");
-  const itemsParsed = itemsRaw ? JSON.parse(itemsRaw as string) : null;
-  const errorsStr = parsed.success ? null : (parsed.error?.errors ? JSON.stringify(parsed.error.errors).slice(0,500) : 'no errors array');
-  const fullErrorObj = parsed.success ? null : JSON.stringify(parsed.error, null, 2).slice(0, 1000);
-  fs.appendFileSync('/Users/daniel/Desktop/Cursor projects/Palhak website/.cursor/debug.log', JSON.stringify({location:'actions.ts:71',message:'Parsed request data',data:{success:parsed.success,type:formData.get("type"),itemsJsonLength:itemsRaw?.length,itemsParsedLength:itemsParsed?.length,itemsParsedSample:JSON.stringify(itemsParsed?.[0]),recipientId:formData.get("recipientId"),errors:errorsStr,fullError:fullErrorObj},timestamp:Date.now(),sessionId:'debug-session',runId:'submit',hypothesisId:'N'})+'\n');
-  // #endregion
-  
+
   if (!parsed.success) {
-    const firstError = parsed.error?.errors?.[0];
-    // #region agent log
-    const allErrorsStr = parsed.error?.errors ? JSON.stringify(parsed.error.errors) : 'no errors';
-    fs.appendFileSync('/Users/daniel/Desktop/Cursor projects/Palhak website/.cursor/debug.log', JSON.stringify({location:'actions.ts:80',message:'Validation failed',data:{errorMessage:firstError?.message,errorPath:JSON.stringify(firstError?.path),allErrors:allErrorsStr},timestamp:Date.now(),sessionId:'debug-session',runId:'submit',hypothesisId:'S'})+'\n');
-    // #endregion
+    const firstError = parsed.error.issues[0];
     throw new Error(firstError?.message || "נתונים לא תקינים.");
   }
 
