@@ -72,7 +72,7 @@ export default function PositionList({
       </div>
 
       <div className="mt-8 border-t border-zinc-800 pt-8">
-        <Pagination page={page} totalPages={totalPages} basePath="/admin/positions" searchParams={searchParams} />
+        <Pagination page={page} totalPages={totalPages} searchParams={searchParams} />
       </div>
 
       {editingItem && (
