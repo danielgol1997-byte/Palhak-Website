@@ -86,3 +86,17 @@ body {
 .btn-sleek:active {
   transform: translateY(0) scale(0.98);
 }
+
+/* Shimmer animation for active tabs */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite;
+}
