@@ -80,29 +80,57 @@ export async function createRequestAction(formData: FormData) {
     for (const item of parsed.data.items) {
       const equipmentItem = await tx.equipmentItem.findUnique({
         where: { id: item.equipmentItemId },
-        select: { id: true, active: true, name: true },
+        select: {
+          id: true,
+          active: true,
+          name: true,
+          isClothing: true,
+          isShoe: true,
+          isWeapon: true,
+          isSight: true,
+        },
       });
       if (!equipmentItem?.active) throw new Error(`פריט "${equipmentItem?.name || item.equipmentItemId}" לא תקין.`);
 
-      // Only validate for declarations and returns - they must have the item
-      if (parsed.data.type !== RequestType.NEW_EQUIPMENT) {
-        const assignedQty = await tx.assignment.aggregate({
-          where: {
-            userId: requesterId,
-            equipmentItemId: item.equipmentItemId,
-            status: AssignmentStatus.ASSIGNED,
-            active: true,
-          },
-          _sum: { quantity: true },
-        });
-        const hasAssigned = (assignedQty._sum.quantity ?? 0) > 0;
-        
-        if (!hasAssigned) {
-          const errorMsg = parsed.data.type === RequestType.RETURN_EQUIPMENT 
-            ? `לא ניתן להחזיר ציוד שלא מוקצה לך: ${equipmentItem.name}.`
-            : `ניתן לדווח רק על ציוד שקיים אצלך: ${equipmentItem.name}.`;
-          throw new Error(errorMsg);
+      const isNewEquipment = parsed.data.type === RequestType.NEW_EQUIPMENT;
+      const isReturn = parsed.data.type === RequestType.RETURN_EQUIPMENT;
+      const requiresSerial = equipmentItem.isWeapon || equipmentItem.isSight;
+
+      if (isNewEquipment) {
+        if (equipmentItem.isClothing && !item.clothingSize) {
+          throw new Error(`נדרשת מידה עבור ${equipmentItem.name}.`);
         }
+        if (equipmentItem.isShoe && !item.shoeSize) {
+          throw new Error(`נדרשת מידת נעליים עבור ${equipmentItem.name}.`);
+        }
+        continue;
+      }
+
+      if (requiresSerial && !item.serialNumber) {
+        const itemType = equipmentItem.isWeapon ? "נשק" : "צלמ";
+        throw new Error(`נדרש מספר סידורי עבור ${itemType}.`);
+      }
+      if (requiresSerial && item.quantity !== 1) {
+        throw new Error(`בציוד עם מספר סידורי ניתן לבחור כמות של 1 בלבד (${equipmentItem.name}).`);
+      }
+
+      const assignedQty = await tx.assignment.aggregate({
+        where: {
+          userId: requesterId,
+          equipmentItemId: item.equipmentItemId,
+          status: AssignmentStatus.ASSIGNED,
+          active: true,
+          ...(item.serialNumber ? { serialNumber: item.serialNumber } : {}),
+        },
+        _sum: { quantity: true },
+      });
+      const availableAssigned = assignedQty._sum.quantity ?? 0;
+
+      if (availableAssigned < item.quantity) {
+        const errorMsg = isReturn
+          ? `לא ניתן להחזיר יותר ממה שמוקצה לך: ${equipmentItem.name}.`
+          : `ניתן לדווח/להעביר רק ציוד שקיים אצלך: ${equipmentItem.name}.`;
+        throw new Error(errorMsg);
       }
     }
 

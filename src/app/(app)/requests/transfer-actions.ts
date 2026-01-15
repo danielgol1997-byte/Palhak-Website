@@ -76,12 +76,16 @@ export async function handleTransferItemAction(formData: FormData) {
     if (parsed.data.action === "ACCEPT") {
       // Accept: Move in-transit (PENDING_APPROVAL) assignments from approving admin -> recipient.
       // This keeps transfers fully reversible (admin can later reset/deny and we can restore sender).
-      const adminId = requestItem.resolvedById ?? requestItem.request.requesterId;
+      const approvingAdminId =
+        requestItem.resolvedById ?? requestItem.request.resolvedById ?? null;
+      if (!approvingAdminId) {
+        throw new Error("מאשר ההעברה לא נמצא.");
+      }
       let remaining = requestItem.quantity;
 
       const pending = await tx.assignment.findMany({
         where: {
-          userId: adminId,
+          userId: approvingAdminId,
           equipmentItemId: requestItem.equipmentItemId,
           status: AssignmentStatus.PENDING_APPROVAL,
           active: true,
@@ -99,7 +103,7 @@ export async function handleTransferItemAction(formData: FormData) {
               userId: session.user.id,
               status: AssignmentStatus.ASSIGNED,
               assignedAt: now,
-              assignedById: requestItem.resolvedById,
+              assignedById: approvingAdminId,
             },
           });
           remaining -= a.quantity;
@@ -116,7 +120,7 @@ export async function handleTransferItemAction(formData: FormData) {
               quantity: remaining,
               status: AssignmentStatus.ASSIGNED,
               active: true,
-              assignedById: requestItem.resolvedById,
+              assignedById: approvingAdminId,
               assignedAt: now,
               serialNumber: a.serialNumber,
               clothingSize: a.clothingSize,
@@ -136,7 +140,7 @@ export async function handleTransferItemAction(formData: FormData) {
             quantity: remaining,
             status: AssignmentStatus.ASSIGNED,
             active: true,
-            assignedById: requestItem.resolvedById,
+            assignedById: approvingAdminId,
             assignedAt: now,
             serialNumber: requestItem.serialNumber ?? null,
             clothingSize: requestItem.clothingSize,
@@ -167,13 +171,17 @@ export async function handleTransferItemAction(formData: FormData) {
         },
       });
     } else {
-      // Reject: Keep items with the approving admin (assign them back), then update status.
-      const adminId = requestItem.resolvedById ?? requestItem.request.requesterId;
+      // Reject: Keep items with approving admin, and mark them as ASSIGNED.
+      const approvingAdminId =
+        requestItem.resolvedById ?? requestItem.request.resolvedById ?? null;
+      if (!approvingAdminId) {
+        throw new Error("מאשר ההעברה לא נמצא.");
+      }
       let remaining = requestItem.quantity;
 
       const pending = await tx.assignment.findMany({
         where: {
-          userId: adminId,
+          userId: approvingAdminId,
           equipmentItemId: requestItem.equipmentItemId,
           status: AssignmentStatus.PENDING_APPROVAL,
           active: true,
@@ -185,18 +193,21 @@ export async function handleTransferItemAction(formData: FormData) {
       for (const a of pending) {
         if (remaining <= 0) break;
         if (a.quantity <= remaining) {
-          await tx.assignment.update({ where: { id: a.id }, data: { status: AssignmentStatus.ASSIGNED } });
+          await tx.assignment.update({
+            where: { id: a.id },
+            data: { status: AssignmentStatus.ASSIGNED, assignedAt: now },
+          });
           remaining -= a.quantity;
         } else {
           await tx.assignment.update({ where: { id: a.id }, data: { quantity: a.quantity - remaining } });
           await tx.assignment.create({
             data: {
-              userId: adminId,
+              userId: approvingAdminId,
               equipmentItemId: requestItem.equipmentItemId,
               quantity: remaining,
               status: AssignmentStatus.ASSIGNED,
               active: true,
-              assignedById: a.assignedById,
+              assignedById: approvingAdminId,
               assignedAt: now,
               serialNumber: a.serialNumber,
               clothingSize: a.clothingSize,
@@ -211,12 +222,12 @@ export async function handleTransferItemAction(formData: FormData) {
         // Legacy fallback: recreate for admin if older flow deleted rows
         await tx.assignment.create({
           data: {
-            userId: adminId,
+            userId: approvingAdminId,
             equipmentItemId: requestItem.equipmentItemId,
             quantity: remaining,
             status: AssignmentStatus.ASSIGNED,
             active: true,
-            assignedById: requestItem.resolvedById,
+            assignedById: approvingAdminId,
             assignedAt: now,
             serialNumber: requestItem.serialNumber ?? null,
             clothingSize: requestItem.clothingSize,
