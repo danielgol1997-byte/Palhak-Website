@@ -18,6 +18,7 @@ export function PendingTransfers({ pendingTransfers }: PendingTransfersProps) {
   const [rejectingItemId, setRejectingItemId] = useState<string | null>(null);
   const [recipientNotes, setRecipientNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [acceptQuantity, setAcceptQuantity] = useState<number>(1);
 
   if (pendingTransfers.length === 0) {
     return null;
@@ -25,12 +26,19 @@ export function PendingTransfers({ pendingTransfers }: PendingTransfersProps) {
 
   const handleAccept = async () => {
     if (!acceptingItemId) return;
+    const acceptingItem = selectedRequest?.items.find((item: any) => item.id === acceptingItemId);
+    if (!acceptingItem) return;
+
+    const requiresSerial = acceptingItem.equipmentItem.isWeapon || acceptingItem.equipmentItem.isSight || !!acceptingItem.serialNumber;
+    const maxQuantity = acceptingItem.quantity ?? 1;
+    const quantityToAccept = requiresSerial ? 1 : Math.max(1, Math.min(acceptQuantity, maxQuantity));
 
     setIsSubmitting(true);
     try {
       const formData = new FormData();
       formData.append("requestItemId", acceptingItemId);
       formData.append("action", "ACCEPT");
+      formData.append("quantity", String(quantityToAccept));
       if (recipientNotes.trim()) {
         formData.append("recipientNotes", recipientNotes);
       }
@@ -39,13 +47,16 @@ export function PendingTransfers({ pendingTransfers }: PendingTransfersProps) {
       // Update local state to mark item as accepted
       if (selectedRequest) {
         const updatedItems = selectedRequest.items.map((item: any) =>
-          item.id === acceptingItemId ? { ...item, status: "ACCEPTED" } : item
+          item.id === acceptingItemId
+            ? { ...item, status: "ACCEPTED", quantity: quantityToAccept }
+            : item
         );
         setSelectedRequest({ ...selectedRequest, items: updatedItems });
       }
       
       setAcceptingItemId(null);
       setRecipientNotes("");
+      setAcceptQuantity(1);
       
       // Refresh server data
       router.refresh();
@@ -82,6 +93,7 @@ export function PendingTransfers({ pendingTransfers }: PendingTransfersProps) {
       
       setRejectingItemId(null);
       setRecipientNotes("");
+      setAcceptQuantity(1);
       
       // Refresh server data
       router.refresh();
@@ -97,6 +109,11 @@ export function PendingTransfers({ pendingTransfers }: PendingTransfersProps) {
     sum + req.items.filter((i: any) => i.status === "AWAITING_ACCEPTANCE").length, 
     0
   );
+
+  const acceptingItem = selectedRequest?.items.find((item: any) => item.id === acceptingItemId) || null;
+  const acceptingRequiresSerial = acceptingItem
+    ? acceptingItem.equipmentItem.isWeapon || acceptingItem.equipmentItem.isSight || !!acceptingItem.serialNumber
+    : false;
 
   return (
     <>
@@ -198,6 +215,7 @@ export function PendingTransfers({ pendingTransfers }: PendingTransfersProps) {
                           onClick={() => {
                             setAcceptingItemId(item.id);
                             setRecipientNotes("");
+                            setAcceptQuantity(item.quantity ?? 1);
                           }}
                           disabled={isSubmitting}
                           className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-500 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
@@ -232,6 +250,22 @@ export function PendingTransfers({ pendingTransfers }: PendingTransfersProps) {
             <p className="text-zinc-400 text-sm mb-4">
               אתה עומד לקלוט פריט זה לציוד שלך. ניתן להוסיף הערות (אופציונלי)
             </p>
+
+            {acceptingItem && acceptingItem.quantity > 1 && !acceptingRequiresSerial && (
+              <div className="mb-4">
+                <label className="block text-sm text-zinc-400 mb-2">כמות לקליטה</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={acceptingItem.quantity}
+                  step={1}
+                  value={acceptQuantity}
+                  onChange={(e) => setAcceptQuantity(Number(e.target.value))}
+                  className="w-full h-12 rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-sm text-zinc-50 outline-none focus:ring-2 focus:ring-zinc-500 transition-all"
+                />
+                <div className="mt-2 text-xs text-zinc-500">מתוך {acceptingItem.quantity}</div>
+              </div>
+            )}
             
             <textarea
               value={recipientNotes}
