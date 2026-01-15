@@ -275,15 +275,17 @@ async function reverseRequestItemSideEffects(tx: Prisma.TransactionClient, reque
   if (isTransfer) {
     const senderId = request.requesterId;
     const recipientId = request.recipientId;
+    const approvingAdminId = requestItem.resolvedById ?? request.resolvedById;
 
     if (!recipientId) throw new Error("מקבל להעברה לא נמצא.");
+    if (!approvingAdminId) throw new Error("מאשר ההעברה לא נמצא.");
 
     // AWAITING_ACCEPTANCE: restore sender's in-transit items back to ASSIGNED
     if (requestItem.status === RequestItemStatus.AWAITING_ACCEPTANCE) {
       let remaining = requestItem.quantity;
       const pending = await tx.assignment.findMany({
         where: {
-          userId: senderId,
+          userId: approvingAdminId,
           equipmentItemId: requestItem.equipmentItemId,
           status: AssignmentStatus.PENDING_APPROVAL,
           active: true,
@@ -295,7 +297,15 @@ async function reverseRequestItemSideEffects(tx: Prisma.TransactionClient, reque
       for (const a of pending) {
         if (remaining <= 0) break;
         if (a.quantity <= remaining) {
-          await tx.assignment.update({ where: { id: a.id }, data: { status: AssignmentStatus.ASSIGNED } });
+          await tx.assignment.update({
+            where: { id: a.id },
+            data: {
+              userId: senderId,
+              status: AssignmentStatus.ASSIGNED,
+              assignedById: approvingAdminId,
+              assignedAt: new Date(),
+            },
+          });
           remaining -= a.quantity;
         } else {
           await tx.assignment.update({ where: { id: a.id }, data: { quantity: a.quantity - remaining } });
@@ -306,7 +316,7 @@ async function reverseRequestItemSideEffects(tx: Prisma.TransactionClient, reque
               quantity: remaining,
               status: AssignmentStatus.ASSIGNED,
               active: true,
-              assignedById: a.assignedById,
+              assignedById: approvingAdminId,
               assignedAt: new Date(),
               serialNumber: a.serialNumber,
               clothingSize: a.clothingSize,
@@ -342,7 +352,7 @@ async function reverseRequestItemSideEffects(tx: Prisma.TransactionClient, reque
         if (a.quantity <= remaining) {
           await tx.assignment.update({
             where: { id: a.id },
-            data: { userId: senderId, status: AssignmentStatus.ASSIGNED },
+            data: { userId: approvingAdminId, status: AssignmentStatus.ASSIGNED },
           });
           remaining -= a.quantity;
         } else {
@@ -350,7 +360,7 @@ async function reverseRequestItemSideEffects(tx: Prisma.TransactionClient, reque
           await tx.assignment.update({ where: { id: a.id }, data: { quantity: a.quantity - remaining } });
           await tx.assignment.create({
             data: {
-              userId: senderId,
+              userId: approvingAdminId,
               equipmentItemId: requestItem.equipmentItemId,
               quantity: remaining,
               status: AssignmentStatus.ASSIGNED,
@@ -367,10 +377,10 @@ async function reverseRequestItemSideEffects(tx: Prisma.TransactionClient, reque
       }
 
       if (remaining > 0) {
-        // Fallback for legacy transfers where recipient assignment was merged: best-effort create for sender.
+        // Fallback for legacy transfers where recipient assignment was merged: best-effort create for approving admin.
         await tx.assignment.create({
           data: {
-            userId: senderId,
+            userId: approvingAdminId,
             equipmentItemId: requestItem.equipmentItemId,
             quantity: remaining,
             status: AssignmentStatus.ASSIGNED,
@@ -679,7 +689,7 @@ export async function handleRequestItemAction(formData: FormData) {
           
           let remaining = quantityToFulfill;
           
-          // Find sender assignments and move the transferred quantity into PENDING_APPROVAL (in-transit)
+          // Find sender assignments and move the transferred quantity to approving admin (in-transit)
           const whereClause: any = {
             userId: request.requesterId,
             equipmentItemId: requestItem.equipmentItemId,
@@ -701,13 +711,18 @@ export async function handleRequestItemAction(formData: FormData) {
             throw new Error(`החייל לא מחזיק ${remaining} יחידות של ${requestItem.equipmentItem.name}${serialInfo}. יש לו רק ${total}.`);
           }
 
-          // Move quantity from sender into PENDING_APPROVAL (do not delete)
+          // Move quantity from sender to approving admin (do not delete)
           for (const assignment of senderAssignments) {
             if (remaining <= 0) break;
             if (assignment.quantity <= remaining) {
               await tx.assignment.update({
                 where: { id: assignment.id },
-                data: { status: AssignmentStatus.PENDING_APPROVAL, assignedById: session.user.id, assignedAt: now },
+                data: {
+                  userId: session.user.id,
+                  status: AssignmentStatus.PENDING_APPROVAL,
+                  assignedById: session.user.id,
+                  assignedAt: now,
+                },
               });
               remaining -= assignment.quantity;
             } else {
@@ -718,7 +733,7 @@ export async function handleRequestItemAction(formData: FormData) {
               });
               await tx.assignment.create({
                 data: {
-                  userId: assignment.userId,
+                  userId: session.user.id,
                   equipmentItemId: assignment.equipmentItemId,
                   quantity: remaining,
                   status: AssignmentStatus.PENDING_APPROVAL,

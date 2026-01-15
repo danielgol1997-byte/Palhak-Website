@@ -145,8 +145,13 @@ export async function recoverAssignmentToStorageAction(formData: FormData) {
     });
 
     if (!assignment) throw new Error("הקצאה לא נמצאה.");
-    if (assignment.status !== "DAMAGED" && assignment.status !== "STOLEN" && assignment.status !== "MISSING") {
-      throw new Error("ניתן לשחזר רק פריטים בסטטוס בלאי, נגנב או אבד.");
+    if (
+      assignment.status !== "DAMAGED" &&
+      assignment.status !== "STOLEN" &&
+      assignment.status !== "MISSING" &&
+      assignment.status !== "USED"
+    ) {
+      throw new Error("ניתן לשחזר רק פריטים בסטטוס בלאי, נגנב, אבד או שומש.");
     }
 
     // Determine quantity to recover (default to all)
