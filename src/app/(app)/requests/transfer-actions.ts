@@ -11,6 +11,7 @@ const HandleTransferItemSchema = z.object({
   requestItemId: z.string().min(1),
   action: z.enum(["ACCEPT", "REJECT"]),
   recipientNotes: z.string().optional(),
+  quantity: z.coerce.number().int().positive().optional(),
 });
 
 export async function handleTransferItemAction(formData: FormData) {
@@ -20,6 +21,7 @@ export async function handleTransferItemAction(formData: FormData) {
     requestItemId: formData.get("requestItemId"),
     action: formData.get("action"),
     recipientNotes: formData.get("recipientNotes") || undefined,
+    quantity: formData.get("quantity") ?? undefined,
   });
   
   if (!parsed.success) {
@@ -81,7 +83,19 @@ export async function handleTransferItemAction(formData: FormData) {
       if (!approvingAdminId) {
         throw new Error("מאשר ההעברה לא נמצא.");
       }
-      let remaining = requestItem.quantity;
+      const requestedQuantity = requestItem.quantity;
+      const acceptQuantity = parsed.data.quantity ?? requestedQuantity;
+
+      if (acceptQuantity < 1 || acceptQuantity > requestedQuantity) {
+        throw new Error("כמות לא תקינה לקליטה.");
+      }
+
+      const requiresSerial = requestItem.equipmentItem.isWeapon || requestItem.equipmentItem.isSight;
+      if (requiresSerial && acceptQuantity !== 1) {
+        throw new Error("בציוד עם מספר סידורי ניתן לקלוט כמות 1 בלבד.");
+      }
+
+      let remaining = acceptQuantity;
 
       const pending = await tx.assignment.findMany({
         where: {
@@ -149,15 +163,107 @@ export async function handleTransferItemAction(formData: FormData) {
         });
       }
 
-      // Update request item status
+      // If partially accepted, move the remaining quantity back to admin (ASSIGNED)
+      if (acceptQuantity < requestedQuantity) {
+        let remainingReject = requestedQuantity - acceptQuantity;
+        const pendingReject = await tx.assignment.findMany({
+          where: {
+            userId: approvingAdminId,
+            equipmentItemId: requestItem.equipmentItemId,
+            status: AssignmentStatus.PENDING_APPROVAL,
+            active: true,
+            ...(requestItem.serialNumber ? { serialNumber: requestItem.serialNumber } : { serialNumber: null }),
+          },
+          orderBy: [{ assignedAt: "asc" }],
+        });
+
+        for (const a of pendingReject) {
+          if (remainingReject <= 0) break;
+          if (a.quantity <= remainingReject) {
+            await tx.assignment.update({
+              where: { id: a.id },
+              data: { status: AssignmentStatus.ASSIGNED, assignedAt: now },
+            });
+            remainingReject -= a.quantity;
+          } else {
+            await tx.assignment.update({
+              where: { id: a.id },
+              data: { quantity: a.quantity - remainingReject },
+            });
+            await tx.assignment.create({
+              data: {
+                userId: approvingAdminId,
+                equipmentItemId: requestItem.equipmentItemId,
+                quantity: remainingReject,
+                status: AssignmentStatus.ASSIGNED,
+                active: true,
+                assignedById: approvingAdminId,
+                assignedAt: now,
+                serialNumber: a.serialNumber,
+                clothingSize: a.clothingSize,
+                shoeSize: a.shoeSize,
+              },
+            });
+            remainingReject = 0;
+          }
+        }
+
+        if (remainingReject > 0) {
+          await tx.assignment.create({
+            data: {
+              userId: approvingAdminId,
+              equipmentItemId: requestItem.equipmentItemId,
+              quantity: remainingReject,
+              status: AssignmentStatus.ASSIGNED,
+              active: true,
+              assignedById: approvingAdminId,
+              assignedAt: now,
+              serialNumber: requestItem.serialNumber ?? null,
+              clothingSize: requestItem.clothingSize,
+              shoeSize: requestItem.shoeSize,
+            },
+          });
+        }
+      }
+
+      // Update request item status (accepted portion)
       await tx.requestItem.update({
         where: { id: parsed.data.requestItemId },
         data: {
           status: RequestItemStatus.ACCEPTED,
           recipientAcceptedAt: now,
           recipientNotes: parsed.data.recipientNotes || null,
+          quantity: acceptQuantity,
         },
       });
+
+      // If partial, create a rejected item for the remaining quantity
+      if (acceptQuantity < requestedQuantity) {
+        const rejectedItem = await tx.requestItem.create({
+          data: {
+            requestId: requestItem.requestId,
+            equipmentItemId: requestItem.equipmentItemId,
+            quantity: requestedQuantity - acceptQuantity,
+            status: RequestItemStatus.REJECTED_BY_RECIPIENT,
+            serialNumber: requestItem.serialNumber,
+            clothingSize: requestItem.clothingSize,
+            shoeSize: requestItem.shoeSize,
+            resolvedById: requestItem.resolvedById ?? requestItem.request.resolvedById ?? null,
+            recipientNotes: parsed.data.recipientNotes || null,
+          },
+        });
+
+        await writeAuditLog(tx, {
+          actorId: session.user.id,
+          entity: AuditEntity.REQUEST_ITEM,
+          entityId: rejectedItem.id,
+          action: "TRANSFER_ITEM_REJECTED",
+          metadataJson: {
+            requestId: requestItem.requestId,
+            notes: parsed.data.recipientNotes,
+          },
+        });
+      }
 
       await writeAuditLog(tx, {
         actorId: session.user.id,
