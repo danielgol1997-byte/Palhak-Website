@@ -10,3 +10,4 @@ CREATE UNIQUE INDEX "User_personalNumber_key" ON "User"("personalNumber");
 
 
 
+
