@@ -207,6 +207,39 @@ export async function createRequestAction(formData: FormData) {
       beforeJson: null,
       afterJson: request,
     });
+
+    // Create admin notification for all request types except ADMIN_ASSIGNMENT
+    if (parsed.data.type !== RequestType.ADMIN_ASSIGNMENT) {
+      // Get requester name
+      const requester = await tx.user.findUnique({
+        where: { id: requesterId },
+        select: { name: true },
+      });
+
+      // Get items summary
+      const itemsWithNames = await tx.equipmentItem.findMany({
+        where: {
+          id: {
+            in: parsed.data.items.map((item) => item.equipmentItemId),
+          },
+        },
+        select: { id: true, name: true },
+      });
+
+      const itemsMap = new Map(itemsWithNames.map((item) => [item.id, item.name]));
+      const itemsSummary = parsed.data.items
+        .map((item) => `${itemsMap.get(item.equipmentItemId)} (${item.quantity})`)
+        .join(", ");
+
+      await tx.adminNotification.create({
+        data: {
+          requestId: request.id,
+          requestType: parsed.data.type,
+          requesterName: requester?.name || "לא ידוע",
+          itemsSummary: itemsSummary.slice(0, 500), // Limit length
+        },
+      });
+    }
   }, {
     maxWait: 10000, // 10 seconds max wait for transaction to start
     timeout: 15000, // 15 seconds max transaction duration

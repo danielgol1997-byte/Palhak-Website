@@ -294,6 +294,19 @@ model AuditLog {
   @@index([createdAt])
 }
 
+model AdminNotification {
+  id           String   @id @default(cuid())
+  requestId    String
+  requestType  String
+  requesterName String
+  itemsSummary String
+  createdAt    DateTime @default(now())
+  dismissed    Boolean  @default(false)
+
+  @@index([dismissed, createdAt(sort: Desc)])
+  @@index([requestId])
+}
+
 model Account {
   id                String  @id @default(cuid())
   userId            String

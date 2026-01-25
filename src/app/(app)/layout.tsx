@@ -4,6 +4,7 @@ import { authOptions } from "@/auth";
 import { SignOutButton } from "@/components/SignOutButton";
 import { Role } from "@prisma/client";
 import { BackButton } from "@/components/BackButton";
+import { AdminNotifications } from "./admin/_components/AdminNotifications";
 
 export default async function AppLayout({
   children,
@@ -11,6 +12,7 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const session = await getServerSession(authOptions);
+  const isAdmin = session?.user?.role === Role.ADMIN || session?.user?.role === Role.SUPER_ADMIN;
 
   return (
     <div className="relative min-h-dvh bg-zinc-950 text-zinc-50">
@@ -54,6 +56,9 @@ export default async function AppLayout({
           </div>
         </div>
       </header>
+
+      {/* Admin notifications (only for admins) */}
+      {isAdmin && <AdminNotifications />}
 
       <main className="mx-auto w-full max-w-5xl px-4 py-5 pb-24">
         {children}
