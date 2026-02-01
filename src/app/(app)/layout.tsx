@@ -4,7 +4,7 @@ import { authOptions } from "@/auth";
 import { SignOutButton } from "@/components/SignOutButton";
 import { Role } from "@prisma/client";
 import { BackButton } from "@/components/BackButton";
-import { AdminNotifications } from "./admin/_components/AdminNotifications";
+import { AdminNotificationBell } from "./admin/_components/AdminNotificationBell";
 
 export default async function AppLayout({
   children,
@@ -47,18 +47,16 @@ export default async function AppLayout({
               </div>
             </Link>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <div className="hidden sm:block text-sm font-medium text-zinc-400">
               {session?.user?.name ?? ""}
             </div>
+            {isAdmin && <AdminNotificationBell />}
             <SignOutButton />
             <BackButton />
           </div>
         </div>
       </header>
-
-      {/* Admin notifications (only for admins) */}
-      {isAdmin && <AdminNotifications />}
 
       <main className="mx-auto w-full max-w-5xl px-4 py-5 pb-24">
         {children}

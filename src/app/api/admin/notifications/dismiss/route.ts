@@ -5,7 +5,8 @@ import { Role } from "@prisma/client";
 
 export async function POST(request: NextRequest) {
   try {
-    await requireRole(Role.ADMIN);
+    const session = await requireRole(Role.ADMIN);
+    const userId = session.user.id;
 
     const body = await request.json();
     const { notificationId } = body;
@@ -14,10 +15,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing notificationId" }, { status: 400 });
     }
 
-    await prisma.adminNotification.update({
+    // Add this admin to the dismissedBy array
+    const notification = await prisma.adminNotification.findUnique({
       where: { id: notificationId },
-      data: { dismissed: true },
     });
+
+    if (!notification) {
+      return NextResponse.json({ error: "Notification not found" }, { status: 404 });
+    }
+
+    // If not already dismissed by this user, add them
+    if (!notification.dismissedBy.includes(userId)) {
+      await prisma.adminNotification.update({
+        where: { id: notificationId },
+        data: {
+          dismissedBy: {
+            push: userId,
+          },
+        },
+      });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

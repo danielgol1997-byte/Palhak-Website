@@ -1053,6 +1053,13 @@ export async function handleRequestItemAction(formData: FormData) {
             where: { id: parsed.data.requestId },
             data: updateData,
           });
+
+          // Delete notification for all admins when request is fully resolved (closed)
+          if (closedStatuses.includes(newRequestStatus)) {
+            await tx.adminNotification.deleteMany({
+              where: { requestId: parsed.data.requestId },
+            });
+          }
         }
       }
 

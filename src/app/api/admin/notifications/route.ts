@@ -7,21 +7,33 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    await requireRole(Role.ADMIN);
+    const session = await requireRole(Role.ADMIN);
+    const userId = session.user.id;
 
+    // Fetch notifications that this admin hasn't dismissed
     const notifications = await prisma.adminNotification.findMany({
-      where: {
-        dismissed: false,
-      },
       orderBy: {
         createdAt: "desc",
       },
-      take: 50,
+      take: 100,
     });
 
-    return NextResponse.json({ notifications });
+    // Filter out notifications this admin has dismissed
+    const filteredNotifications = notifications.filter(
+      (n) => !n.dismissedBy.includes(userId)
+    );
+
+    // Count unviewed notifications (not in viewedBy array)
+    const unviewedCount = filteredNotifications.filter(
+      (n) => !n.viewedBy.includes(userId)
+    ).length;
+
+    return NextResponse.json({ 
+      notifications: filteredNotifications,
+      unviewedCount 
+    });
   } catch (error) {
     console.error("Failed to fetch notifications:", error);
-    return NextResponse.json({ notifications: [] }, { status: 500 });
+    return NextResponse.json({ notifications: [], unviewedCount: 0 }, { status: 500 });
   }
 }

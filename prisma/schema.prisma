@@ -301,10 +301,11 @@ model AdminNotification {
   requesterName String
   itemsSummary String
   createdAt    DateTime @default(now())
-  dismissed    Boolean  @default(false)
+  viewedBy     String[] // Array of admin user IDs who have viewed this notification
+  dismissedBy  String[] // Array of admin user IDs who have dismissed this notification
 
-  @@index([dismissed, createdAt(sort: Desc)])
   @@index([requestId])
+  @@index([createdAt(sort: Desc)])
 }
 
 model Account {

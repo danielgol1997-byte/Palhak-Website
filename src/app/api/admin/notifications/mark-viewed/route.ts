@@ -8,19 +8,20 @@ export async function POST() {
     const session = await requireRole(Role.ADMIN);
     const userId = session.user.id;
 
-    // Get all notifications not dismissed by this admin
+    // Get all notifications that this admin hasn't viewed yet
     const notifications = await prisma.adminNotification.findMany();
-    const notDismissedByUser = notifications.filter(
-      (n) => !n.dismissedBy.includes(userId)
+    
+    const notViewedByUser = notifications.filter(
+      (n) => !n.viewedBy.includes(userId) && !n.dismissedBy.includes(userId)
     );
 
-    // Add this admin to dismissedBy for all notifications
+    // Mark all as viewed by this admin
     await Promise.all(
-      notDismissedByUser.map((notification) =>
+      notViewedByUser.map((notification) =>
         prisma.adminNotification.update({
           where: { id: notification.id },
           data: {
-            dismissedBy: {
+            viewedBy: {
               push: userId,
             },
           },
@@ -30,7 +31,7 @@ export async function POST() {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Failed to dismiss all notifications:", error);
-    return NextResponse.json({ error: "Failed to dismiss notifications" }, { status: 500 });
+    console.error("Failed to mark notifications as viewed:", error);
+    return NextResponse.json({ error: "Failed to mark as viewed" }, { status: 500 });
   }
 }
