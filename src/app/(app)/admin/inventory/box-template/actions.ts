@@ -15,6 +15,11 @@ async function getOrCreateBoxTemplate(tx: any) {
   return tpl;
 }
 
+function revalidateBoxPaths() {
+  revalidatePath("/admin/inventory/box-template");
+  revalidatePath("/admin/boxes");
+}
+
 const AddItemSchema = z.object({
   equipmentItemId: z.string().min(1),
   quantity: z.coerce.number().int().min(1).max(1000),
@@ -73,8 +78,7 @@ export async function addBoxTemplateItemAction(
     return { success: false, error: message };
   }
 
-  revalidatePath("/admin/inventory/box-template");
-  revalidatePath("/admin/boxes");
+  revalidateBoxPaths();
   return { success: true };
 }
 
@@ -119,8 +123,7 @@ export async function removeBoxTemplateItemAction(
     return { success: false, error: message };
   }
 
-  revalidatePath("/admin/inventory/box-template");
-  revalidatePath("/admin/boxes");
+  revalidateBoxPaths();
   return { success: true };
 }
 
@@ -192,7 +195,108 @@ export async function addMultipleBoxTemplateItemsAction(
     return { success: false, error: message };
   }
 
-  revalidatePath("/admin/inventory/box-template");
-  revalidatePath("/admin/boxes");
+  revalidateBoxPaths();
+  return { success: true };
+}
+
+const AddAltSchema = z.object({
+  templateItemId: z.string().min(1),
+  alternativeItemId: z.string().min(1),
+});
+
+export async function addAlternativeAction(
+  formData: FormData
+): Promise<{ success: boolean; error?: string }> {
+  const session = await requireRole(Role.ADMIN);
+  const parsed = AddAltSchema.safeParse({
+    templateItemId: formData.get("templateItemId"),
+    alternativeItemId: formData.get("alternativeItemId"),
+  });
+  if (!parsed.success) return { success: false, error: "נתונים לא תקינים." };
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const tplItem = await tx.boxTemplateItem.findUnique({
+        where: { id: parsed.data.templateItemId },
+        select: { id: true, equipmentItemId: true, boxTemplateId: true },
+      });
+      if (!tplItem) throw new Error("פריט תבנית לא נמצא.");
+
+      if (tplItem.equipmentItemId === parsed.data.alternativeItemId) {
+        throw new Error("לא ניתן להוסיף את הפריט הראשי כחלופה.");
+      }
+
+      const altItem = await tx.equipmentItem.findUnique({
+        where: { id: parsed.data.alternativeItemId },
+        select: { id: true, name: true },
+      });
+      if (!altItem) throw new Error("פריט חלופי לא נמצא.");
+
+      await tx.boxTemplateItemAlt.upsert({
+        where: {
+          templateItemId_equipmentItemId: {
+            templateItemId: tplItem.id,
+            equipmentItemId: parsed.data.alternativeItemId,
+          },
+        },
+        create: {
+          templateItemId: tplItem.id,
+          equipmentItemId: parsed.data.alternativeItemId,
+        },
+        update: {},
+      });
+
+      await writeAuditLog(tx, {
+        actorId: session.user.id,
+        entity: AuditEntity.BOX_TEMPLATE,
+        entityId: tplItem.boxTemplateId,
+        action: "BOX_TEMPLATE_ALT_ADDED",
+        metadataJson: { templateItemId: tplItem.id, alternativeItemId: parsed.data.alternativeItemId, altItemName: altItem.name },
+      });
+    });
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : "אירעה שגיאה." };
+  }
+
+  revalidateBoxPaths();
+  return { success: true };
+}
+
+const RemoveAltSchema = z.object({
+  altId: z.string().min(1),
+});
+
+export async function removeAlternativeAction(
+  formData: FormData
+): Promise<{ success: boolean; error?: string }> {
+  const session = await requireRole(Role.ADMIN);
+  const parsed = RemoveAltSchema.safeParse({
+    altId: formData.get("altId"),
+  });
+  if (!parsed.success) return { success: false, error: "נתונים לא תקינים." };
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const alt = await tx.boxTemplateItemAlt.findUnique({
+        where: { id: parsed.data.altId },
+        select: { id: true, templateItem: { select: { boxTemplateId: true } } },
+      });
+      if (!alt) throw new Error("חלופה לא נמצאה.");
+
+      await tx.boxTemplateItemAlt.delete({ where: { id: parsed.data.altId } });
+
+      await writeAuditLog(tx, {
+        actorId: session.user.id,
+        entity: AuditEntity.BOX_TEMPLATE,
+        entityId: alt.templateItem.boxTemplateId,
+        action: "BOX_TEMPLATE_ALT_REMOVED",
+        metadataJson: { altId: parsed.data.altId },
+      });
+    });
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : "אירעה שגיאה." };
+  }
+
+  revalidateBoxPaths();
   return { success: true };
 }

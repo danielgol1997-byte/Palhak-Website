@@ -53,10 +53,16 @@ interface SelectedItem {
   fromUnit?: string;
 }
 
+interface BoxTemplateAlt {
+  equipmentItemId: string;
+  equipmentItem: { id: string; name: string };
+}
+
 interface BoxTemplateItem {
   equipmentItemId: string;
   quantity: number;
   equipmentItem: { id: string; name: string };
+  alternatives: BoxTemplateAlt[];
 }
 
 interface BoxItemData {
@@ -94,14 +100,30 @@ export function EquipmentTab({ user, availableEquipment, unitTemplates, boxTempl
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
   const [adminNotes, setAdminNotes] = useState("");
 
-  const boxTemplateItemIds = new Set(boxTemplate?.items.map((i) => i.equipmentItemId) ?? []);
+  const findTemplateItemForEquipment = (equipmentItemId: string) => {
+    if (!boxTemplate) return null;
+    return boxTemplate.items.find((i) => {
+      if (i.equipmentItemId === equipmentItemId) return true;
+      return i.alternatives.some((a) => a.equipmentItemId === equipmentItemId);
+    }) ?? null;
+  };
+
+  const boxTemplateAllItemIds = new Set<string>();
+  if (boxTemplate) {
+    for (const item of boxTemplate.items) {
+      boxTemplateAllItemIds.add(item.equipmentItemId);
+      for (const alt of item.alternatives) {
+        boxTemplateAllItemIds.add(alt.equipmentItemId);
+      }
+    }
+  }
 
   const getBoxRemainingCapacity = (equipmentItemId: string) => {
-    if (!boxTemplate) return 0;
-    const tplItem = boxTemplate.items.find((i) => i.equipmentItemId === equipmentItemId);
+    const tplItem = findTemplateItemForEquipment(equipmentItemId);
     if (!tplItem) return 0;
+    const groupIds = [tplItem.equipmentItemId, ...tplItem.alternatives.map((a) => a.equipmentItemId)];
     const inBox = (userBox?.items ?? [])
-      .filter((bi) => bi.equipmentItemId === equipmentItemId)
+      .filter((bi) => groupIds.includes(bi.equipmentItemId))
       .reduce((sum, bi) => sum + bi.quantity, 0);
     return Math.max(0, tplItem.quantity - inBox);
   };
@@ -240,7 +262,7 @@ export function EquipmentTab({ user, availableEquipment, unitTemplates, boxTempl
             </thead>
             <tbody>
               {user.assignments.map((assignment: Assignment) => {
-                const canMoveToBox = boxTemplateItemIds.has(assignment.equipmentItem.id) && getBoxRemainingCapacity(assignment.equipmentItem.id) > 0;
+                const canMoveToBox = boxTemplateAllItemIds.has(assignment.equipmentItem.id) && getBoxRemainingCapacity(assignment.equipmentItem.id) > 0;
                 return (
                   <tr key={assignment.id} className="border-b border-zinc-800 hover:bg-zinc-900/50 transition-colors">
                     <td className="px-4 py-4 text-sm font-bold text-zinc-50">{assignment.equipmentItem.name}</td>

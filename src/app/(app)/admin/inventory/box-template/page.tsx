@@ -6,47 +6,40 @@ import { BoxTemplateItemActions } from "./BoxTemplateItemActions";
 
 export const dynamic = "force-dynamic";
 
-export default async function BoxTemplatePage() {
-  await requireRole(Role.ADMIN);
-
-  let tpl = await prisma.boxTemplate.findFirst({
+const tplSelect = {
+  id: true,
+  items: {
+    orderBy: { equipmentItem: { name: "asc" as const } },
     select: {
       id: true,
-      items: {
-        orderBy: { equipmentItem: { name: "asc" } },
+      equipmentItemId: true,
+      quantity: true,
+      equipmentItem: {
         select: {
+          name: true,
+          category: { select: { division: true, name: true } },
+        },
+      },
+      alternatives: {
+        select: {
+          id: true,
           equipmentItemId: true,
-          quantity: true,
           equipmentItem: {
-            select: {
-              name: true,
-              category: { select: { division: true, name: true } },
-            },
+            select: { name: true, category: { select: { division: true, name: true } } },
           },
         },
       },
     },
-  });
+  },
+};
+
+export default async function BoxTemplatePage() {
+  await requireRole(Role.ADMIN);
+
+  let tpl = await prisma.boxTemplate.findFirst({ select: tplSelect });
 
   if (!tpl) {
-    tpl = await prisma.boxTemplate.create({
-      data: {},
-      select: {
-        id: true,
-        items: {
-          select: {
-            equipmentItemId: true,
-            quantity: true,
-            equipmentItem: {
-              select: {
-                name: true,
-                category: { select: { division: true, name: true } },
-              },
-            },
-          },
-        },
-      },
-    });
+    tpl = await prisma.boxTemplate.create({ data: {}, select: tplSelect });
   }
 
   const availableItems = await prisma.equipmentItem.findMany({
@@ -80,12 +73,21 @@ export default async function BoxTemplatePage() {
         <div className="flex flex-col gap-4">
           {tpl.items.map((i) => (
             <BoxTemplateItemActions
-              key={i.equipmentItemId}
+              key={i.id}
+              templateItemId={i.id}
               equipmentItemId={i.equipmentItemId}
               itemName={i.equipmentItem.name}
               division={i.equipmentItem.category.division}
               categoryName={i.equipmentItem.category.name}
               quantity={i.quantity}
+              alternatives={i.alternatives.map((a) => ({
+                id: a.id,
+                equipmentItemId: a.equipmentItemId,
+                name: a.equipmentItem.name,
+                division: a.equipmentItem.category.division,
+                categoryName: a.equipmentItem.category.name,
+              }))}
+              availableItems={availableItems}
             />
           ))}
           {tpl.items.length === 0 && (

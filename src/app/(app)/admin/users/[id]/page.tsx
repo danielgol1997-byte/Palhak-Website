@@ -131,6 +131,12 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
             equipmentItem: {
               select: { id: true, name: true },
             },
+            alternatives: {
+              select: {
+                equipmentItemId: true,
+                equipmentItem: { select: { id: true, name: true } },
+              },
+            },
           },
         },
       },

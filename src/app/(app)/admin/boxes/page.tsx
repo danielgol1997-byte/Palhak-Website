@@ -22,6 +22,14 @@ export default async function BoxesPage() {
               category: { select: { division: true, name: true } },
             },
           },
+          alternatives: {
+            select: {
+              equipmentItemId: true,
+              equipmentItem: {
+                select: { id: true, name: true },
+              },
+            },
+          },
         },
       },
     },
@@ -116,14 +124,25 @@ export default async function BoxesPage() {
     const userAssignments = assignmentsByUser[box.userId] ?? [];
 
     const templateStatus = boxTemplate.items.map((tplItem) => {
-      const boxItems = box.items.filter((bi) => bi.equipmentItemId === tplItem.equipmentItemId);
+      const groupIds = [
+        tplItem.equipmentItemId,
+        ...tplItem.alternatives.map((a) => a.equipmentItemId),
+      ];
+      const groupIdSet = new Set(groupIds);
+
+      const boxItems = box.items.filter((bi) => groupIdSet.has(bi.equipmentItemId));
       const inBox = boxItems.reduce((s, bi) => s + bi.quantity, 0);
       const missing = Math.max(0, tplItem.quantity - inBox);
+
+      const altNames = tplItem.alternatives.map((a) => a.equipmentItem.name);
+      const displayName = altNames.length > 0
+        ? `${tplItem.equipmentItem.name} (+ ${altNames.length} חלופות)`
+        : tplItem.equipmentItem.name;
 
       let missingReason: string | null = null;
       if (missing > 0) {
         const userItemAssignments = userAssignments.filter(
-          (a) => a.equipmentItemId === tplItem.equipmentItemId
+          (a) => groupIdSet.has(a.equipmentItemId)
         );
         const assigned = userItemAssignments
           .filter((a) => a.status === "ASSIGNED")
@@ -145,14 +164,16 @@ export default async function BoxesPage() {
         else missingReason = "לא הוקצה";
       }
 
+      const groupStorageTotal = groupIds.reduce((s, id) => s + (storageMap[id] ?? 0), 0);
+
       return {
         equipmentItemId: tplItem.equipmentItemId,
-        name: tplItem.equipmentItem.name,
+        name: displayName,
         required: tplItem.quantity,
         inBox,
         missing,
         missingReason,
-        inStorage: storageMap[tplItem.equipmentItemId] ?? 0,
+        inStorage: groupStorageTotal,
       };
     });
 

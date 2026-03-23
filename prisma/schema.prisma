@@ -129,6 +129,7 @@ model EquipmentItem {
   transferItems      TransferItem[]
   unitTemplateItems  UnitTemplateItem[]
   boxTemplateItems   BoxTemplateItem[]
+  boxTemplateAlts    BoxTemplateItemAlt[]
   boxItems           BoxItem[]
 
   @@unique([categoryId, name])
@@ -287,13 +288,26 @@ model BoxTemplate {
 }
 
 model BoxTemplateItem {
+  id              String               @id @default(cuid())
   boxTemplateId   String
   equipmentItemId String
-  quantity        Int           @default(1)
-  boxTemplate     BoxTemplate   @relation(fields: [boxTemplateId], references: [id], onDelete: Cascade)
-  equipmentItem   EquipmentItem @relation(fields: [equipmentItemId], references: [id])
+  quantity        Int                  @default(1)
+  boxTemplate     BoxTemplate          @relation(fields: [boxTemplateId], references: [id], onDelete: Cascade)
+  equipmentItem   EquipmentItem        @relation(fields: [equipmentItemId], references: [id])
+  alternatives    BoxTemplateItemAlt[]
 
-  @@id([boxTemplateId, equipmentItemId])
+  @@unique([boxTemplateId, equipmentItemId])
+  @@index([equipmentItemId])
+}
+
+model BoxTemplateItemAlt {
+  id              String        @id @default(cuid())
+  templateItemId  String
+  equipmentItemId String
+  templateItem    BoxTemplateItem @relation(fields: [templateItemId], references: [id], onDelete: Cascade)
+  equipmentItem   EquipmentItem   @relation(fields: [equipmentItemId], references: [id])
+
+  @@unique([templateItemId, equipmentItemId])
   @@index([equipmentItemId])
 }
 

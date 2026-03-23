@@ -354,23 +354,29 @@ export async function moveToBoxAction(formData: FormData): Promise<{ success: bo
       if (assignment.userId !== parsed.data.userId) throw new Error("הקצאה לא שייכת למשתמש זה.");
       if (parsed.data.quantity > assignment.quantity) throw new Error("לא ניתן להעביר יותר מהכמות המוקצית.");
 
-      const tpl = await tx.boxTemplate.findFirst({ include: { items: true } });
+      const tpl = await tx.boxTemplate.findFirst({
+        include: { items: { include: { alternatives: true } } },
+      });
       if (!tpl) throw new Error("תבנית קרטון לא הוגדרה.");
-      const templateItem = tpl.items.find((i) => i.equipmentItemId === assignment.equipmentItemId);
+
+      const templateItem = tpl.items.find((i) => {
+        if (i.equipmentItemId === assignment.equipmentItemId) return true;
+        return i.alternatives.some((a) => a.equipmentItemId === assignment.equipmentItemId);
+      });
       if (!templateItem) throw new Error("פריט זה לא מוגדר בתבנית הקרטון.");
+
+      const allGroupItemIds = [
+        templateItem.equipmentItemId,
+        ...templateItem.alternatives.map((a) => a.equipmentItemId),
+      ];
 
       let box = await tx.box.findUnique({ where: { userId: parsed.data.userId } });
       if (!box) box = await tx.box.create({ data: { userId: parsed.data.userId } });
 
-      const existingBoxItem = assignment.serialNumber
-        ? null
-        : await tx.boxItem.findFirst({ where: { boxId: box.id, equipmentItemId: assignment.equipmentItemId, serialNumber: null } });
-
-      const currentNonSerial = existingBoxItem?.quantity ?? 0;
-      const serialCount = await tx.boxItem.count({
-        where: { boxId: box.id, equipmentItemId: assignment.equipmentItemId, serialNumber: { not: null } },
+      const groupBoxItems = await tx.boxItem.findMany({
+        where: { boxId: box.id, equipmentItemId: { in: allGroupItemIds } },
       });
-      const totalInBox = currentNonSerial + serialCount;
+      const totalInBox = groupBoxItems.reduce((s, bi) => s + bi.quantity, 0);
       const remainingCapacity = templateItem.quantity - totalInBox;
       if (parsed.data.quantity > remainingCapacity) {
         throw new Error(remainingCapacity <= 0 ? "הקרטון מלא עבור פריט זה." : `הקרטון יכול להכיל עוד ${remainingCapacity} יחידות מפריט זה.`);
@@ -381,6 +387,10 @@ export async function moveToBoxAction(formData: FormData): Promise<{ success: bo
       } else {
         await tx.assignment.delete({ where: { id: assignment.id } });
       }
+
+      const existingBoxItem = assignment.serialNumber
+        ? null
+        : await tx.boxItem.findFirst({ where: { boxId: box.id, equipmentItemId: assignment.equipmentItemId, serialNumber: null } });
 
       if (assignment.serialNumber) {
         await tx.boxItem.create({ data: { boxId: box.id, equipmentItemId: assignment.equipmentItemId, quantity: parsed.data.quantity, serialNumber: assignment.serialNumber, movedById: session.user.id } });
