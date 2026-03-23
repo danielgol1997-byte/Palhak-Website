@@ -150,6 +150,10 @@ export function roleLabel(r: Role): string {
       return "מנהל";
     case "USER":
       return "משתמש";
+    case "THEME_MASTER":
+      return "יובל על חלל";
+    default:
+      return r;
   }
 }
 

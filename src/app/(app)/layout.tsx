@@ -5,6 +5,10 @@ import { SignOutButton } from "@/components/SignOutButton";
 import { Role } from "@prisma/client";
 import { BackButton } from "@/components/BackButton";
 import { AdminNotificationBell } from "./admin/_components/AdminNotificationBell";
+import { ThemeDesigner } from "./_components/ThemeDesigner";
+import { ThemeEffects } from "./_components/ThemeEffects";
+import { prisma } from "@/lib/prisma";
+import { getPreset, DEFAULT_THEME } from "@/lib/theme";
 
 export default async function AppLayout({
   children,
@@ -12,28 +16,72 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const session = await getServerSession(authOptions);
-  const isAdmin = session?.user?.role === Role.ADMIN || session?.user?.role === Role.SUPER_ADMIN;
+  const role = session?.user?.role as Role | undefined;
+  const isAdmin = role === Role.ADMIN || role === Role.SUPER_ADMIN;
+  const isThemeMaster = role === Role.THEME_MASTER;
+
+  let themePreset = DEFAULT_THEME.preset;
+  let themeEffect = DEFAULT_THEME.effect;
+  try {
+    const theme = await prisma.siteTheme.findUnique({ where: { id: "singleton" } });
+    if (theme) {
+      themePreset = theme.preset;
+      themeEffect = theme.effect;
+    }
+  } catch {
+    // use defaults
+  }
+
+  const preset = getPreset(themePreset);
 
   return (
-    <div className="relative min-h-dvh bg-zinc-950 text-zinc-50">
-      {/* Background image layer (faded/low-contrast) */}
+    <div
+      className="relative min-h-dvh text-zinc-50 transition-colors duration-700"
+      style={{ backgroundColor: "var(--t-bg, #09090b)" }}
+    >
+      {/* Theme-colored overlay tint */}
       <div
-        className="pointer-events-none absolute inset-0 -z-10 bg-cover bg-center opacity-[0.3] grayscale-[0.15] contrast-75 saturate-75"
+        className="pointer-events-none absolute inset-0 -z-10 transition-colors duration-700"
+        style={{ backgroundColor: "var(--t-overlay, transparent)" }}
+        aria-hidden="true"
+      />
+      {/* Background image layer */}
+      <div
+        className="pointer-events-none absolute inset-0 -z-20 bg-cover bg-center opacity-[0.25] grayscale-[0.15] contrast-75 saturate-75"
         style={{ backgroundImage: "url(/bg.jpg)" }}
         aria-hidden="true"
       />
-      {/* Soft vignette so content stays readable */}
+      {/* Soft vignette */}
       <div
-        className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b from-zinc-950/70 via-zinc-950/60 to-zinc-950"
+        className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b from-black/60 via-black/40 to-black/70"
         aria-hidden="true"
       />
-      <header className="sticky top-0 z-20 border-b border-zinc-800 bg-zinc-900/90 backdrop-blur">
+
+      {/* Animated effects overlay (stars, sparkles, aurora…) */}
+      <ThemeEffects initialEffect={themeEffect} initialPreset={themePreset} />
+
+      <header
+        className="sticky top-0 z-20 border-b backdrop-blur transition-colors duration-700"
+        style={{
+          borderColor: "var(--t-border, #27272a)",
+          background: `color-mix(in srgb, var(--t-surface, #18181b) 85%, transparent)`,
+        }}
+      >
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-3 min-w-0">
             <Link href="/" className="flex items-center gap-3 group transition-all">
               <div className="relative">
-                <div className="absolute -inset-1 rounded-xl bg-white/5 opacity-0 blur transition duration-500 group-hover:opacity-100"></div>
-                <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-50 text-zinc-950 shadow-xl transition-all duration-300 group-hover:scale-105 active:scale-95">
+                <div
+                  className="absolute -inset-1 rounded-xl opacity-0 blur transition duration-500 group-hover:opacity-100"
+                  style={{ backgroundColor: "var(--t-glow, rgba(255,255,255,0.08))" }}
+                />
+                <div
+                  className="relative flex h-10 w-10 items-center justify-center rounded-xl shadow-xl transition-all duration-300 group-hover:scale-105 active:scale-95"
+                  style={{
+                    backgroundColor: "var(--t-accent, #e4e4e7)",
+                    color: "var(--t-bg, #09090b)",
+                  }}
+                >
                   <span className="text-2xl font-black leading-none select-none">א</span>
                 </div>
               </div>
@@ -41,7 +89,10 @@ export default async function AppLayout({
                 <span className="text-2xl font-black tracking-tighter text-zinc-50 select-none">
                   אשר
                 </span>
-                <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-[0.2em] select-none truncate">
+                <span
+                  className="text-[10px] font-bold uppercase tracking-[0.2em] select-none truncate transition-colors duration-700"
+                  style={{ color: preset.accent }}
+                >
                   INVENTORY
                 </span>
               </div>
@@ -52,6 +103,9 @@ export default async function AppLayout({
               {session?.user?.name ?? ""}
             </div>
             {isAdmin && <AdminNotificationBell />}
+            {isThemeMaster && (
+              <ThemeDesigner initialPreset={themePreset} initialEffect={themeEffect} />
+            )}
             <SignOutButton />
             <BackButton />
           </div>
@@ -64,5 +118,3 @@ export default async function AppLayout({
     </div>
   );
 }
-
-

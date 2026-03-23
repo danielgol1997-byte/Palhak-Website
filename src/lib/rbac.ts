@@ -10,6 +10,8 @@ export function roleRank(role: AppRole): number {
       return 2;
     case Role.USER:
       return 1;
+    case Role.THEME_MASTER:
+      return 1;
     default:
       return 0;
   }

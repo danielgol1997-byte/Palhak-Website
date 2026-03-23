@@ -406,6 +406,13 @@ enum Role {
   SUPER_ADMIN
   ADMIN
   USER
+  THEME_MASTER
+}
+
+model SiteTheme {
+  id     String @id @default("singleton")
+  preset String @default("default")
+  effect String @default("none")
 }
 
 enum Division {
