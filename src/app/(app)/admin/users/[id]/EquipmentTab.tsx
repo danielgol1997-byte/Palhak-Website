@@ -90,10 +90,14 @@ export function EquipmentTab({ user, availableEquipment, unitTemplates }: Equipm
     setIsSubmitting(true);
     setError(null);
     try {
-      await adminUnassignEquipmentAction(formData);
-      setUnassignModal(null);
-    } catch (err: any) {
-      setError(err.message || "אירעה שגיאה");
+      const result = await adminUnassignEquipmentAction(formData);
+      if (!result.success) {
+        setError(result.error || "אירעה שגיאה");
+      } else {
+        setUnassignModal(null);
+      }
+    } catch {
+      setError("אירעה שגיאה בלתי צפויה");
     } finally {
       setIsSubmitting(false);
     }
@@ -125,7 +129,6 @@ export function EquipmentTab({ user, availableEquipment, unitTemplates }: Equipm
     setError(null);
 
     try {
-      // Submit each item
       for (const item of selectedItems) {
         const formData = new FormData();
         formData.append("userId", user.id);
@@ -136,15 +139,19 @@ export function EquipmentTab({ user, availableEquipment, unitTemplates }: Equipm
         }
         formData.append("adminNotes", adminNotes);
 
-        await adminAssignEquipmentAction(formData);
+        const result = await adminAssignEquipmentAction(formData);
+        if (!result.success) {
+          setError(result.error || "אירעה שגיאה");
+          setIsSubmitting(false);
+          return;
+        }
       }
 
-      // Reset state
       setAssignModal(false);
       setSelectedItems([]);
       setAdminNotes("");
-    } catch (err: any) {
-      setError(err.message || "אירעה שגיאה");
+    } catch {
+      setError("אירעה שגיאה בלתי צפויה");
     } finally {
       setIsSubmitting(false);
     }
