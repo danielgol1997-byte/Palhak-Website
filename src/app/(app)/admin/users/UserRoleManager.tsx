@@ -51,6 +51,10 @@ export function UserRoleManager({ userId, currentRole, userName, isCurrentUser }
         return "bg-blue-900/20 text-blue-400 border-blue-900/40";
       case Role.USER:
         return "bg-zinc-900/20 text-zinc-400 border-zinc-700";
+      case Role.THEME_MASTER:
+        return "bg-fuchsia-900/20 text-fuchsia-400 border-fuchsia-900/40";
+      default:
+        return "bg-zinc-900/20 text-zinc-400 border-zinc-700";
     }
   };
 
@@ -136,6 +140,11 @@ export function UserRoleManager({ userId, currentRole, userName, isCurrentUser }
                 {role === Role.USER && (
                   <div className="text-xs text-zinc-500 mt-1">
                     משתמש רגיל
+                  </div>
+                )}
+                {role === Role.THEME_MASTER && (
+                  <div className="text-xs text-fuchsia-500/70 mt-1">
+                    ✨ יובל על חלל
                   </div>
                 )}
               </button>
