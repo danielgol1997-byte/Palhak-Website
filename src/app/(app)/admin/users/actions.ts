@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
+import { isPrivilegedOperator, PRIVILEGED_OPERATOR_ROLES } from "@/lib/rbac";
 import { AuditEntity, Role } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
@@ -26,7 +27,22 @@ export async function adminUpdateUserActiveAction(formData: FormData) {
       select: { id: true, role: true, active: true, name: true, email: true },
     });
     if (!before) throw new Error("משתמש לא נמצא.");
-    if (before.role === Role.SUPER_ADMIN) throw new Error("לא ניתן לערוך משתמש זה.");
+    if (isPrivilegedOperator(before.role) && !isPrivilegedOperator(session.user.role)) {
+      throw new Error("לא ניתן לערוך משתמש זה.");
+    }
+
+    if (
+      isPrivilegedOperator(before.role) &&
+      !parsed.data.active &&
+      isPrivilegedOperator(session.user.role)
+    ) {
+      const privilegedActive = await tx.user.count({
+        where: { active: true, role: { in: [...PRIVILEGED_OPERATOR_ROLES] } },
+      });
+      if (privilegedActive <= 1) {
+        throw new Error("לא ניתן לבטל את מפעיל המערכת האחרון.");
+      }
+    }
 
     const after = await tx.user.update({
       where: { id: parsed.data.userId },
@@ -73,14 +89,16 @@ export async function superAdminUpdateUserRoleAction(formData: FormData) {
     });
     if (!before) throw new Error("משתמש לא נמצא.");
 
-    // Check if we're about to remove the last super admin
-    if (before.role === Role.SUPER_ADMIN && parsed.data.role !== Role.SUPER_ADMIN) {
-      const superAdminCount = await tx.user.count({
-        where: { role: Role.SUPER_ADMIN, active: true },
+    // Cannot demote the last privileged operator (super admin or יובל על חלל)
+    if (
+      isPrivilegedOperator(before.role) &&
+      !isPrivilegedOperator(parsed.data.role)
+    ) {
+      const privilegedCount = await tx.user.count({
+        where: { role: { in: [...PRIVILEGED_OPERATOR_ROLES] }, active: true },
       });
-      
-      if (superAdminCount <= 1) {
-        throw new Error("לא ניתן להסיר את מנהל העל האחרון במערכת.");
+      if (privilegedCount <= 1) {
+        throw new Error("לא ניתן להסיר את מפעיל המערכת האחרון.");
       }
     }
 
@@ -137,7 +155,9 @@ export async function adminUpdateUserDepartmentsPositionsAction(formData: FormDa
       },
     });
     if (!beforeUser) throw new Error("משתמש לא נמצא.");
-    if (beforeUser.role === Role.SUPER_ADMIN) throw new Error("לא ניתן לערוך משתמש זה.");
+    if (isPrivilegedOperator(beforeUser.role) && !isPrivilegedOperator(session.user.role)) {
+      throw new Error("לא ניתן לערוך משתמש זה.");
+    }
 
     // Validate positions belong to selected departments
     if (parsed.data.positions.length) {

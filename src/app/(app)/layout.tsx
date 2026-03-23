@@ -17,7 +17,8 @@ export default async function AppLayout({
 }) {
   const session = await getServerSession(authOptions);
   const role = session?.user?.role as Role | undefined;
-  const isAdmin = role === Role.ADMIN || role === Role.SUPER_ADMIN;
+  const isAdmin =
+    role === Role.ADMIN || role === Role.SUPER_ADMIN || role === Role.THEME_MASTER;
   const isThemeMaster = role === Role.THEME_MASTER;
 
   let themePreset = DEFAULT_THEME.preset;

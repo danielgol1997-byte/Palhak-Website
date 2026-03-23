@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { AssignmentStatus, Role } from "@prisma/client";
+import { isPrivilegedOperator } from "@/lib/rbac";
 import { PersonalTabs } from "./PersonalTabs";
 import { EquipmentTab } from "./EquipmentTab";
 import { RequestsTab } from "./RequestsTab";
@@ -11,7 +12,8 @@ export const dynamic = "force-dynamic";
 export default async function PersonalPage() {
   const session = await requireSession();
   const assignmentStatusFilter =
-    session.user.role === Role.ADMIN
+    session.user.role === Role.ADMIN ||
+    isPrivilegedOperator(session.user.role)
       ? { in: [AssignmentStatus.ASSIGNED, AssignmentStatus.PENDING_APPROVAL] }
       : AssignmentStatus.ASSIGNED;
 

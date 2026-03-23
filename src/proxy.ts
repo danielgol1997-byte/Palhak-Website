@@ -67,7 +67,8 @@ export async function proxy(req: NextRequest) {
   }
 
   const role = (token.role as Role | undefined) ?? Role.USER;
-  const isAdminRole = role === Role.ADMIN || role === Role.SUPER_ADMIN;
+  const isAdminRole =
+    role === Role.ADMIN || role === Role.SUPER_ADMIN || role === Role.THEME_MASTER;
   if (isAdminOnlyPath(pathname) && !isAdminRole) {
     const url = req.nextUrl.clone();
     url.pathname = "/";

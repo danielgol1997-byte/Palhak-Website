@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
+import { isPrivilegedOperator, PRIVILEGED_OPERATOR_ROLES } from "@/lib/rbac";
 import { AuditEntity, Role, ClothingSize, ShoeSize } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
@@ -65,6 +66,30 @@ export async function adminUpdateUserPersonalDetailsAction(formData: FormData) {
     });
     
     if (!before) throw new Error("משתמש לא נמצא.");
+
+    if (isPrivilegedOperator(before.role) && !isPrivilegedOperator(session.user.role)) {
+      throw new Error("אין הרשאה לערוך משתמש זה.");
+    }
+
+    if (
+      !isPrivilegedOperator(session.user.role) &&
+      isPrivilegedOperator(parsed.data.role)
+    ) {
+      throw new Error("אין הרשאה להקצות תפקיד ניהול על.");
+    }
+
+    if (
+      isPrivilegedOperator(before.role) &&
+      !isPrivilegedOperator(parsed.data.role) &&
+      isPrivilegedOperator(session.user.role)
+    ) {
+      const privilegedCount = await tx.user.count({
+        where: { active: true, role: { in: [...PRIVILEGED_OPERATOR_ROLES] } },
+      });
+      if (privilegedCount <= 1) {
+        throw new Error("לא ניתן להסיר את מפעיל המערכת האחרון.");
+      }
+    }
 
     // Update user basic info
     await tx.user.update({
