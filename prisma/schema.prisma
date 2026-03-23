@@ -41,6 +41,7 @@ model User {
   transfersTo          Transfer[]       @relation("TransferTo")
   userDepartments      UserDepartment[]
   userPositions        UserPosition[]
+  box                  Box?
 
   @@index([role])
   @@index([active])
@@ -127,6 +128,8 @@ model EquipmentItem {
   storageInventories StorageInventory[]
   transferItems      TransferItem[]
   unitTemplateItems  UnitTemplateItem[]
+  boxTemplateItems   BoxTemplateItem[]
+  boxItems           BoxItem[]
 
   @@unique([categoryId, name])
   @@index([categoryId, active])
@@ -275,6 +278,46 @@ model RequestItem {
   resolvedBy           User?             @relation("RequestItemResolvedBy", fields: [resolvedById], references: [id])
 
   @@index([requestId])
+  @@index([equipmentItemId])
+}
+
+model BoxTemplate {
+  id    String            @id @default(cuid())
+  items BoxTemplateItem[]
+}
+
+model BoxTemplateItem {
+  boxTemplateId   String
+  equipmentItemId String
+  quantity        Int           @default(1)
+  boxTemplate     BoxTemplate   @relation(fields: [boxTemplateId], references: [id], onDelete: Cascade)
+  equipmentItem   EquipmentItem @relation(fields: [equipmentItemId], references: [id])
+
+  @@id([boxTemplateId, equipmentItemId])
+  @@index([equipmentItemId])
+}
+
+model Box {
+  id        String    @id @default(cuid())
+  userId    String    @unique
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  user      User      @relation(fields: [userId], references: [id])
+  items     BoxItem[]
+}
+
+model BoxItem {
+  id              String        @id @default(cuid())
+  boxId           String
+  equipmentItemId String
+  quantity        Int
+  serialNumber    String?
+  movedAt         DateTime      @default(now())
+  movedById       String?
+  box             Box           @relation(fields: [boxId], references: [id], onDelete: Cascade)
+  equipmentItem   EquipmentItem @relation(fields: [equipmentItemId], references: [id])
+
+  @@index([boxId, equipmentItemId])
   @@index([equipmentItemId])
 }
 
@@ -455,4 +498,6 @@ enum AuditEntity {
   STORAGE_LOCATION
   STORAGE_INVENTORY
   REQUEST_ITEM
+  BOX
+  BOX_TEMPLATE
 }

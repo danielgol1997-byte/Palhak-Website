@@ -184,6 +184,7 @@ export async function adminAssignEquipmentAction(formData: FormData): Promise<{ 
   return { success: true };
 }
 
+
 const UnassignEquipmentSchema = z.object({
   userId: z.string().min(1),
   assignmentId: z.string().min(1),
@@ -321,6 +322,143 @@ export async function adminUnassignEquipmentAction(formData: FormData): Promise<
   revalidatePath(`/admin/users/${parsed.data.userId}`);
   revalidatePath("/admin/users");
   revalidatePath("/admin/requests");
+  revalidatePath("/admin/storage");
+  return { success: true };
+}
+
+const MoveToBoxSchema = z.object({
+  userId: z.string().min(1),
+  assignmentId: z.string().min(1),
+  quantity: z.coerce.number().int().min(1).max(1000),
+});
+
+export async function moveToBoxAction(formData: FormData): Promise<{ success: boolean; error?: string }> {
+  const session = await requireRole(Role.ADMIN);
+  const parsed = MoveToBoxSchema.safeParse({
+    userId: formData.get("userId"),
+    assignmentId: formData.get("assignmentId"),
+    quantity: formData.get("quantity"),
+  });
+  if (!parsed.success) return { success: false, error: "נתונים לא תקינים." };
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const assignment = await tx.assignment.findUnique({
+        where: { id: parsed.data.assignmentId },
+        include: {
+          equipmentItem: { select: { id: true, name: true } },
+          user: { select: { id: true, name: true } },
+        },
+      });
+      if (!assignment) throw new Error("הקצאה לא נמצאה.");
+      if (assignment.userId !== parsed.data.userId) throw new Error("הקצאה לא שייכת למשתמש זה.");
+      if (parsed.data.quantity > assignment.quantity) throw new Error("לא ניתן להעביר יותר מהכמות המוקצית.");
+
+      const tpl = await tx.boxTemplate.findFirst({ include: { items: true } });
+      if (!tpl) throw new Error("תבנית קרטון לא הוגדרה.");
+      const templateItem = tpl.items.find((i) => i.equipmentItemId === assignment.equipmentItemId);
+      if (!templateItem) throw new Error("פריט זה לא מוגדר בתבנית הקרטון.");
+
+      let box = await tx.box.findUnique({ where: { userId: parsed.data.userId } });
+      if (!box) box = await tx.box.create({ data: { userId: parsed.data.userId } });
+
+      const existingBoxItem = assignment.serialNumber
+        ? null
+        : await tx.boxItem.findFirst({ where: { boxId: box.id, equipmentItemId: assignment.equipmentItemId, serialNumber: null } });
+
+      const currentNonSerial = existingBoxItem?.quantity ?? 0;
+      const serialCount = await tx.boxItem.count({
+        where: { boxId: box.id, equipmentItemId: assignment.equipmentItemId, serialNumber: { not: null } },
+      });
+      const totalInBox = currentNonSerial + serialCount;
+      const remainingCapacity = templateItem.quantity - totalInBox;
+      if (parsed.data.quantity > remainingCapacity) {
+        throw new Error(remainingCapacity <= 0 ? "הקרטון מלא עבור פריט זה." : `הקרטון יכול להכיל עוד ${remainingCapacity} יחידות מפריט זה.`);
+      }
+
+      if (parsed.data.quantity < assignment.quantity) {
+        await tx.assignment.update({ where: { id: assignment.id }, data: { quantity: assignment.quantity - parsed.data.quantity } });
+      } else {
+        await tx.assignment.delete({ where: { id: assignment.id } });
+      }
+
+      if (assignment.serialNumber) {
+        await tx.boxItem.create({ data: { boxId: box.id, equipmentItemId: assignment.equipmentItemId, quantity: parsed.data.quantity, serialNumber: assignment.serialNumber, movedById: session.user.id } });
+      } else if (existingBoxItem) {
+        await tx.boxItem.update({ where: { id: existingBoxItem.id }, data: { quantity: existingBoxItem.quantity + parsed.data.quantity } });
+      } else {
+        await tx.boxItem.create({ data: { boxId: box.id, equipmentItemId: assignment.equipmentItemId, quantity: parsed.data.quantity, serialNumber: null, movedById: session.user.id } });
+      }
+
+      await writeAuditLog(tx, {
+        actorId: session.user.id, entity: AuditEntity.BOX, entityId: box.id, action: "MOVE_TO_BOX",
+        metadataJson: { equipmentItemId: assignment.equipmentItemId, equipmentItemName: assignment.equipmentItem.name, userName: assignment.user.name, quantity: parsed.data.quantity, serialNumber: assignment.serialNumber },
+      });
+    }, { maxWait: 10000, timeout: 15000 });
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : "אירעה שגיאה בלתי צפויה." };
+  }
+
+  revalidatePath(`/admin/users/${parsed.data.userId}`);
+  revalidatePath("/admin/boxes");
+  revalidatePath("/admin/storage");
+  return { success: true };
+}
+
+const RestoreFromBoxSchema = z.object({
+  userId: z.string().min(1),
+  boxItemId: z.string().min(1),
+  quantity: z.coerce.number().int().min(1).max(1000),
+});
+
+export async function restoreFromBoxAction(formData: FormData): Promise<{ success: boolean; error?: string }> {
+  const session = await requireRole(Role.ADMIN);
+  const parsed = RestoreFromBoxSchema.safeParse({
+    userId: formData.get("userId"),
+    boxItemId: formData.get("boxItemId"),
+    quantity: formData.get("quantity"),
+  });
+  if (!parsed.success) return { success: false, error: "נתונים לא תקינים." };
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const boxItem = await tx.boxItem.findUnique({
+        where: { id: parsed.data.boxItemId },
+        include: { box: { select: { id: true, userId: true } }, equipmentItem: { select: { id: true, name: true } } },
+      });
+      if (!boxItem) throw new Error("פריט קרטון לא נמצא.");
+      if (boxItem.box.userId !== parsed.data.userId) throw new Error("פריט זה לא שייך למשתמש זה.");
+      if (parsed.data.quantity > boxItem.quantity) throw new Error("לא ניתן לשחזר יותר מהכמות בקרטון.");
+
+      if (parsed.data.quantity < boxItem.quantity) {
+        await tx.boxItem.update({ where: { id: boxItem.id }, data: { quantity: boxItem.quantity - parsed.data.quantity } });
+      } else {
+        await tx.boxItem.delete({ where: { id: boxItem.id } });
+      }
+
+      if (boxItem.serialNumber) {
+        await tx.assignment.create({ data: { userId: parsed.data.userId, equipmentItemId: boxItem.equipmentItemId, quantity: parsed.data.quantity, status: "ASSIGNED", active: true, assignedById: session.user.id, assignedAt: new Date(), serialNumber: boxItem.serialNumber } });
+      } else {
+        const existing = await tx.assignment.findFirst({ where: { userId: parsed.data.userId, equipmentItemId: boxItem.equipmentItemId, active: true, status: "ASSIGNED", serialNumber: null } });
+        if (existing) {
+          await tx.assignment.update({ where: { id: existing.id }, data: { quantity: existing.quantity + parsed.data.quantity } });
+        } else {
+          await tx.assignment.create({ data: { userId: parsed.data.userId, equipmentItemId: boxItem.equipmentItemId, quantity: parsed.data.quantity, status: "ASSIGNED", active: true, assignedById: session.user.id, assignedAt: new Date() } });
+        }
+      }
+
+      const user = await tx.user.findUnique({ where: { id: parsed.data.userId }, select: { name: true } });
+      await writeAuditLog(tx, {
+        actorId: session.user.id, entity: AuditEntity.BOX, entityId: boxItem.box.id, action: "RESTORE_FROM_BOX",
+        metadataJson: { equipmentItemId: boxItem.equipmentItemId, equipmentItemName: boxItem.equipmentItem.name, userName: user?.name, quantity: parsed.data.quantity, serialNumber: boxItem.serialNumber },
+      });
+    }, { maxWait: 10000, timeout: 15000 });
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : "אירעה שגיאה בלתי צפויה." };
+  }
+
+  revalidatePath(`/admin/users/${parsed.data.userId}`);
+  revalidatePath("/admin/boxes");
   revalidatePath("/admin/storage");
   return { success: true };
 }

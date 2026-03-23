@@ -9,7 +9,7 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
   const resolvedParams = await params;
   await requireRole(Role.ADMIN);
 
-  const [user, departments, positions, activeEquipmentItems, unitTemplates] = await Promise.all([
+  const [user, departments, positions, activeEquipmentItems, unitTemplates, boxTemplate, userBox] = await Promise.all([
     prisma.user.findUnique({
       where: { id: resolvedParams.id },
       select: {
@@ -121,6 +121,43 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
       },
       orderBy: { name: "asc" },
     }),
+    prisma.boxTemplate.findFirst({
+      select: {
+        id: true,
+        items: {
+          select: {
+            equipmentItemId: true,
+            quantity: true,
+            equipmentItem: {
+              select: { id: true, name: true },
+            },
+          },
+        },
+      },
+    }),
+    prisma.box.findUnique({
+      where: { userId: resolvedParams.id },
+      select: {
+        id: true,
+        items: {
+          select: {
+            id: true,
+            equipmentItemId: true,
+            quantity: true,
+            serialNumber: true,
+            movedAt: true,
+            equipmentItem: {
+              select: {
+                id: true,
+                name: true,
+                category: { select: { division: true, name: true } },
+              },
+            },
+          },
+          orderBy: { movedAt: "desc" },
+        },
+      },
+    }),
   ]);
 
   if (!user) {
@@ -153,6 +190,8 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
         positions={positions}
         availableEquipment={activeEquipmentItems}
         unitTemplates={unitTemplates}
+        boxTemplate={boxTemplate}
+        userBox={userBox}
       />
     </div>
   );

@@ -29,6 +29,7 @@ interface StorageInventoryRow {
     assignments: Assignment[];
   };
   inStorage: number;
+  inBoxes: number;
   assignedHealthy: number;
   damaged: number;
   used: number;
@@ -36,7 +37,7 @@ interface StorageInventoryRow {
   total: number;
 }
 
-type StatusType = "inStorage" | "assigned" | "damaged" | "used" | "stolenOrLost";
+type StatusType = "inStorage" | "inBoxes" | "assigned" | "damaged" | "used" | "stolenOrLost";
 
 interface StatusModalData {
   item: StorageInventoryRow;
@@ -57,7 +58,7 @@ export default function StorageList({ initialRows }: { initialRows: StorageInven
   const [isRecovering, setIsRecovering] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDivision, setSelectedDivision] = useState<Division | "ALL">("ALL");
-  const [sortField, setSortField] = useState<"name" | "total" | "inStorage" | "assignedHealthy" | "damaged" | "used" | "stolenOrLost">("name");
+  const [sortField, setSortField] = useState<"name" | "total" | "inStorage" | "inBoxes" | "assignedHealthy" | "damaged" | "used" | "stolenOrLost">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   useEffect(() => {
@@ -98,6 +99,10 @@ export default function StorageList({ initialRows }: { initialRows: StorageInven
         case "inStorage":
           aVal = a.inStorage;
           bVal = b.inStorage;
+          break;
+        case "inBoxes":
+          aVal = a.inBoxes;
+          bVal = b.inBoxes;
           break;
         case "assignedHealthy":
           aVal = a.assignedHealthy;
@@ -208,6 +213,13 @@ export default function StorageList({ initialRows }: { initialRows: StorageInven
                       במלאי <SortIcon field="inStorage" />
                     </button>
                     <button
+                      onClick={() => handleSort("inBoxes")}
+                      className="flex items-center gap-1 px-2 py-1 rounded hover:bg-amber-900/20 transition-colors cursor-pointer"
+                    >
+                      <div className="w-2 h-2 rounded-sm bg-amber-500" />
+                      בקרטונים <SortIcon field="inBoxes" />
+                    </button>
+                    <button
                       onClick={() => handleSort("assignedHealthy")}
                       className="flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-900/20 transition-colors cursor-pointer"
                     >
@@ -252,13 +264,14 @@ export default function StorageList({ initialRows }: { initialRows: StorageInven
                 };
 
                 const inStorageWidth = calculateWidth(row.inStorage);
+                const inBoxesWidth = calculateWidth(row.inBoxes);
                 const assignedWidth = calculateWidth(row.assignedHealthy);
                 const damagedWidth = calculateWidth(row.damaged);
                 const usedWidth = calculateWidth(row.used);
                 const stolenWidth = calculateWidth(row.stolenOrLost);
 
                 // Normalize if total exceeds 100%
-                const totalWidth = inStorageWidth + assignedWidth + damagedWidth + usedWidth + stolenWidth;
+                const totalWidth = inStorageWidth + inBoxesWidth + assignedWidth + damagedWidth + usedWidth + stolenWidth;
                 const scale = totalWidth > 100 ? 100 / totalWidth : 1;
 
                 return (
@@ -290,6 +303,21 @@ export default function StorageList({ initialRows }: { initialRows: StorageInven
                             <div className="absolute inset-0 bg-gradient-to-b from-emerald-500/90 to-emerald-600/90" />
                             <div className="relative h-full flex items-center justify-center px-1 text-white text-xs font-bold whitespace-nowrap overflow-hidden">
                               {inStorageWidth * scale > 8 && row.inStorage}
+                            </div>
+                          </button>
+                        )}
+
+                        {/* In Boxes - Amber */}
+                        {row.inBoxes > 0 && (
+                          <button
+                            onClick={() => setStatusModal({ item: row, statusType: "inBoxes" })}
+                            className="group relative transition-all hover:brightness-110 cursor-pointer"
+                            style={{ width: `${inBoxesWidth * scale}%` }}
+                            title={`בקרטונים: ${row.inBoxes}`}
+                          >
+                            <div className="absolute inset-0 bg-gradient-to-b from-amber-500/90 to-amber-600/90" />
+                            <div className="relative h-full flex items-center justify-center px-1 text-white text-xs font-bold whitespace-nowrap overflow-hidden">
+                              {inBoxesWidth * scale > 8 && row.inBoxes}
                             </div>
                           </button>
                         )}
@@ -416,7 +444,7 @@ export default function StorageList({ initialRows }: { initialRows: StorageInven
               <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-950">
                 <div className="text-xs text-zinc-500 mb-2">סה״כ מלאי (לאחר שמירה)</div>
                 <div className="text-sm text-zinc-400 space-y-1">
-                  <div><span className="text-emerald-400">במלאי</span> + <span className="text-blue-400">{editingItem.assignedHealthy} מוקצה</span> + <span className="text-orange-400">{editingItem.damaged} בלאי</span> + <span className="text-yellow-400">{editingItem.used} שומש</span> + <span className="text-red-400">{editingItem.stolenOrLost} אבד/נגנב</span></div>
+                  <div><span className="text-emerald-400">במלאי</span> + <span className="text-amber-400">{editingItem.inBoxes} בקרטונים</span> + <span className="text-blue-400">{editingItem.assignedHealthy} מוקצה</span> + <span className="text-orange-400">{editingItem.damaged} בלאי</span> + <span className="text-yellow-400">{editingItem.used} שומש</span> + <span className="text-red-400">{editingItem.stolenOrLost} אבד/נגנב</span></div>
                   <div className="text-xl font-bold text-zinc-50">= {editingItem.total} סה״כ</div>
                 </div>
               </div>
@@ -445,6 +473,7 @@ export default function StorageList({ initialRows }: { initialRows: StorageInven
                 </h3>
                 <div className="mt-1 text-sm text-zinc-400">
                   {statusModal.statusType === "inStorage" && "פריטים במלאי"}
+                  {statusModal.statusType === "inBoxes" && "פריטים בקרטונים"}
                   {statusModal.statusType === "assigned" && "פריטים מוקצים לחיילים"}
                   {statusModal.statusType === "damaged" && "פריטים בבלאי"}
                   {statusModal.statusType === "used" && "פריטים שומשים"}
@@ -479,6 +508,18 @@ export default function StorageList({ initialRows }: { initialRows: StorageInven
                   <div className="text-sm text-zinc-400">יחידות זמינות במחסן</div>
                   <div className="mt-4 text-xs text-zinc-500">
                     פריטים אלו נמצאים במלאי ולא הוקצו לאיש.
+                  </div>
+                </div>
+              </div>
+            ) : statusModal.statusType === "inBoxes" ? (
+              <div className="rounded-xl border border-amber-900/40 bg-amber-900/10 p-6">
+                <div className="text-center">
+                  <div className="text-4xl sm:text-6xl font-black text-amber-400 mb-2">
+                    {statusModal.item.inBoxes}
+                  </div>
+                  <div className="text-sm text-zinc-400">יחידות בקרטונים</div>
+                  <div className="mt-4 text-xs text-zinc-500">
+                    פריטים אלו מאוחסנים בקרטונים של חיילים. צפה ב<a href="/admin/boxes" className="text-amber-400 hover:underline">רשימת הקרטונים</a> לפרטים.
                   </div>
                 </div>
               </div>

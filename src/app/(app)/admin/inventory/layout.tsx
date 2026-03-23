@@ -8,6 +8,7 @@ export default function InventoryLayout({ children }: { children: React.ReactNod
           { label: "מלאי", href: "/admin/inventory/storage" },
           { label: "פריטים", href: "/admin/inventory/items" },
           { label: "יחידות", href: "/admin/inventory/unit-templates" },
+          { label: "תבנית קרטון", href: "/admin/inventory/box-template" },
         ]}
       />
       {children}

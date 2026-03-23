@@ -12,9 +12,11 @@ interface UserDetailTabsProps {
   positions: any[];
   availableEquipment: any[];
   unitTemplates: any[];
+  boxTemplate: any;
+  userBox: any;
 }
 
-export function UserDetailTabs({ user, departments, positions, availableEquipment, unitTemplates }: UserDetailTabsProps) {
+export function UserDetailTabs({ user, departments, positions, availableEquipment, unitTemplates, boxTemplate, userBox }: UserDetailTabsProps) {
   const [activeTab, setActiveTab] = useState<TabType>("equipment");
 
   return (
@@ -50,6 +52,8 @@ export function UserDetailTabs({ user, departments, positions, availableEquipmen
               user={user}
               availableEquipment={availableEquipment}
               unitTemplates={unitTemplates}
+              boxTemplate={boxTemplate}
+              userBox={userBox}
             />
           )}
           {activeTab === "personal" && (

@@ -12,6 +12,7 @@ export default function AdminPage() {
           { href: "/admin/inventory/storage", title: "מלאי / פריטים / יחידות", desc: "מלאי במחסן, ניהול פריטים, וניהול יחידות." },
           { href: "/admin/users", title: "משתמשים", desc: "ניהול משתמשים ותפקידים." },
           { href: "/admin/requests", title: "בקשות", desc: "ניהול בקשות ציוד והעברות." },
+          { href: "/admin/boxes", title: "קרטונים", desc: "ניהול קרטוני ציוד לחיילים ומעקב מילוי." },
           { href: "/admin/exports", title: "ייצוא נתונים", desc: "הורדה ל-Excel / Google Sheets / CSV." },
           { href: "/admin/weapons-and-sights", title: "נשקים וצלמים", desc: "מעקב אחר נשקים וצלמים מוקצים." },
         ].map((link) => (

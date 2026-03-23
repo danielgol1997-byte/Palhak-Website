@@ -55,6 +55,16 @@ export default async function StoragePage() {
     },
   });
 
+  // Get box item counts per equipment item
+  const boxItemCounts = await prisma.boxItem.groupBy({
+    by: ["equipmentItemId"],
+    _sum: { quantity: true },
+  });
+  const boxCountMap: Record<string, number> = {};
+  for (const bi of boxItemCounts) {
+    boxCountMap[bi.equipmentItemId] = bi._sum.quantity ?? 0;
+  }
+
   // Calculate totals for each row
   const rowsWithTotals = rows.map((row) => {
     const assignedHealthy = row.equipmentItem.assignments
@@ -74,7 +84,8 @@ export default async function StoragePage() {
       .reduce((sum, a) => sum + a.quantity, 0);
 
     const inStorage = row.quantity;
-    const total = assignedHealthy + damaged + used + stolenOrLost + inStorage;
+    const inBoxes = boxCountMap[row.equipmentItem.id] ?? 0;
+    const total = assignedHealthy + damaged + used + stolenOrLost + inStorage + inBoxes;
 
     return {
       id: row.id,
@@ -85,6 +96,7 @@ export default async function StoragePage() {
         assignments: row.equipmentItem.assignments,
       },
       inStorage,
+      inBoxes,
       assignedHealthy,
       damaged,
       used,
