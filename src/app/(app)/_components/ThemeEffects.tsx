@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { getPreset } from "@/lib/theme";
+import { getResolvedPreset } from "@/lib/theme";
 
 type Particle = {
   id: number;
@@ -193,6 +193,84 @@ function FirefliesEffect({ accent }: { accent: string }) {
   );
 }
 
+function HeartsEffect({ accent }: { accent: string }) {
+  const [items, setItems] = useState<
+    { id: number; x: number; delay: number; dur: number; emoji: string; drift: number }[]
+  >([]);
+  useEffect(() => {
+    const em = ["💕", "💖", "💗", "💝", "🩷", "💓", "✨", "🌸"];
+    setItems(
+      Array.from({ length: 42 }, (_, i) => ({
+        id: i,
+        x: Math.random() * 100,
+        delay: Math.random() * 12,
+        dur: 7 + Math.random() * 9,
+        emoji: em[Math.floor(Math.random() * em.length)]!,
+        drift: (Math.random() - 0.5) * 100,
+      }))
+    );
+  }, []);
+  if (!items.length) return null;
+  return (
+    <div className="fixed inset-0 overflow-hidden pointer-events-none">
+      {items.map((h) => (
+        <div
+          key={h.id}
+          className="absolute text-lg sm:text-xl select-none"
+          style={{
+            left: `${h.x}%`,
+            bottom: "-5%",
+            animation: `yuval-heart-float ${h.dur}s ${h.delay}s ease-in-out infinite`,
+            filter: `drop-shadow(0 0 6px ${accent})`,
+            "--heart-drift": `${h.drift}px`,
+          } as React.CSSProperties}
+        >
+          {h.emoji}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PetalsEffect({ accent }: { accent: string }) {
+  const [petals, setPetals] = useState<
+    { id: number; x: number; delay: number; dur: number; rot: number; w: number }[]
+  >([]);
+  useEffect(() => {
+    setPetals(
+      Array.from({ length: 55 }, (_, i) => ({
+        id: i,
+        x: Math.random() * 100,
+        delay: Math.random() * 15,
+        dur: 12 + Math.random() * 14,
+        rot: Math.random() * 360,
+        w: 8 + Math.random() * 14,
+      }))
+    );
+  }, []);
+  if (!petals.length) return null;
+  return (
+    <div className="fixed inset-0 overflow-hidden pointer-events-none">
+      {petals.map((p) => (
+        <div
+          key={p.id}
+          className="absolute rounded-full opacity-70"
+          style={{
+            left: `${p.x}%`,
+            top: "-8%",
+            width: `${p.w}px`,
+            height: `${p.w * 1.4}px`,
+            background: `linear-gradient(135deg, ${accent}, #ffffffaa)`,
+            ["--petal-rot" as string]: `${p.rot}deg`,
+            animation: `yuval-petal-fall ${p.dur}s ${p.delay}s linear infinite`,
+            boxShadow: `0 0 14px ${accent}66`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 function MatrixEffect() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -254,13 +332,13 @@ export function ThemeEffects({
   initialPreset: string;
 }) {
   const [effect, setEffect] = useState(initialEffect);
-  const [accentColor, setAccentColor] = useState(getPreset(initialPreset).accent);
+  const [accentColor, setAccentColor] = useState(getResolvedPreset(initialPreset).accent);
 
   useEffect(() => {
     const handler = (e: Event) => {
       const ce = e as CustomEvent<{ effect: string; preset: string }>;
       setEffect(ce.detail.effect);
-      setAccentColor(getPreset(ce.detail.preset).accent);
+      setAccentColor(getResolvedPreset(ce.detail.preset).accent);
     };
     window.addEventListener("yuval-theme-change", handler);
     return () => window.removeEventListener("yuval-theme-change", handler);
@@ -272,6 +350,8 @@ export function ThemeEffects({
     <>
       {effect === "stars" && <StarsEffect accent={accentColor} />}
       {effect === "sparkles" && <SparklesEffect accent={accentColor} />}
+      {effect === "hearts" && <HeartsEffect accent={accentColor} />}
+      {effect === "petals" && <PetalsEffect accent={accentColor} />}
       {effect === "aurora" && <AuroraEffect accent={accentColor} />}
       {effect === "bubbles" && <BubblesEffect accent={accentColor} />}
       {effect === "fireflies" && <FirefliesEffect accent={accentColor} />}

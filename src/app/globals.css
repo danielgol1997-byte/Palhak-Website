@@ -93,8 +93,85 @@ body {
   --t-surface: #18181b;
   --t-border: #27272a;
   --t-accent: #e4e4e7;
+  --t-accent2: #e4e4e7;
   --t-glow: rgba(255, 255, 255, 0.08);
   --t-overlay: transparent;
+  --t-fg: #fafafa;
+  --t-fg-muted: #a1a1aa;
+  --t-photo-opacity: 0.25;
+  --t-immersive: transparent;
+  --t-vignette: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.58) 0%,
+    rgba(0, 0, 0, 0.12) 42%,
+    rgba(0, 0, 0, 0.62) 100%
+  );
+}
+
+html[data-immersive="1"] .yuval-immersive-layer {
+  animation: yuval-mesh-shift 24s ease-in-out infinite;
+  background-size: 400% 400%;
+  opacity: 1;
+}
+
+@keyframes yuval-mesh-shift {
+  0%,
+  100% {
+    background-position: 0% 40%;
+  }
+  50% {
+    background-position: 100% 60%;
+  }
+}
+
+/* Light / girly themes: lift Tailwind zinc surfaces toward preset (exaggerated) */
+html[data-theme-mode="light"] .app-theme-scope .text-zinc-50 {
+  color: var(--t-fg) !important;
+}
+html[data-theme-mode="light"] .app-theme-scope .text-zinc-100 {
+  color: color-mix(in srgb, var(--t-fg) 92%, var(--t-accent)) !important;
+}
+html[data-theme-mode="light"] .app-theme-scope .text-zinc-200 {
+  color: color-mix(in srgb, var(--t-fg) 78%, var(--t-accent)) !important;
+}
+html[data-theme-mode="light"] .app-theme-scope .text-zinc-300 {
+  color: color-mix(in srgb, var(--t-fg) 65%, var(--t-accent)) !important;
+}
+html[data-theme-mode="light"] .app-theme-scope .text-zinc-400 {
+  color: var(--t-fg-muted) !important;
+}
+html[data-theme-mode="light"] .app-theme-scope .text-zinc-500 {
+  color: color-mix(in srgb, var(--t-fg-muted) 75%, var(--t-accent)) !important;
+}
+html[data-theme-mode="light"] .app-theme-scope .text-zinc-600 {
+  color: color-mix(in srgb, var(--t-fg-muted) 55%, var(--t-accent)) !important;
+}
+
+html[data-theme-mode="light"] .app-theme-scope .bg-zinc-950 {
+  background-color: color-mix(in srgb, var(--t-surface) 94%, white) !important;
+}
+html[data-theme-mode="light"] .app-theme-scope .bg-zinc-900 {
+  background-color: color-mix(in srgb, var(--t-surface) 88%, white) !important;
+}
+html[data-theme-mode="light"] .app-theme-scope .bg-zinc-800 {
+  background-color: color-mix(in srgb, var(--t-surface) 82%, var(--t-accent) 8%) !important;
+}
+html[data-theme-mode="light"] .app-theme-scope .bg-zinc-950\/50 {
+  background-color: color-mix(in srgb, var(--t-surface) 65%, transparent) !important;
+}
+
+html[data-theme-mode="light"] .app-theme-scope .border-zinc-800 {
+  border-color: color-mix(in srgb, var(--t-border) 82%, white) !important;
+}
+html[data-theme-mode="light"] .app-theme-scope .border-zinc-700 {
+  border-color: color-mix(in srgb, var(--t-border) 75%, white) !important;
+}
+html[data-theme-mode="light"] .app-theme-scope .border-zinc-900\/40 {
+  border-color: color-mix(in srgb, var(--t-border) 72%, #ffffff66) !important;
+}
+
+html[data-theme-mode="light"] .app-theme-scope .placeholder\:text-zinc-700::placeholder {
+  color: color-mix(in srgb, var(--t-fg-muted) 55%, transparent) !important;
 }
 
 /* ─── Theme effect keyframes ─── */
@@ -131,6 +208,38 @@ body {
   25% { transform: translate(var(--dx1, 20px), var(--dy1, -30px)) scale(1.4); opacity: 1; }
   50% { transform: translate(var(--dx2, -15px), var(--dy2, 10px)) scale(0.6); opacity: 0.3; }
   75% { transform: translate(var(--dx3, 30px), var(--dy3, 20px)) scale(1.2); opacity: 0.9; }
+}
+
+@keyframes yuval-heart-float {
+  0% {
+    transform: translateY(0) translateX(0) rotate(-8deg);
+    opacity: 0;
+  }
+  8% {
+    opacity: 0.95;
+  }
+  92% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translateY(-115vh) translateX(var(--heart-drift, 0px)) rotate(18deg);
+    opacity: 0;
+  }
+}
+
+@keyframes yuval-petal-fall {
+  from {
+    transform: translateY(-6vh) rotate(var(--petal-rot, 0deg)) translateX(0);
+    opacity: 0;
+  }
+  5% {
+    opacity: 0.88;
+  }
+  to {
+    transform: translateY(108vh) rotate(calc(var(--petal-rot, 0deg) + 540deg))
+      translateX(min(22vw, 140px));
+    opacity: 0;
+  }
 }
 
 /* Shimmer animation for active tabs */

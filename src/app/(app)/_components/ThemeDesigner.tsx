@@ -1,19 +1,17 @@
 "use client";
 
 import { useState, useEffect, useRef, useTransition } from "react";
-import { THEME_PRESETS, THEME_EFFECTS, getPreset } from "@/lib/theme";
+import {
+  THEME_PRESETS,
+  THEME_EFFECTS,
+  getResolvedPreset,
+  applyThemeVarsToRoot,
+  DEFAULT_THEME,
+} from "@/lib/theme";
 import { saveThemeAction } from "@/app/(app)/_actions/saveTheme";
 
 function applyThemeToDOM(presetId: string, effect: string) {
-  const p = getPreset(presetId);
-  const s = document.documentElement.style;
-  s.setProperty("--t-bg", p.bg);
-  s.setProperty("--t-surface", p.surface);
-  s.setProperty("--t-border", p.border);
-  s.setProperty("--t-accent", p.accent);
-  s.setProperty("--t-glow", p.glow);
-  s.setProperty("--t-overlay", p.overlayColor);
-  document.documentElement.setAttribute("data-effect", effect);
+  applyThemeVarsToRoot(presetId, effect);
   window.dispatchEvent(
     new CustomEvent("yuval-theme-change", { detail: { effect, preset: presetId } })
   );
@@ -55,7 +53,9 @@ export function ThemeDesigner({
   const btnRef = useRef<HTMLButtonElement>(null);
 
   const hasChanges = selectedPreset !== savedPreset || selectedEffect !== savedEffect;
-  const currentPreset = getPreset(selectedPreset);
+  const currentPreset = getResolvedPreset(selectedPreset);
+  const isFactoryDefault =
+    savedPreset === DEFAULT_THEME.preset && savedEffect === DEFAULT_THEME.effect;
 
   useEffect(() => {
     if (!open) return;
@@ -83,19 +83,24 @@ export function ThemeDesigner({
     applyThemeToDOM(selectedPreset, id);
   }
 
-  function handleSave() {
+  function persist(presetId: string, effectId: string, onOk?: () => void) {
     startTransition(async () => {
       const fd = new FormData();
-      fd.append("preset", selectedPreset);
-      fd.append("effect", selectedEffect);
+      fd.append("preset", presetId);
+      fd.append("effect", effectId);
       const result = await saveThemeAction(fd);
       if (result.success) {
-        setSavedPreset(selectedPreset);
-        setSavedEffect(selectedEffect);
+        setSavedPreset(presetId);
+        setSavedEffect(effectId);
         setJustSaved(true);
         setTimeout(() => setJustSaved(false), 2200);
+        onOk?.();
       }
     });
+  }
+
+  function handleSave() {
+    persist(selectedPreset, selectedEffect);
   }
 
   function handleRevert() {
@@ -104,9 +109,22 @@ export function ThemeDesigner({
     applyThemeToDOM(savedPreset, savedEffect);
   }
 
+  function handleFactoryReset() {
+    if (
+      !confirm(
+        "לאפס את המראה למצב המקורי של אשר (רקע כהה, ללא אפקטים) לכל המשתמשים במערכת?"
+      )
+    ) {
+      return;
+    }
+    setSelectedPreset(DEFAULT_THEME.preset);
+    setSelectedEffect(DEFAULT_THEME.effect);
+    applyThemeToDOM(DEFAULT_THEME.preset, DEFAULT_THEME.effect);
+    persist(DEFAULT_THEME.preset, DEFAULT_THEME.effect);
+  }
+
   return (
     <div className="relative">
-      {/* Header button */}
       <button
         ref={btnRef}
         onClick={() => setOpen((o) => !o)}
@@ -129,21 +147,19 @@ export function ThemeDesigner({
         )}
       </button>
 
-      {/* Designer panel */}
       {open && (
         <div
           ref={panelRef}
-          className="absolute left-0 top-full mt-2 z-50 w-[340px] sm:w-[400px] rounded-2xl p-5 shadow-2xl"
+          className="absolute left-0 top-full mt-2 z-50 w-[min(100vw-1.5rem,420px)] sm:w-[440px] rounded-2xl p-5 shadow-2xl max-h-[min(90dvh,720px)] flex flex-col gap-4"
           style={{
-            background: `linear-gradient(135deg, ${currentPreset.surface}f0 0%, ${currentPreset.bg}f8 100%)`,
-            border: `1px solid ${currentPreset.accent}30`,
-            boxShadow: `0 24px 64px rgba(0,0,0,0.8), 0 0 0 1px ${currentPreset.accent}20, inset 0 1px 0 ${currentPreset.accent}15`,
-            backdropFilter: "blur(24px)",
+            background: `linear-gradient(145deg, ${currentPreset.surface}f2 0%, ${currentPreset.bg}fa 50%, color-mix(in srgb, ${currentPreset.accent} 12%, ${currentPreset.surface}) 100%)`,
+            border: `1px solid ${currentPreset.accent}35`,
+            boxShadow: `0 28px 80px rgba(0,0,0,0.55), 0 0 0 1px ${currentPreset.accent}18, inset 0 1px 0 ${currentPreset.accent}20`,
+            backdropFilter: "blur(28px)",
           }}
           dir="rtl"
         >
-          {/* Panel header */}
-          <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center justify-between gap-2 shrink-0">
             <div>
               <h3
                 className="text-base font-black tracking-tight"
@@ -151,12 +167,12 @@ export function ThemeDesigner({
               >
                 ✨ סטודיו עיצוב
               </h3>
-              <p className="text-[11px] mt-0.5" style={{ color: `${currentPreset.accent}80` }}>
-                שינויים מיידיים לכולם
+              <p className="text-[11px] mt-0.5" style={{ color: currentPreset.fgMuted }}>
+                חוויה מלאה — רקע, צבעים ואפקטים לכולם
               </p>
             </div>
             <div
-              className="text-xs px-2.5 py-1 rounded-full font-bold"
+              className="text-xs px-2.5 py-1 rounded-full font-bold shrink-0"
               style={{
                 background: `${currentPreset.accent}18`,
                 color: currentPreset.accent,
@@ -167,133 +183,151 @@ export function ThemeDesigner({
             </div>
           </div>
 
-          {/* Color Presets */}
-          <div className="mb-5">
-            <p
-              className="text-[10px] font-bold uppercase tracking-[0.15em] mb-3"
-              style={{ color: `${currentPreset.accent}70` }}
-            >
-              ערכות צבע
-            </p>
-            <div className="grid grid-cols-5 gap-2">
-              {THEME_PRESETS.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => handlePresetSelect(p.id)}
-                  title={p.name}
-                  className="relative flex flex-col items-center gap-1.5 rounded-xl p-2 transition-all duration-200 hover:scale-105 active:scale-95"
-                  style={{
-                    background:
-                      selectedPreset === p.id
-                        ? `${p.accent}25`
-                        : `${p.bg}90`,
-                    border: `1px solid ${selectedPreset === p.id ? p.accent : p.border}`,
-                    boxShadow: selectedPreset === p.id ? `0 0 12px ${p.accent}40` : "none",
-                  }}
-                >
-                  <div
-                    className="w-7 h-7 rounded-full"
-                    style={{
-                      background: `radial-gradient(circle at 35% 35%, ${p.accent} 0%, ${p.bg} 100%)`,
-                      boxShadow: `0 0 8px ${p.accent}60`,
-                    }}
-                  />
-                  <span
-                    className="text-[9px] font-semibold text-center leading-tight truncate w-full"
-                    style={{ color: selectedPreset === p.id ? p.accent : `${p.accent}90` }}
-                  >
-                    {p.name}
-                  </span>
-                  {selectedPreset === p.id && (
-                    <div
-                      className="absolute top-1 left-1 rounded-full p-0.5"
-                      style={{ background: p.accent, color: p.bg }}
-                    >
-                      <CheckIcon />
-                    </div>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Effects */}
-          <div className="mb-5">
-            <p
-              className="text-[10px] font-bold uppercase tracking-[0.15em] mb-3"
-              style={{ color: `${currentPreset.accent}70` }}
-            >
-              אפקטי רקע
-            </p>
-            <div className="grid grid-cols-4 gap-2">
-              {THEME_EFFECTS.map((e) => (
-                <button
-                  key={e.id}
-                  onClick={() => handleEffectSelect(e.id)}
-                  className="flex flex-col items-center gap-1.5 rounded-xl px-2 py-2.5 transition-all duration-200 hover:scale-105 active:scale-95"
-                  style={{
-                    background:
-                      selectedEffect === e.id
-                        ? `${currentPreset.accent}22`
-                        : `${currentPreset.surface}80`,
-                    border: `1px solid ${selectedEffect === e.id ? currentPreset.accent : currentPreset.border}`,
-                    boxShadow:
-                      selectedEffect === e.id
-                        ? `0 0 10px ${currentPreset.accent}35`
-                        : "none",
-                  }}
-                >
-                  <span className="text-lg leading-none">{e.emoji}</span>
-                  <span
-                    className="text-[9px] font-semibold text-center leading-tight"
-                    style={{
-                      color:
-                        selectedEffect === e.id
-                          ? currentPreset.accent
-                          : `${currentPreset.accent}80`,
-                    }}
-                  >
-                    {e.name}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Preview strip */}
-          <div
-            className="rounded-xl p-3 mb-4 flex items-center gap-3"
+          {/* Factory reset — always visible */}
+          <button
+            type="button"
+            onClick={handleFactoryReset}
+            disabled={isPending}
+            className="w-full rounded-xl py-3 px-4 text-sm font-black transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed border-2 border-dashed"
             style={{
-              background: `${currentPreset.bg}80`,
+              borderColor: isFactoryDefault ? currentPreset.border : "#64748b",
+              background: isFactoryDefault
+                ? `${currentPreset.surface}60`
+                : "linear-gradient(135deg, rgba(15,23,42,0.85) 0%, rgba(30,41,59,0.9) 100%)",
+              color: isFactoryDefault ? currentPreset.fgMuted : "#e2e8f0",
+            }}
+          >
+            🔄 איפוס למראה המקורי של אשר
+            <span className="block text-[10px] font-semibold opacity-80 mt-1">
+              חוזרים לרקע הכהה הקלאסי, בלי אפקטים — לכל המשתמשים
+            </span>
+          </button>
+
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1 space-y-5 -mr-1">
+            <div>
+              <p
+                className="text-[10px] font-bold uppercase tracking-[0.15em] mb-2"
+                style={{ color: currentPreset.fgMuted }}
+              >
+                ערכות צבע ({THEME_PRESETS.length})
+              </p>
+              <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 max-h-[min(38vh,280px)] overflow-y-auto pb-1">
+                {THEME_PRESETS.map((p) => {
+                  const rp = getResolvedPreset(p.id);
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => handlePresetSelect(p.id)}
+                      title={p.name}
+                      className="relative flex flex-col items-center gap-1 rounded-xl p-1.5 transition-all duration-200 hover:scale-105 active:scale-95"
+                      style={{
+                        background:
+                          selectedPreset === p.id ? `${rp.accent}28` : `${rp.bg}99`,
+                        border: `1px solid ${selectedPreset === p.id ? rp.accent : rp.border}`,
+                        boxShadow:
+                          selectedPreset === p.id ? `0 0 14px ${rp.accent}45` : "none",
+                      }}
+                    >
+                      <div
+                        className="w-7 h-7 rounded-full shrink-0"
+                        style={{
+                          background: `linear-gradient(135deg, ${rp.accent} 0%, ${rp.accent2} 100%)`,
+                          boxShadow: `0 0 10px ${rp.glow}`,
+                        }}
+                      />
+                      <span
+                        className="text-[8px] font-bold text-center leading-tight line-clamp-2 min-h-[2rem]"
+                        style={{
+                          color: selectedPreset === p.id ? rp.accent : rp.fg,
+                        }}
+                      >
+                        {p.emoji} {p.name}
+                      </span>
+                      {selectedPreset === p.id && (
+                        <div
+                          className="absolute top-0.5 left-0.5 rounded-full p-0.5"
+                          style={{ background: rp.accent, color: rp.bg }}
+                        >
+                          <CheckIcon />
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <p
+                className="text-[10px] font-bold uppercase tracking-[0.15em] mb-2"
+                style={{ color: currentPreset.fgMuted }}
+              >
+                אפקטי רקע
+              </p>
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                {THEME_EFFECTS.map((e) => (
+                  <button
+                    key={e.id}
+                    onClick={() => handleEffectSelect(e.id)}
+                    className="flex flex-col items-center gap-1 rounded-xl px-1.5 py-2 transition-all duration-200 hover:scale-105 active:scale-95"
+                    style={{
+                      background:
+                        selectedEffect === e.id
+                          ? `${currentPreset.accent}24`
+                          : `${currentPreset.surface}90`,
+                      border: `1px solid ${selectedEffect === e.id ? currentPreset.accent : currentPreset.border}`,
+                      boxShadow:
+                        selectedEffect === e.id
+                          ? `0 0 10px ${currentPreset.accent}35`
+                          : "none",
+                    }}
+                  >
+                    <span className="text-base leading-none">{e.emoji}</span>
+                    <span
+                      className="text-[8px] font-bold text-center leading-tight line-clamp-2"
+                      style={{
+                        color:
+                          selectedEffect === e.id
+                            ? currentPreset.accent
+                            : currentPreset.fgMuted,
+                      }}
+                    >
+                      {e.name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div
+            className="rounded-xl p-3 flex items-center gap-3 shrink-0"
+            style={{
+              background: `${currentPreset.bg}90`,
               border: `1px solid ${currentPreset.border}`,
             }}
           >
             <div
-              className="w-10 h-10 rounded-xl flex-shrink-0"
+              className="w-11 h-11 rounded-xl flex-shrink-0"
               style={{
-                background: `radial-gradient(circle at 35% 35%, ${currentPreset.accent} 0%, ${currentPreset.bg} 100%)`,
-                boxShadow: `0 0 16px ${currentPreset.glow}`,
+                background: `linear-gradient(135deg, ${currentPreset.accent}, ${currentPreset.accent2})`,
+                boxShadow: `0 0 18px ${currentPreset.glow}`,
               }}
             />
-            <div className="min-w-0">
-              <div
-                className="text-sm font-bold truncate"
-                style={{ color: currentPreset.accent }}
-              >
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-bold truncate" style={{ color: currentPreset.accent }}>
                 {THEME_PRESETS.find((p) => p.id === selectedPreset)?.name}
               </div>
-              <div
-                className="text-xs truncate"
-                style={{ color: `${currentPreset.accent}70` }}
-              >
+              <div className="text-xs truncate" style={{ color: currentPreset.fgMuted }}>
                 {THEME_EFFECTS.find((e) => e.id === selectedEffect)?.name}
+                {currentPreset.mode === "light" ? " · בהיר ומלא" : " · כהה"}
               </div>
             </div>
             {hasChanges && (
               <div
-                className="mr-auto text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0"
+                className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0"
                 style={{
-                  background: `${currentPreset.accent}20`,
+                  background: `${currentPreset.accent}22`,
                   color: currentPreset.accent,
                 }}
               >
@@ -302,8 +336,7 @@ export function ThemeDesigner({
             )}
           </div>
 
-          {/* Action buttons */}
-          <div className="flex gap-2">
+          <div className="flex gap-2 shrink-0">
             <button
               onClick={handleSave}
               disabled={isPending || (!hasChanges && !justSaved)}
@@ -312,10 +345,16 @@ export function ThemeDesigner({
                 background: justSaved
                   ? "#16a34a"
                   : hasChanges
-                  ? `linear-gradient(135deg, ${currentPreset.accent} 0%, ${currentPreset.glow} 100%)`
-                  : `${currentPreset.accent}30`,
-                color: justSaved ? "#fff" : currentPreset.bg,
-                boxShadow: hasChanges ? `0 4px 20px ${currentPreset.accent}40` : "none",
+                    ? `linear-gradient(135deg, ${currentPreset.accent} 0%, ${currentPreset.accent2} 100%)`
+                    : `${currentPreset.accent}35`,
+                color: justSaved
+                  ? "#fff"
+                  : hasChanges
+                    ? currentPreset.mode === "light"
+                      ? "#ffffff"
+                      : "#09090b"
+                    : currentPreset.fgMuted,
+                boxShadow: hasChanges ? `0 4px 24px ${currentPreset.accent}50` : "none",
               }}
             >
               {isPending ? "שומר..." : justSaved ? "✓ נשמר לכולם!" : "שמור ופרסם לכולם"}
@@ -325,8 +364,8 @@ export function ThemeDesigner({
                 onClick={handleRevert}
                 className="rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
                 style={{
-                  background: `${currentPreset.surface}80`,
-                  color: `${currentPreset.accent}90`,
+                  background: `${currentPreset.surface}90`,
+                  color: currentPreset.fgMuted,
                   border: `1px solid ${currentPreset.border}`,
                 }}
               >

@@ -8,7 +8,7 @@ import { AdminNotificationBell } from "./admin/_components/AdminNotificationBell
 import { ThemeDesigner } from "./_components/ThemeDesigner";
 import { ThemeEffects } from "./_components/ThemeEffects";
 import { prisma } from "@/lib/prisma";
-import { getPreset, DEFAULT_THEME } from "@/lib/theme";
+import { getResolvedPreset, DEFAULT_THEME } from "@/lib/theme";
 
 export default async function AppLayout({
   children,
@@ -32,13 +32,22 @@ export default async function AppLayout({
     // use defaults
   }
 
-  const preset = getPreset(themePreset);
+  const preset = getResolvedPreset(themePreset);
 
   return (
     <div
-      className="relative min-h-dvh text-zinc-50 transition-colors duration-700"
-      style={{ backgroundColor: "var(--t-bg, #09090b)" }}
+      className="app-theme-scope relative min-h-dvh transition-colors duration-700"
+      style={{
+        backgroundColor: "var(--t-bg, #09090b)",
+        color: "var(--t-fg, #fafafa)",
+      }}
     >
+      {/* Immersive animated gradient (girly / light themes) */}
+      <div
+        className="yuval-immersive-layer pointer-events-none absolute inset-0 -z-30 transition-opacity duration-700"
+        style={{ background: "var(--t-immersive, transparent)" }}
+        aria-hidden="true"
+      />
       {/* Theme-colored overlay tint */}
       <div
         className="pointer-events-none absolute inset-0 -z-10 transition-colors duration-700"
@@ -47,13 +56,17 @@ export default async function AppLayout({
       />
       {/* Background image layer */}
       <div
-        className="pointer-events-none absolute inset-0 -z-20 bg-cover bg-center opacity-[0.25] grayscale-[0.15] contrast-75 saturate-75"
-        style={{ backgroundImage: "url(/bg.jpg)" }}
+        className="theme-bg-photo pointer-events-none absolute inset-0 -z-20 bg-cover bg-center grayscale-[0.12] contrast-90 saturate-90 transition-opacity duration-700"
+        style={{
+          backgroundImage: "url(/bg.jpg)",
+          opacity: "var(--t-photo-opacity, 0.25)",
+        }}
         aria-hidden="true"
       />
-      {/* Soft vignette */}
+      {/* Atmosphere vignette (dark or soft pink for light) */}
       <div
-        className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b from-black/60 via-black/40 to-black/70"
+        className="pointer-events-none absolute inset-0 -z-10 transition-all duration-700"
+        style={{ background: "var(--t-vignette)" }}
         aria-hidden="true"
       />
 
@@ -86,7 +99,10 @@ export default async function AppLayout({
                 </div>
               </div>
               <div className="flex flex-col -space-y-1.5 min-w-0">
-                <span className="text-2xl font-black tracking-tighter text-zinc-50 select-none">
+                <span
+                  className="text-2xl font-black tracking-tighter select-none"
+                  style={{ color: "var(--t-fg, #fafafa)" }}
+                >
                   אשר
                 </span>
                 <span
@@ -99,7 +115,10 @@ export default async function AppLayout({
             </Link>
           </div>
           <div className="flex items-center gap-3">
-            <div className="hidden sm:block text-sm font-medium text-zinc-400">
+            <div
+              className="hidden sm:block text-sm font-medium"
+              style={{ color: "var(--t-fg-muted, #a1a1aa)" }}
+            >
               {session?.user?.name ?? ""}
             </div>
             {isAdmin && <AdminNotificationBell />}
