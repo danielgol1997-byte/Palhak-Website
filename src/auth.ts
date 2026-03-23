@@ -64,35 +64,28 @@ export const authOptions: NextAuthOptions = {
       }
       return true;
     },
-    async jwt({ token, user, trigger }) {
-      // On first sign in, fetch fresh data from DB to ensure all fields are present
-      // The user object from the adapter may not include custom fields like role, active, onboardedAt
-      if (user) {
+    async jwt({ token, user }) {
+      // OAuth sign-in: attach user id to the token
+      if (user?.id) {
         token.sub = user.id;
-        
-        // Always fetch from DB on first sign-in to get all fields
-        const dbUser = await prisma.user.findUnique({
-          where: { id: user.id },
-          select: { id: true, role: true, active: true, onboardedAt: true },
-        });
-        
-        if (dbUser) {
-          token.role = dbUser.role;
-          token.active = dbUser.active;
-          token.onboardedAt = dbUser.onboardedAt?.toISOString() ?? null;
-        }
       }
 
-      // Fetch from DB on explicit update trigger (e.g., after onboarding)
-      if (trigger === "update") {
-        const dbUser = await prisma.user.findUnique({
-          where: { id: token.sub as string },
-          select: { id: true, role: true, active: true, onboardedAt: true },
-        });
-        if (dbUser) {
-          token.role = dbUser.role;
-          token.active = dbUser.active;
-          token.onboardedAt = dbUser.onboardedAt?.toISOString() ?? null;
+      // Refresh role / active / onboarding from DB on every request so admin role
+      // changes (e.g. יובל על חלל) apply without requiring sign-out. JWT alone
+      // would otherwise keep stale claims until re-login.
+      if (token.sub) {
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: token.sub },
+            select: { role: true, active: true, onboardedAt: true },
+          });
+          if (dbUser) {
+            token.role = dbUser.role;
+            token.active = dbUser.active;
+            token.onboardedAt = dbUser.onboardedAt?.toISOString() ?? null;
+          }
+        } catch {
+          // DB unavailable: keep existing token claims
         }
       }
 
