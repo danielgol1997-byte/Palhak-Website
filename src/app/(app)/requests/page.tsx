@@ -9,7 +9,7 @@ export default async function RequestsPage() {
 
   const [items, unitTemplates, userAssignments, pendingDeclarations, pendingTransfers, userData, allUsers] = await Promise.all([
     prisma.equipmentItem.findMany({
-      where: { active: true },
+      where: { active: true, discontinued: false },
       select: {
         id: true,
         name: true,

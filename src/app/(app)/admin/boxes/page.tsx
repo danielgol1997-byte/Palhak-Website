@@ -140,10 +140,18 @@ export default async function BoxesPage() {
       const inBox = boxItems.reduce((s, bi) => s + bi.quantity, 0);
       const missing = Math.max(0, tplItem.quantity - inBox);
 
-      const altNames = tplItem.alternatives.map((a) => a.equipmentItem.name);
-      const displayName = altNames.length > 0
-        ? `${tplItem.equipmentItem.name} (+ ${altNames.length} חלופות)`
-        : tplItem.equipmentItem.name;
+      // Show the actual item names in the box; fall back to template group label when empty
+      let displayName: string;
+      if (boxItems.length > 0) {
+        // Deduplicate item names
+        const actualNames = [...new Set(boxItems.map((bi) => bi.equipmentItem.name))];
+        displayName = actualNames.join(", ");
+      } else {
+        const altNames = tplItem.alternatives.map((a) => a.equipmentItem.name);
+        displayName = altNames.length > 0
+          ? `${tplItem.equipmentItem.name} (+ ${altNames.length} חלופות)`
+          : tplItem.equipmentItem.name;
+      }
 
       let missingReason: string | null = null;
       if (missing > 0) {

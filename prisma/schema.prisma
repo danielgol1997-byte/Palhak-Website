@@ -118,6 +118,7 @@ model EquipmentItem {
   categoryId         String
   name               String
   active             Boolean            @default(true)
+  discontinued       Boolean            @default(false)
   isWeapon           Boolean            @default(false)
   isSight            Boolean            @default(false)
   isClothing         Boolean            @default(false)

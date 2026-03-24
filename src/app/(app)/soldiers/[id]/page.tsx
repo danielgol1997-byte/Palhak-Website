@@ -28,7 +28,7 @@ export default async function SoldierPage({ params }: { params: Promise<{ id: st
       },
     }),
     prisma.equipmentItem.findMany({
-      where: { active: true },
+      where: { active: true, discontinued: false },
       orderBy: [{ category: { division: "asc" } }, { name: "asc" }],
       select: { id: true, name: true, category: { select: { division: true } } },
       take: 2000,

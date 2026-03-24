@@ -68,7 +68,7 @@ export async function createTransferAction(formData: FormData) {
   await prisma.$transaction(async (tx) => {
     // Validate items exist+active
     const dbItems = await tx.equipmentItem.findMany({
-      where: { id: { in: items.map((i) => i.equipmentItemId) }, active: true, category: { active: true } },
+      where: { id: { in: items.map((i) => i.equipmentItemId) }, active: true, discontinued: false, category: { active: true } },
       select: { id: true },
     });
     if (dbItems.length !== new Set(items.map((i) => i.equipmentItemId)).size) {

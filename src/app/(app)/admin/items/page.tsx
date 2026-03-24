@@ -47,6 +47,7 @@ export default async function ItemsPage({
         id: true,
         name: true,
         active: true,
+        discontinued: true,
         categoryId: true,
         isWeapon: true,
         isSight: true,

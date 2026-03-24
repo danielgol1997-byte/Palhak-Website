@@ -81,7 +81,7 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
       select: { id: true, name: true, departmentId: true },
     }),
     prisma.equipmentItem.findMany({
-      where: { active: true },
+      where: { active: true, discontinued: false },
       select: {
         id: true,
         name: true,

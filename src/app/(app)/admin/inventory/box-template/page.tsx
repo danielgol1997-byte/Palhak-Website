@@ -43,7 +43,7 @@ export default async function BoxTemplatePage() {
   }
 
   const availableItems = await prisma.equipmentItem.findMany({
-    where: { active: true, category: { active: true } },
+    where: { active: true, discontinued: false, category: { active: true } },
     orderBy: [{ name: "asc" }],
     select: {
       id: true,

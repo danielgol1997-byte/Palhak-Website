@@ -236,6 +236,7 @@ export default async function PersonalPage() {
     prisma.equipmentItem.findMany({
       where: { 
         active: true,
+        discontinued: false,
         isWeapon: true,
       },
       orderBy: { name: "asc" },

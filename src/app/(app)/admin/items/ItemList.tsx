@@ -12,6 +12,7 @@ interface Item {
   id: string;
   name: string;
   active: boolean;
+  discontinued: boolean;
   categoryId: string;
   isWeapon: boolean;
   isSight: boolean;
@@ -37,6 +38,8 @@ export default function ItemList({
   const searchParams = useSearchParams();
   const [items, setItems] = useState(initialRows);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
+  const [deletingItem, setDeletingItem] = useState<Item | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [searchQuery, setSearchQuery] = useState(searchParams.get("q") || "");
   const [selectedDivision, setSelectedDivision] = useState<Division | "ALL">((searchParams.get("division") as Division) || "ALL");
@@ -126,21 +129,35 @@ export default function ItemList({
                     {divisionLabel(item.category.division as any)}
                   </td>
                   <td className="px-4 py-4 text-center">
-                    <span className={`inline-flex px-3 py-1 rounded-full text-xs font-bold border ${
-                      item.active
-                        ? "bg-green-900/20 text-green-400 border-green-900/40"
-                        : "bg-zinc-800 text-zinc-500 border-zinc-700"
-                    }`}>
-                      {item.active ? "פעיל" : "לא פעיל"}
-                    </span>
+                    {item.discontinued ? (
+                      <span className="inline-flex px-3 py-1 rounded-full text-xs font-bold border bg-red-900/20 text-red-400 border-red-900/40">
+                        הופסק
+                      </span>
+                    ) : (
+                      <span className={`inline-flex px-3 py-1 rounded-full text-xs font-bold border ${
+                        item.active
+                          ? "bg-green-900/20 text-green-400 border-green-900/40"
+                          : "bg-zinc-800 text-zinc-500 border-zinc-700"
+                      }`}>
+                        {item.active ? "פעיל" : "לא פעיל"}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-4">
                     <div className="flex gap-2 justify-center">
+                      {!item.discontinued && (
+                        <button
+                          onClick={() => setEditingItem(item)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer"
+                        >
+                          עריכה
+                        </button>
+                      )}
                       <button
-                        onClick={() => setEditingItem(item)}
-                        className="px-3 py-1.5 rounded-lg text-xs font-bold bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer"
+                        onClick={() => { setDeletingItem(item); setDeleteError(null); }}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold bg-red-900/20 text-red-400 border border-red-900/40 hover:bg-red-900/40 transition-all cursor-pointer"
                       >
-                        עריכה
+                        {item.discontinued ? "הסר לצמיתות" : "מחק"}
                       </button>
                     </div>
                   </td>
@@ -256,7 +273,7 @@ export default function ItemList({
                   <h4 className="text-2xl font-bold text-zinc-50 mb-3">האם אתה בטוח?</h4>
                   <p className="text-zinc-400 mb-10 leading-relaxed px-4">פעולה זו תמחק את הפריט מהמערכת. לא ניתן למחוק פריטים עם היסטוריה.</p>
                   <div className="flex flex-col gap-3">
-                    <form action={async (fd) => { try { await deleteItemAction(fd); setIsDeleting(false); setEditingItem(null); } catch (e: any) { alert(e.message); setIsDeleting(false); } }}>
+                    <form action={async (fd) => { const res = await deleteItemAction(fd); if (!res.success) { alert(res.error); } setIsDeleting(false); setEditingItem(null); router.refresh(); }}>
                       <input type="hidden" name="id" value={editingItem.id} />
                       <button type="submit" className="h-14 w-full inline-flex items-center justify-center rounded-2xl bg-red-600 text-base font-bold text-white hover:bg-red-700 transition-all shadow-lg shadow-red-950/20 cursor-pointer">כן, מחק פריט</button>
                     </form>
@@ -265,6 +282,63 @@ export default function ItemList({
                 </div>
               </div>
             )}
+          </div>
+        </div>
+        </ModalPortal>
+      )}
+      {/* Standalone delete/discontinue confirmation modal */}
+      {deletingItem && (
+        <ModalPortal>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
+          <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => !isDeleting && setDeletingItem(null)} />
+          <div className="relative w-full max-w-md rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200">
+            <div className="flex flex-col items-center text-center">
+              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-red-950/50 text-red-500 mb-5 border border-red-900/50">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6" /></svg>
+              </div>
+              <h4 className="text-xl font-bold text-zinc-50 mb-2">
+                {deletingItem.discontinued ? "הסרה לצמיתות מהמערכת?" : `מחיקת פריט: ${deletingItem.name}`}
+              </h4>
+              <p className="text-sm text-zinc-400 mb-1 leading-relaxed">
+                {deletingItem.discontinued
+                  ? `פריט "${deletingItem.name}" כבר מסומן כהופסק ואין לו היסטוריה — ניתן להסיר לצמיתות.`
+                  : "אם לפריט יש היסטוריית בקשות, הוא יסומן כ\"הופסק\" (הקצאות פעילות חוסמות מחיקה). אם אין לו היסטוריה, הוא יימחק לצמיתות."
+                }
+              </p>
+              <p className="text-xs text-zinc-500 mb-6">פעולה זו בלתי הפיכה.</p>
+
+              {deleteError && (
+                <div className="w-full rounded-xl border border-red-900/40 bg-red-900/10 p-3 text-sm text-red-400 mb-4">{deleteError}</div>
+              )}
+
+              <div className="w-full flex gap-3">
+                <button
+                  disabled={isDeleting}
+                  onClick={async () => {
+                    setIsDeleting(true);
+                    setDeleteError(null);
+                    const fd = new FormData();
+                    fd.append("id", deletingItem.id);
+                    const res = await deleteItemAction(fd);
+                    setIsDeleting(false);
+                    if (!res.success) {
+                      setDeleteError(res.error || "אירעה שגיאה");
+                    } else {
+                      setDeletingItem(null);
+                      router.refresh();
+                    }
+                  }}
+                  className="flex-1 h-12 inline-flex items-center justify-center rounded-2xl bg-red-600 text-sm font-bold text-white hover:bg-red-700 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isDeleting ? "מוחק..." : (deletingItem.discontinued ? "הסר לצמיתות" : "אשר מחיקה")}
+                </button>
+                <button
+                  onClick={() => { setDeletingItem(null); setDeleteError(null); }}
+                  disabled={isDeleting}
+                  className="flex-1 h-12 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-sm font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer disabled:opacity-50"
+                >ביטול</button>
+              </div>
+            </div>
           </div>
         </div>
         </ModalPortal>

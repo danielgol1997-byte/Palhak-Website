@@ -19,7 +19,7 @@ export default async function InventoryPage({
   const division = (resolvedSearchParams.division as string) || undefined;
   const sort = parseSort(q.sort);
 
-  let where: any = { active: true }; // Only show active items
+  let where: any = { active: true, discontinued: false };
   if (q.q) {
     where.OR = [
           { name: { contains: q.q, mode: "insensitive" as const } },

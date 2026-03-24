@@ -135,46 +135,91 @@ export async function updateItemAction(formData: FormData) {
   revalidatePath("/admin/items");
 }
 
-export async function deleteItemAction(formData: FormData) {
+export async function deleteItemAction(formData: FormData): Promise<{ success: boolean; error?: string }> {
   const session = await requireRole(Role.ADMIN);
   const id = formData.get("id") as string;
-  if (!id) throw new Error("מזהה פריט חסר.");
+  if (!id) return { success: false, error: "מזהה פריט חסר." };
 
-  await prisma.$transaction(async (tx) => {
-    const before = await tx.equipmentItem.findUnique({
-      where: { id },
-      include: {
-        assignments: true,
-        storageInventories: true,
-        transferItems: true,
-        unitTemplateItems: true,
-        requestItems: true,
-      },
+  try {
+    await prisma.$transaction(async (tx) => {
+      const item = await tx.equipmentItem.findUnique({
+        where: { id },
+        select: {
+          id: true, name: true, active: true, discontinued: true,
+          assignments: { where: { active: true }, select: { id: true }, take: 1 },
+          boxItems: { select: { id: true }, take: 1 },
+          requestItems: { select: { id: true }, take: 1 },
+          storageInventories: { select: { id: true, quantity: true } },
+          unitTemplateItems: { select: { unitTemplateId: true }, take: 1 },
+          boxTemplateItems: { select: { id: true }, take: 1 },
+          boxTemplateAlts: { select: { id: true }, take: 1 },
+          transferItems: { select: { id: true }, take: 1 },
+        },
+      });
+
+      if (!item) throw new Error("פריט לא נמצא.");
+
+      // Block if there are any active assignments
+      if (item.assignments.length > 0) {
+        throw new Error("לא ניתן למחוק פריט שמוקצה לחיילים. יש להסיר את כל ההקצאות הפעילות תחילה.");
+      }
+
+      // Check for active box items
+      if (item.boxItems.length > 0) {
+        throw new Error("לא ניתן למחוק פריט שנמצא בקרטונים פעילים. יש להסיר אותו מהקרטונים תחילה.");
+      }
+
+      const hasHistory =
+        item.requestItems.length > 0 ||
+        item.transferItems.length > 0;
+
+      if (hasHistory) {
+        // Soft delete: mark as discontinued so FK references in request history remain valid
+        await tx.equipmentItem.update({
+          where: { id },
+          data: { discontinued: true, active: false },
+        });
+
+        // Remove from storage, templates — these no longer apply
+        await tx.storageInventory.deleteMany({ where: { equipmentItemId: id } });
+        await tx.unitTemplateItem.deleteMany({ where: { equipmentItemId: id } });
+        await tx.boxTemplateItemAlt.deleteMany({ where: { equipmentItemId: id } });
+        await tx.boxTemplateItem.deleteMany({ where: { equipmentItemId: id } });
+
+        await writeAuditLog(tx, {
+          actorId: session.user.id,
+          entity: AuditEntity.ITEM,
+          entityId: id,
+          action: "ITEM_DISCONTINUED",
+          beforeJson: { name: item.name, active: item.active },
+          afterJson: { discontinued: true, active: false },
+        });
+      } else {
+        // Hard delete: no history, safe to fully remove
+        await tx.storageInventory.deleteMany({ where: { equipmentItemId: id } });
+        await tx.unitTemplateItem.deleteMany({ where: { equipmentItemId: id } });
+        await tx.boxTemplateItemAlt.deleteMany({ where: { equipmentItemId: id } });
+        await tx.boxTemplateItem.deleteMany({ where: { equipmentItemId: id } });
+        // Delete any inactive assignment records
+        await tx.assignment.deleteMany({ where: { equipmentItemId: id } });
+
+        await tx.equipmentItem.delete({ where: { id } });
+
+        await writeAuditLog(tx, {
+          actorId: session.user.id,
+          entity: AuditEntity.ITEM,
+          entityId: id,
+          action: "ITEM_DELETED",
+          beforeJson: { name: item.name },
+          afterJson: null,
+        });
+      }
     });
-
-    if (!before) throw new Error("פריט לא נמצא.");
-    
-    if (
-      before.assignments.length > 0 ||
-      before.storageInventories.length > 0 ||
-      before.transferItems.length > 0 ||
-      before.unitTemplateItems.length > 0 ||
-      before.requestItems.length > 0
-    ) {
-      throw new Error("לא ניתן למחוק פריט שיש לו היסטוריה או מלאי במערכת. בטל את הפריט (הפוך ללא פעיל) במקום למחוק.");
-    }
-
-    await tx.equipmentItem.delete({ where: { id } });
-
-    await writeAuditLog(tx, {
-      actorId: session.user.id,
-      entity: AuditEntity.ITEM,
-      entityId: id,
-      action: "ITEM_DELETED",
-      beforeJson: before,
-      afterJson: null,
-    });
-  });
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : "אירעה שגיאה בלתי צפויה." };
+  }
 
   revalidatePath("/admin/items");
+  revalidatePath("/admin/storage");
+  return { success: true };
 }
