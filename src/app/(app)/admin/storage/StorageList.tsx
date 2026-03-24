@@ -5,6 +5,7 @@ import { upsertStorageInventoryAction, recoverAssignmentToStorageAction } from "
 import { divisionLabel } from "@/lib/he";
 import { Division } from "@prisma/client";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { ModalPortal } from "@/components/ui/ModalPortal";
 
 interface Assignment {
   id: string;
@@ -402,7 +403,8 @@ export default function StorageList({ initialRows }: { initialRows: StorageInven
       )}
 
       {editingItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
           <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => setEditingItem(null)} />
           <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl overflow-hidden border border-zinc-800 animate-in fade-in zoom-in duration-200">
             <div className="flex items-center justify-between mb-8">
@@ -456,11 +458,13 @@ export default function StorageList({ initialRows }: { initialRows: StorageInven
             </form>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* Status Detail Modal */}
       {statusModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
           <div
             className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm"
             onClick={() => setStatusModal(null)}
@@ -622,11 +626,13 @@ export default function StorageList({ initialRows }: { initialRows: StorageInven
             )}
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* Recovery Modal */}
       {recoveryModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
           <div
             className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm"
             onClick={() => setRecoveryModal(null)}
@@ -716,6 +722,7 @@ export default function StorageList({ initialRows }: { initialRows: StorageInven
             </form>
           </div>
         </div>
+        </ModalPortal>
       )}
     </>
   );

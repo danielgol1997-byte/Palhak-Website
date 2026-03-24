@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { ModalPortal } from "@/components/ui/ModalPortal";
 
 interface SuccessModalProps {
   message: string;
@@ -16,7 +17,8 @@ export function SuccessModal({ message, onClose }: SuccessModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
       <div
         className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm"
         onClick={handleClose}
@@ -55,6 +57,7 @@ export function SuccessModal({ message, onClose }: SuccessModalProps) {
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 

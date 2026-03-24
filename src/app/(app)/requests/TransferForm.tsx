@@ -6,6 +6,7 @@ import { divisionLabel } from "@/lib/he";
 import { createRequestAction } from "./actions";
 import { LoadingOverlay } from "@/components/ui/LoadingSpinner";
 import { SuccessModal } from "@/components/ui/SuccessModal";
+import { ModalPortal } from "@/components/ui/ModalPortal";
 
 interface Item {
   id: string;
@@ -670,7 +671,8 @@ export function TransferForm({ currentUserId, userAssignments, availableUnits, a
 
       {/* Quantity Prompt Modal */}
       {quantityPrompt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setQuantityPrompt(null)}>
+        <ModalPortal>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4" onClick={() => setQuantityPrompt(null)}>
           <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" />
           <div 
             className="relative rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800 w-full max-w-md animate-in fade-in zoom-in duration-200"
@@ -722,6 +724,7 @@ export function TransferForm({ currentUserId, userAssignments, availableUnits, a
             </button>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* Success Modal */}

@@ -15,6 +15,7 @@ import {
 } from "./equipment-actions";
 import { EquipmentSelector } from "@/components/equipment/EquipmentSelector";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { ModalPortal } from "@/components/ui/ModalPortal";
 
 interface Assignment {
   id: string;
@@ -774,7 +775,8 @@ export function EquipmentTab({
 
       {/* ===== BULK UNASSIGN MODAL ===== */}
       {bulkUnassignModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
           <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => !isSubmitting && !bulkProgress?.finished ? setBulkUnassignModal(false) : undefined} />
           <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
@@ -866,11 +868,13 @@ export function EquipmentTab({
             )}
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* ===== BULK MOVE TO BOX MODAL ===== */}
       {bulkMoveToBoxModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
           <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => !isSubmitting && !bulkProgress?.finished ? setBulkMoveToBoxModal(false) : undefined} />
           <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
@@ -975,11 +979,13 @@ export function EquipmentTab({
             )}
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* ===== BULK TRANSFER TO USER MODAL ===== */}
       {bulkTransferModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
           <div
             className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm"
             onClick={() => !isSubmitting && !bulkProgress?.finished ? setBulkTransferModal(false) : undefined}
@@ -1129,11 +1135,13 @@ export function EquipmentTab({
             )}
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* ===== SINGLE UNASSIGN MODAL ===== */}
       {unassignModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
           <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => !isSubmitting && setUnassignModal(null)} />
           <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200">
             <div className="flex items-center justify-between mb-6">
@@ -1174,11 +1182,13 @@ export function EquipmentTab({
             </form>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* ===== SINGLE MOVE TO BOX MODAL ===== */}
       {moveToBoxModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
           <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => !isSubmitting && setMoveToBoxModal(null)} />
           <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200">
             <div className="flex items-center justify-between mb-6">
@@ -1212,11 +1222,13 @@ export function EquipmentTab({
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* ===== SINGLE TRANSFER TO USER MODAL ===== */}
       {transferModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
           <div
             className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm"
             onClick={() => !isSubmitting && setTransferModal(null)}
@@ -1338,11 +1350,13 @@ export function EquipmentTab({
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* ===== RESTORE FROM BOX MODAL ===== */}
       {restoreModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
           <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => !isSubmitting && setRestoreModal(null)} />
           <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200">
             <div className="flex items-center justify-between mb-6">
@@ -1375,11 +1389,13 @@ export function EquipmentTab({
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* ===== REMOVE FROM BOX MODAL ===== */}
       {removeFromBoxModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
           <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => !isSubmitting && setRemoveFromBoxModal(null)} />
           <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200">
             <div className="flex items-center justify-between mb-6">
@@ -1415,11 +1431,13 @@ export function EquipmentTab({
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* ===== TRANSFER BOX ITEM TO ANOTHER USER'S BOX MODAL ===== */}
       {transferBoxModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
           <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => !isSubmitting && setTransferBoxModal(null)} />
           <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
@@ -1492,11 +1510,13 @@ export function EquipmentTab({
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* ===== ASSIGN MODAL ===== */}
       {assignModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
           <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => !isSubmitting && setAssignModal(false)} />
           <div className="relative w-full max-w-4xl rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
@@ -1531,6 +1551,7 @@ export function EquipmentTab({
             </form>
           </div>
         </div>
+        </ModalPortal>
       )}
     </div>
   );

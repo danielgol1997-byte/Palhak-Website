@@ -6,6 +6,7 @@ import { requestTypeLabel, requestStatusLabel, priorityLabel, divisionLabel, req
 import { updateRequestPriorityAction, markRequestViewedAction, updateRequestNotesAction, handleRequestItemAction } from "./actions";
 import { useRouter } from "next/navigation";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { ModalPortal } from "@/components/ui/ModalPortal";
 
 interface Request {
   id: string;
@@ -278,7 +279,8 @@ export function RequestDetailModal({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-2 sm:p-4">
       <div
         className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm"
         onClick={onClose}
@@ -904,5 +906,6 @@ export function RequestDetailModal({
         </div>
       )}
     </div>
+    </ModalPortal>
   );
 }

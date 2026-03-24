@@ -1,5 +1,7 @@
 "use client";
 
+import { ModalPortal } from "@/components/ui/ModalPortal";
+
 interface LoadingSpinnerProps {
   size?: "sm" | "md" | "lg" | "xl";
   text?: string;
@@ -45,9 +47,11 @@ export function LoadingSpinner({ size = "md", text, fullScreen = false }: Loadin
 
   if (fullScreen) {
     return (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-950/80 backdrop-blur-sm">
-        {spinner}
-      </div>
+      <ModalPortal>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain bg-zinc-950/80 backdrop-blur-sm p-4">
+          {spinner}
+        </div>
+      </ModalPortal>
     );
   }
 

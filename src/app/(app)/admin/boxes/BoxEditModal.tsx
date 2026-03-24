@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { ModalPortal } from "@/components/ui/ModalPortal";
 import {
   removeFromBoxAction,
   restoreFromBoxAction,
@@ -186,7 +187,8 @@ export function BoxEditModal({ box, allUsers, onClose }: BoxEditModalProps) {
   const totalInBox = box.items.reduce((s, i) => s + i.quantity, 0);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" dir="rtl">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4" dir="rtl">
       <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => !isSubmitting && !pendingAction && onClose()} />
       <div className="relative w-full max-w-2xl rounded-3xl bg-zinc-900 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200 max-h-[90vh] flex flex-col overflow-hidden">
         {/* Header */}
@@ -377,5 +379,6 @@ export function BoxEditModal({ box, allUsers, onClose }: BoxEditModalProps) {
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

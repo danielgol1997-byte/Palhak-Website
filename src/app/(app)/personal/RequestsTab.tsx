@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { RequestType, RequestStatus, Priority, Division } from "@prisma/client";
 import { requestTypeLabel, requestStatusLabel, priorityLabel, divisionLabel, requestItemStatusLabel } from "@/lib/he";
 import { cancelRequestAction } from "../requests/actions";
+import { ModalPortal } from "@/components/ui/ModalPortal";
 
 interface RequestItem {
   id: string;
@@ -262,7 +263,8 @@ export function RequestsTab({ requests, currentUserId }: { requests: RequestItem
 
       {/* Detail Modal - Reusing existing logic */}
       {selectedRequest && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
           <div
             className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm"
             onClick={() => setSelectedRequest(null)}
@@ -544,6 +546,7 @@ export function RequestsTab({ requests, currentUserId }: { requests: RequestItem
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </>
   );

@@ -6,6 +6,7 @@ import { RequestType, ClothingSize, ShoeSize } from "@prisma/client";
 import { requestTypeLabel, divisionLabel, requestItemStatusLabel } from "@/lib/he";
 import { handleTransferItemAction } from "../requests/transfer-actions";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { ModalPortal } from "@/components/ui/ModalPortal";
 
 interface PendingTransfersProps {
   pendingTransfers: any[];
@@ -145,7 +146,8 @@ export function PendingTransfers({ pendingTransfers }: PendingTransfersProps) {
 
       {/* Detail Modal */}
       {selectedRequest && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
           <div className="absolute inset-0 bg-zinc-950/90 backdrop-blur-sm" onClick={() => !isSubmitting && setSelectedRequest(null)} />
           <div className="relative w-full max-w-4xl rounded-3xl bg-zinc-900 p-8 shadow-2xl overflow-hidden border border-zinc-800 max-h-[90vh] overflow-y-auto scrollbar-hide">
             {/* Header */}
@@ -239,11 +241,13 @@ export function PendingTransfers({ pendingTransfers }: PendingTransfersProps) {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* Accept Modal */}
       {acceptingItemId && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
           <div className="absolute inset-0 bg-zinc-950/90 backdrop-blur-sm" onClick={() => !isSubmitting && setAcceptingItemId(null)} />
           <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800">
             <h3 className="text-2xl font-bold text-zinc-50 mb-4">קליטת פריט</h3>
@@ -296,11 +300,13 @@ export function PendingTransfers({ pendingTransfers }: PendingTransfersProps) {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* Reject Modal */}
       {rejectingItemId && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
           <div className="absolute inset-0 bg-zinc-950/90 backdrop-blur-sm" onClick={() => !isSubmitting && setRejectingItemId(null)} />
           <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800">
             <h3 className="text-2xl font-bold text-zinc-50 mb-4">דחיית פריט</h3>
@@ -337,6 +343,7 @@ export function PendingTransfers({ pendingTransfers }: PendingTransfersProps) {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </>
   );
