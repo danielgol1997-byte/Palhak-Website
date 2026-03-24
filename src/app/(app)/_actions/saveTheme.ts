@@ -5,6 +5,8 @@ import { authOptions } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import type { Prisma } from "@prisma/client";
+import { mergeTuning } from "@/lib/theme-tuning";
 
 export async function saveThemeAction(
   formData: FormData
@@ -16,11 +18,22 @@ export async function saveThemeAction(
 
   const preset = (formData.get("preset") as string) ?? "default";
   const effect = (formData.get("effect") as string) ?? "none";
+  const tuningRaw = formData.get("tuning");
+  let tuning = mergeTuning(undefined);
+  if (typeof tuningRaw === "string" && tuningRaw.trim()) {
+    try {
+      tuning = mergeTuning(JSON.parse(tuningRaw));
+    } catch {
+      return { success: false, error: "נתוני עיצוב לא תקינים" };
+    }
+  }
+
+  const tuningJson = JSON.parse(JSON.stringify(tuning)) as Prisma.InputJsonValue;
 
   await prisma.siteTheme.upsert({
     where: { id: "singleton" },
-    update: { preset, effect },
-    create: { id: "singleton", preset, effect },
+    update: { preset, effect, tuning: tuningJson },
+    create: { id: "singleton", preset, effect, tuning: tuningJson },
   });
 
   revalidatePath("/", "layout");

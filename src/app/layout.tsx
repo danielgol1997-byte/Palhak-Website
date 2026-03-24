@@ -23,17 +23,19 @@ export default async function RootLayout({
 }>) {
   let presetId = DEFAULT_THEME.preset;
   let effect = DEFAULT_THEME.effect;
+  let tuningStored: unknown = undefined;
   try {
     const theme = await prisma.siteTheme.findUnique({ where: { id: "singleton" } });
     if (theme) {
       presetId = theme.preset;
       effect = theme.effect;
+      tuningStored = theme.tuning ?? undefined;
     }
   } catch {
     // DB unavailable — script still applies defaults
   }
 
-  const themeScript = buildThemeVarScript(presetId, effect);
+  const themeScript = buildThemeVarScript(presetId, effect, tuningStored);
 
   return (
     <html lang="he" dir="rtl">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useTransition } from "react";
+import type { ThemeTuning } from "@/lib/theme";
 import {
   THEME_PRESETS,
   THEME_EFFECTS,
@@ -8,13 +9,21 @@ import {
   applyThemeVarsToRoot,
   DEFAULT_THEME,
 } from "@/lib/theme";
+import { DEFAULT_TUNING } from "@/lib/theme-tuning";
 import { saveThemeAction } from "@/app/(app)/_actions/saveTheme";
+import { ThemeTuningPanel } from "./ThemeTuningPanel";
 
-function applyThemeToDOM(presetId: string, effect: string) {
-  applyThemeVarsToRoot(presetId, effect);
+function applyThemeToDOM(presetId: string, effect: string, tuning: ThemeTuning) {
+  applyThemeVarsToRoot(presetId, effect, tuning);
   window.dispatchEvent(
-    new CustomEvent("yuval-theme-change", { detail: { effect, preset: presetId } })
+    new CustomEvent("yuval-theme-change", {
+      detail: { effect, preset: presetId, tuning },
+    })
   );
+}
+
+function tuningJsonEqual(a: ThemeTuning, b: ThemeTuning) {
+  return JSON.stringify(a) === JSON.stringify(b);
 }
 
 function WandIcon() {
@@ -38,24 +47,33 @@ function CheckIcon() {
 export function ThemeDesigner({
   initialPreset,
   initialEffect,
+  initialTuning,
 }: {
   initialPreset: string;
   initialEffect: string;
+  initialTuning: ThemeTuning;
 }) {
   const [open, setOpen] = useState(false);
   const [selectedPreset, setSelectedPreset] = useState(initialPreset);
   const [selectedEffect, setSelectedEffect] = useState(initialEffect);
+  const [selectedTuning, setSelectedTuning] = useState<ThemeTuning>(initialTuning);
   const [savedPreset, setSavedPreset] = useState(initialPreset);
   const [savedEffect, setSavedEffect] = useState(initialEffect);
+  const [savedTuning, setSavedTuning] = useState<ThemeTuning>(initialTuning);
   const [isPending, startTransition] = useTransition();
   const [justSaved, setJustSaved] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
 
-  const hasChanges = selectedPreset !== savedPreset || selectedEffect !== savedEffect;
+  const hasChanges =
+    selectedPreset !== savedPreset ||
+    selectedEffect !== savedEffect ||
+    !tuningJsonEqual(selectedTuning, savedTuning);
   const currentPreset = getResolvedPreset(selectedPreset);
   const isFactoryDefault =
-    savedPreset === DEFAULT_THEME.preset && savedEffect === DEFAULT_THEME.effect;
+    savedPreset === DEFAULT_THEME.preset &&
+    savedEffect === DEFAULT_THEME.effect &&
+    tuningJsonEqual(savedTuning, DEFAULT_TUNING);
 
   useEffect(() => {
     if (!open) return;
@@ -75,23 +93,30 @@ export function ThemeDesigner({
 
   function handlePresetSelect(id: string) {
     setSelectedPreset(id);
-    applyThemeToDOM(id, selectedEffect);
+    applyThemeToDOM(id, selectedEffect, selectedTuning);
   }
 
   function handleEffectSelect(id: string) {
     setSelectedEffect(id);
-    applyThemeToDOM(selectedPreset, id);
+    applyThemeToDOM(selectedPreset, id, selectedTuning);
   }
 
-  function persist(presetId: string, effectId: string, onOk?: () => void) {
+  function persist(
+    presetId: string,
+    effectId: string,
+    tuning: ThemeTuning,
+    onOk?: () => void
+  ) {
     startTransition(async () => {
       const fd = new FormData();
       fd.append("preset", presetId);
       fd.append("effect", effectId);
+      fd.append("tuning", JSON.stringify(tuning));
       const result = await saveThemeAction(fd);
       if (result.success) {
         setSavedPreset(presetId);
         setSavedEffect(effectId);
+        setSavedTuning(tuning);
         setJustSaved(true);
         setTimeout(() => setJustSaved(false), 2200);
         onOk?.();
@@ -100,27 +125,30 @@ export function ThemeDesigner({
   }
 
   function handleSave() {
-    persist(selectedPreset, selectedEffect);
+    persist(selectedPreset, selectedEffect, selectedTuning);
   }
 
   function handleRevert() {
     setSelectedPreset(savedPreset);
     setSelectedEffect(savedEffect);
-    applyThemeToDOM(savedPreset, savedEffect);
+    setSelectedTuning(savedTuning);
+    applyThemeToDOM(savedPreset, savedEffect, savedTuning);
   }
 
   function handleFactoryReset() {
     if (
       !confirm(
-        "לאפס את המראה למצב המקורי של אשר (רקע כהה, ללא אפקטים) לכל המשתמשים במערכת?"
+        "לאפס את המראה למצב המקורי של אשר (רקע כהה, ללא אפקטים, כרטיסים ברירת מחדל) לכל המשתמשים במערכת?"
       )
     ) {
       return;
     }
+    const t = { ...DEFAULT_TUNING };
     setSelectedPreset(DEFAULT_THEME.preset);
     setSelectedEffect(DEFAULT_THEME.effect);
-    applyThemeToDOM(DEFAULT_THEME.preset, DEFAULT_THEME.effect);
-    persist(DEFAULT_THEME.preset, DEFAULT_THEME.effect);
+    setSelectedTuning(t);
+    applyThemeToDOM(DEFAULT_THEME.preset, DEFAULT_THEME.effect, t);
+    persist(DEFAULT_THEME.preset, DEFAULT_THEME.effect, t);
   }
 
   return (
@@ -150,7 +178,7 @@ export function ThemeDesigner({
       {open && (
         <div
           ref={panelRef}
-          className="absolute left-0 top-full mt-2 z-50 w-[min(100vw-1.5rem,420px)] sm:w-[440px] rounded-2xl p-5 shadow-2xl max-h-[min(90dvh,720px)] flex flex-col gap-4"
+          className="absolute left-0 top-full mt-2 z-50 w-[min(100vw-1.5rem,520px)] sm:w-[min(96vw,560px)] rounded-2xl p-5 shadow-2xl max-h-[min(90dvh,780px)] flex flex-col gap-4"
           style={{
             background: `linear-gradient(145deg, ${currentPreset.surface}f2 0%, ${currentPreset.bg}fa 50%, color-mix(in srgb, ${currentPreset.accent} 12%, ${currentPreset.surface}) 100%)`,
             border: `1px solid ${currentPreset.accent}35`,
@@ -297,6 +325,24 @@ export function ThemeDesigner({
                   </button>
                 ))}
               </div>
+            </div>
+
+            <div>
+              <p
+                className="text-[10px] font-bold uppercase tracking-[0.15em] mb-2"
+                style={{ color: currentPreset.fgMuted }}
+              >
+                כרטיסים תלת־ממד + קסם 🎀
+              </p>
+              <ThemeTuningPanel
+                value={selectedTuning}
+                onChange={(t) => {
+                  setSelectedTuning(t);
+                  applyThemeToDOM(selectedPreset, selectedEffect, t);
+                }}
+                labelColor={currentPreset.accent}
+                mutedColor={currentPreset.fgMuted}
+              />
             </div>
           </div>
 

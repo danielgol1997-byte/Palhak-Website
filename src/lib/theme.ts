@@ -1,3 +1,14 @@
+import {
+  type ThemeTuning,
+  mergeTuning,
+  tuningScriptBody,
+  applyTuningToDocumentElement,
+  DEFAULT_TUNING,
+} from "@/lib/theme-tuning";
+
+export type { ThemeTuning };
+export { mergeTuning, DEFAULT_TUNING } from "@/lib/theme-tuning";
+
 export type ThemeMode = "dark" | "light";
 
 export type ThemePreset = {
@@ -394,20 +405,27 @@ export function getEffect(id: string): ThemeEffect {
 export type SiteThemeData = {
   preset: string;
   effect: string;
+  tuning: ThemeTuning;
 };
 
 export const DEFAULT_THEME: SiteThemeData = {
   preset: "default",
   effect: "none",
+  tuning: DEFAULT_TUNING,
 };
 
 function esc(s: string): string {
   return JSON.stringify(s);
 }
 
-/** Inline script: apply theme before paint. Always include preset + effect from DB. */
-export function buildThemeVarScript(presetId: string, effect: string): string {
+/** Inline script: apply theme before paint. Always include preset + effect + tuning from DB. */
+export function buildThemeVarScript(
+  presetId: string,
+  effect: string,
+  tuningStored?: unknown
+): string {
   const p = getResolvedPreset(presetId);
+  const tun = mergeTuning(tuningStored);
   const immersive = p.immersiveGradient;
   const hasImmersive = immersive !== "transparent" && immersive.length > 2;
   const lines: string[] = [
@@ -430,6 +448,7 @@ export function buildThemeVarScript(presetId: string, effect: string): string {
     hasImmersive
       ? `d.setAttribute('data-immersive','1');`
       : `d.removeAttribute('data-immersive');`,
+    tuningScriptBody(tun),
     `document.body.style.backgroundColor=${esc(p.bg)};`,
     "})();",
   ];
@@ -437,8 +456,13 @@ export function buildThemeVarScript(presetId: string, effect: string): string {
 }
 
 /** Client-side: apply all CSS vars + html data attributes */
-export function applyThemeVarsToRoot(presetId: string, effect: string): void {
+export function applyThemeVarsToRoot(
+  presetId: string,
+  effect: string,
+  tuningStored?: unknown
+): void {
   const p = getResolvedPreset(presetId);
+  const tun = mergeTuning(tuningStored);
   const root = document.documentElement;
   const s = root.style;
   s.setProperty("--t-bg", p.bg);
@@ -460,5 +484,6 @@ export function applyThemeVarsToRoot(presetId: string, effect: string): void {
   } else {
     root.removeAttribute("data-immersive");
   }
+  applyTuningToDocumentElement(root, tun);
   document.body.style.backgroundColor = p.bg;
 }

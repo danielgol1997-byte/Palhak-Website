@@ -413,6 +413,7 @@ model SiteTheme {
   id     String @id @default("singleton")
   preset String @default("default")
   effect String @default("none")
+  tuning Json?
 }
 
 enum Division {

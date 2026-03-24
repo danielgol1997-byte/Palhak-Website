@@ -8,7 +8,7 @@ import { AdminNotificationBell } from "./admin/_components/AdminNotificationBell
 import { ThemeDesigner } from "./_components/ThemeDesigner";
 import { ThemeEffects } from "./_components/ThemeEffects";
 import { prisma } from "@/lib/prisma";
-import { getResolvedPreset, DEFAULT_THEME } from "@/lib/theme";
+import { getResolvedPreset, DEFAULT_THEME, mergeTuning } from "@/lib/theme";
 
 export default async function AppLayout({
   children,
@@ -23,11 +23,13 @@ export default async function AppLayout({
 
   let themePreset = DEFAULT_THEME.preset;
   let themeEffect = DEFAULT_THEME.effect;
+  let themeTuning = DEFAULT_THEME.tuning;
   try {
     const theme = await prisma.siteTheme.findUnique({ where: { id: "singleton" } });
     if (theme) {
       themePreset = theme.preset;
       themeEffect = theme.effect;
+      themeTuning = mergeTuning(theme.tuning);
     }
   } catch {
     // use defaults
@@ -70,6 +72,8 @@ export default async function AppLayout({
         style={{ background: "var(--t-vignette)" }}
         aria-hidden="true"
       />
+
+      <div className="theme-grain-layer" aria-hidden />
 
       {/* Animated effects overlay (stars, sparkles, aurora…) */}
       <ThemeEffects initialEffect={themeEffect} initialPreset={themePreset} />
@@ -124,7 +128,11 @@ export default async function AppLayout({
             </div>
             {isAdmin && <AdminNotificationBell />}
             {isThemeMaster && (
-              <ThemeDesigner initialPreset={themePreset} initialEffect={themeEffect} />
+              <ThemeDesigner
+                initialPreset={themePreset}
+                initialEffect={themeEffect}
+                initialTuning={themeTuning}
+              />
             )}
             <SignOutButton />
             <BackButton />
