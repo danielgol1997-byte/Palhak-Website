@@ -144,6 +144,14 @@ export default async function AdminExportsPage() {
         />
 
         <ExportCard
+          title="קרטונים (מטריצה)"
+          desc="גליון אחד: כל חייל, עמודות לפי פריטי תבנית הקרטון, כמות בקרטון או ריק. שורות ממוינות ממילוי נמוך לגבוה; צבעי שורה אדום–צהוב–ירוק כמו במסך הקרטונים. קובץ מיושר לעברית (ימין־לשמאל)."
+          hrefExcel="/api/export/boxes/excel"
+          hrefSheets="/api/export/boxes/sheets"
+          hrefCsv="/api/export/boxes/csv"
+        />
+
+        <ExportCard
           title="משתמשים"
           desc="רשימת כל המשתמשים הפעילים + פרטי הרשמה (שם, מייל, טלפון, מספר אישי, מחלקות/תפקידים, וכו׳)."
           hrefExcel="/api/export/users/excel"

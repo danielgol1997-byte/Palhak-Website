@@ -1,6 +1,12 @@
 import type ExcelJS from "exceljs";
 
-export function styleHeaderRow(ws: ExcelJS.Worksheet, headers: string[]) {
+/** Hebrew exports: sheet RTL + header row styling */
+export function styleHeaderRow(
+  ws: ExcelJS.Worksheet,
+  headers: string[],
+  options?: { rightToLeft?: boolean },
+) {
+  const rtl = options?.rightToLeft !== false;
   const headerRow = ws.addRow(headers);
   headerRow.height = 22;
   headerRow.eachCell((cell) => {
@@ -12,10 +18,20 @@ export function styleHeaderRow(ws: ExcelJS.Worksheet, headers: string[]) {
       bottom: { style: "thin", color: { argb: "FF27272A" } },
       right: { style: "thin", color: { argb: "FF27272A" } },
     };
-    cell.alignment = { vertical: "middle", horizontal: "center" };
+    cell.alignment = {
+      vertical: "middle",
+      horizontal: rtl ? "right" : "center",
+      readingOrder: rtl ? "rtl" : undefined,
+    };
   });
 
-  ws.views = [{ state: "frozen", ySplit: 1 }];
+  ws.views = [
+    {
+      state: "frozen",
+      ySplit: 1,
+      rightToLeft: rtl,
+    } as ExcelJS.WorksheetView,
+  ];
 
   ws.autoFilter = {
     from: { row: 1, column: 1 },

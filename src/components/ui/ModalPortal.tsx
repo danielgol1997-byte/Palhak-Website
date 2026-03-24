@@ -48,5 +48,14 @@ export function ModalPortal({
 
   if (!mounted) return null;
 
-  return createPortal(children, document.body);
+  return createPortal(
+    <div
+      className="modal-portal-root"
+      dir="rtl"
+      style={{ color: "var(--t-fg, #fafafa)" }}
+    >
+      {children}
+    </div>,
+    document.body,
+  );
 }

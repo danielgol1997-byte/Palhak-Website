@@ -59,8 +59,8 @@ button:active {
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--t-bg, var(--background));
+  color: var(--t-fg, var(--foreground));
   font-family: var(--font-sans), system-ui, -apple-system, Segoe UI, Arial,
     sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -127,6 +127,81 @@ body {
 
 .app-theme-scope {
   filter: saturate(var(--theme-global-saturate, 100%));
+}
+
+/* ─── Theme designer: map neutral zinc to palette site-wide + portaled modals ─── */
+.app-theme-scope .border-zinc-800,
+.modal-portal-root .border-zinc-800 {
+  border-color: var(--t-border) !important;
+}
+
+.app-theme-scope .border-zinc-700,
+.modal-portal-root .border-zinc-700 {
+  border-color: color-mix(in srgb, var(--t-border) 90%, var(--t-accent) 10%) !important;
+}
+
+.app-theme-scope .bg-zinc-900,
+.modal-portal-root .bg-zinc-900 {
+  background-color: var(--t-surface) !important;
+}
+
+.app-theme-scope .bg-zinc-950,
+.modal-portal-root .bg-zinc-950 {
+  background-color: color-mix(in srgb, var(--t-bg) 55%, var(--t-surface)) !important;
+}
+
+.app-theme-scope .bg-zinc-800,
+.modal-portal-root .bg-zinc-800 {
+  background-color: color-mix(in srgb, var(--t-surface) 75%, var(--t-border)) !important;
+}
+
+.modal-portal-root .bg-zinc-950\/80 {
+  background-color: color-mix(in srgb, var(--t-bg) 78%, transparent) !important;
+}
+
+.app-theme-scope .text-zinc-50,
+.modal-portal-root .text-zinc-50 {
+  color: var(--t-fg) !important;
+}
+
+.app-theme-scope .text-zinc-100,
+.modal-portal-root .text-zinc-100 {
+  color: color-mix(in srgb, var(--t-fg) 96%, var(--t-fg-muted)) !important;
+}
+
+.app-theme-scope .text-zinc-200,
+.modal-portal-root .text-zinc-200 {
+  color: color-mix(in srgb, var(--t-fg) 88%, var(--t-fg-muted)) !important;
+}
+
+.app-theme-scope .text-zinc-300,
+.modal-portal-root .text-zinc-300 {
+  color: color-mix(in srgb, var(--t-fg) 72%, var(--t-fg-muted)) !important;
+}
+
+.app-theme-scope .text-zinc-400,
+.modal-portal-root .text-zinc-400 {
+  color: var(--t-fg-muted) !important;
+}
+
+.app-theme-scope .text-zinc-500,
+.modal-portal-root .text-zinc-500 {
+  color: color-mix(in srgb, var(--t-fg-muted) 82%, var(--t-border)) !important;
+}
+
+.app-theme-scope .text-zinc-600,
+.modal-portal-root .text-zinc-600 {
+  color: color-mix(in srgb, var(--t-fg-muted) 65%, var(--t-border)) !important;
+}
+
+.app-theme-scope .placeholder\:text-zinc-600::placeholder,
+.modal-portal-root .placeholder\:text-zinc-600::placeholder {
+  color: color-mix(in srgb, var(--t-fg-muted) 55%, var(--t-border)) !important;
+}
+
+.app-theme-scope .placeholder\:text-zinc-700::placeholder,
+.modal-portal-root .placeholder\:text-zinc-700::placeholder {
+  color: color-mix(in srgb, var(--t-fg-muted) 45%, var(--t-border)) !important;
 }
 
 .app-theme-scope .theme-grain-layer {
