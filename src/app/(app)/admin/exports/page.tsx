@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { Role } from "@prisma/client";
+import { EquipmentBySoldierExportCard } from "./EquipmentBySoldierExportCard";
 
 export const dynamic = "force-dynamic";
 
@@ -132,13 +133,7 @@ export default async function AdminExportsPage() {
           hrefCsv="/api/export/weapons-and-sights/csv"
         />
 
-        <ExportCard
-          title="ציוד (לפי חייל)"
-          desc="Excel/Sheets: גליון לכל חייל עם כל הציוד המוקצה לו. CSV: קובץ מאוחד עם עמודות חייל/מספר אישי."
-          hrefExcel="/api/export/equipment-by-soldier/excel"
-          hrefSheets="/api/export/equipment-by-soldier/sheets"
-          hrefCsv="/api/export/equipment-by-soldier/csv"
-        />
+        <EquipmentBySoldierExportCard />
 
         <ExportCard
           title="מלאי"

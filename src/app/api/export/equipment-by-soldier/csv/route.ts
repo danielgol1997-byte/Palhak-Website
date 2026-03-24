@@ -1,50 +1,56 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { toCsv } from "@/lib/csv";
 import { requireAdminExportSession } from "../../_lib/adminExportAuth";
+import {
+  buildMatrixColumns,
+  buildMatrixDataRow,
+  fetchEquipmentBySoldierUsers,
+  parseEquipmentLayout,
+} from "../../_lib/equipmentBySoldierExport";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+const detailHeader = [
+  "שם חייל",
+  "מספר אישי",
+  "פריט",
+  "כמות",
+  "סטטוס",
+  "מספר סידורי",
+  "תאריך שיוך",
+  "הוקצה ע״י",
+  "מידה (בגד)",
+  "מידה (נעל)",
+];
+
+export async function GET(request: Request) {
   const auth = await requireAdminExportSession();
   if (!auth.ok) return auth.response;
 
-  const users = await prisma.user.findMany({
-    // Include ALL active users (including admins/super-admins)
-    where: { active: true },
-    orderBy: [{ name: "asc" }],
-    select: {
-      name: true,
-      personalNumber: true,
-      assignments: {
-        where: { active: true },
-        orderBy: [{ assignedAt: "desc" }],
-        select: {
-          quantity: true,
-          status: true,
-          serialNumber: true,
-          clothingSize: true,
-          shoeSize: true,
-          assignedAt: true,
-          assignedBy: { select: { name: true } },
-          equipmentItem: { select: { name: true } },
-        },
-      },
-    },
-  });
+  const layout = parseEquipmentLayout(request);
+  const users = await fetchEquipmentBySoldierUsers();
 
-  const header = [
-    "שם חייל",
-    "מספר אישי",
-    "פריט",
-    "כמות",
-    "סטטוס",
-    "מספר סידורי",
-    "תאריך שיוך",
-    "הוקצה ע״י",
-    "מידה (בגד)",
-    "מידה (נעל)",
-  ];
+  if (layout === "matrix") {
+    const columns = buildMatrixColumns(users);
+    const header = ["שם חייל", "מספר אישי", ...columns.map((c) => c.header)];
+    const rows = users.map((u) => {
+      const cells = buildMatrixDataRow(u, columns);
+      const row: Record<string, string | number> = {};
+      header.forEach((h, i) => {
+        row[h] = cells[i] as string | number;
+      });
+      return row;
+    });
+    const csv = toCsv(rows, header);
+    return new NextResponse(csv, {
+      status: 200,
+      headers: {
+        "content-type": "text/csv; charset=utf-8",
+        "content-disposition": "attachment; filename=\"equipment-by-soldier.csv\"",
+        "cache-control": "no-store",
+      },
+    });
+  }
 
   const rows = users.flatMap((u) =>
     u.assignments.map((a) => ({
@@ -61,7 +67,7 @@ export async function GET() {
     })),
   );
 
-  const csv = toCsv(rows as any, header);
+  const csv = toCsv(rows as any, detailHeader);
 
   return new NextResponse(csv, {
     status: 200,
@@ -72,5 +78,3 @@ export async function GET() {
     },
   });
 }
-
-
