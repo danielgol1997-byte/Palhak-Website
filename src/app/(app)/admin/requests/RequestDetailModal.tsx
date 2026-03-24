@@ -92,6 +92,7 @@ export function RequestDetailModal({
   const isDeclaration = request.type === RequestType.DAMAGED || request.type === RequestType.STOLEN || request.type === RequestType.MISSING;
   const isReturn = request.type === RequestType.RETURN_EQUIPMENT;
   const isNewEquipment = request.type === RequestType.NEW_EQUIPMENT;
+  const isAdminEquipmentTransfer = request.type === RequestType.ADMIN_EQUIPMENT_TRANSFER;
   
   // Get appropriate action labels based on request type
   const getApproveLabel = () => {
@@ -312,8 +313,16 @@ export function RequestDetailModal({
         <div className="grid gap-4 sm:gap-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
-              <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">מבקש</div>
+              <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
+                {isAdminEquipmentTransfer && request.recipient ? "נמען (אליו הועבר)" : "מבקש"}
+              </div>
               <div className="text-sm font-medium text-zinc-50 break-words">{request.requester.name}</div>
+              {isAdminEquipmentTransfer && request.recipient && (
+                <div className="mt-3">
+                  <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">מאת</div>
+                  <div className="text-sm font-medium text-zinc-300 break-words">{request.recipient.name}</div>
+                </div>
+              )}
             </div>
             <div>
               <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">כמות כוללת</div>
@@ -373,6 +382,25 @@ export function RequestDetailModal({
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {isAdminEquipmentTransfer && (
+            <div className="rounded-2xl border border-sky-900/40 bg-sky-950/20 p-4">
+              <div className="text-xs font-bold text-sky-400 uppercase tracking-wider mb-2">העברה ניהולית</div>
+              <p className="text-sm text-zinc-300">
+                ציוד הועבר ישירות על ידי מנהל המערכת
+                {request.resolvedBy && (
+                  <>
+                    : <span className="font-bold text-zinc-50">{request.resolvedBy.name}</span>
+                  </>
+                )}
+                {request.resolvedAt && (
+                  <span className="block text-xs text-zinc-500 mt-1">
+                    {new Date(request.resolvedAt).toLocaleString("he-IL")}
+                  </span>
+                )}
+              </p>
             </div>
           )}
 
@@ -464,60 +492,64 @@ export function RequestDetailModal({
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex gap-1 justify-center">
-                          {item.status !== "FULFILLED" && (
-                            <button
-                              onClick={() => handleItemAction(item.id, "FULFILL")}
-                              disabled={isProcessing}
-                              className={`px-2 py-1 rounded-md text-xs font-bold border transition-all cursor-pointer disabled:opacity-50 ${
-                                item.status === "FULFILLED"
-                                  ? "bg-green-900/40 text-green-300 border-green-900/60"
-                                  : "bg-green-900/20 text-green-400 border-green-900/40 hover:bg-green-900/40"
-                              }`}
-                              title={getApproveLabel()}
-                            >
-                              ✓
-                            </button>
-                          )}
-                          {item.status !== "DENIED" && (
-                            <button
-                              onClick={() => handleItemAction(item.id, "DENY")}
-                              disabled={isProcessing}
-                              className={`px-2 py-1 rounded-md text-xs font-bold border transition-all cursor-pointer disabled:opacity-50 ${
-                                item.status === "DENIED"
-                                  ? "bg-red-900/40 text-red-300 border-red-900/60"
-                                  : "bg-red-900/20 text-red-400 border-red-900/40 hover:bg-red-900/40"
-                              }`}
-                              title={getDenyLabel()}
-                            >
-                              ✗
-                            </button>
-                          )}
-                          {item.status !== "CANCELLED" && (
-                            <button
-                              onClick={() => handleItemAction(item.id, "CANCEL")}
-                              disabled={isProcessing}
-                              className={`px-2 py-1 rounded-md text-xs font-bold border transition-all cursor-pointer disabled:opacity-50 ${
-                                item.status === "CANCELLED"
-                                  ? "bg-zinc-700 text-zinc-400 border-zinc-600"
-                                  : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:bg-zinc-700"
-                              }`}
-                              title="ביטול"
-                            >
-                              ⊘
-                            </button>
-                          )}
-                          {item.status !== "PENDING" && (
-                            <button
-                              onClick={() => handleItemAction(item.id, "RESET")}
-                              disabled={isProcessing}
-                              className="px-2 py-1 rounded-md text-xs font-bold bg-blue-900/20 text-blue-400 border border-blue-900/40 hover:bg-blue-900/40 transition-all cursor-pointer disabled:opacity-50"
-                              title="איפוס לממתין"
-                            >
-                              ↺
-                            </button>
-                          )}
-                        </div>
+                        {!isAdminEquipmentTransfer ? (
+                          <div className="flex gap-1 justify-center">
+                            {item.status !== "FULFILLED" && (
+                              <button
+                                onClick={() => handleItemAction(item.id, "FULFILL")}
+                                disabled={isProcessing}
+                                className={`px-2 py-1 rounded-md text-xs font-bold border transition-all cursor-pointer disabled:opacity-50 ${
+                                  item.status === "FULFILLED"
+                                    ? "bg-green-900/40 text-green-300 border-green-900/60"
+                                    : "bg-green-900/20 text-green-400 border-green-900/40 hover:bg-green-900/40"
+                                }`}
+                                title={getApproveLabel()}
+                              >
+                                ✓
+                              </button>
+                            )}
+                            {item.status !== "DENIED" && (
+                              <button
+                                onClick={() => handleItemAction(item.id, "DENY")}
+                                disabled={isProcessing}
+                                className={`px-2 py-1 rounded-md text-xs font-bold border transition-all cursor-pointer disabled:opacity-50 ${
+                                  item.status === "DENIED"
+                                    ? "bg-red-900/40 text-red-300 border-red-900/60"
+                                    : "bg-red-900/20 text-red-400 border-red-900/40 hover:bg-red-900/40"
+                                }`}
+                                title={getDenyLabel()}
+                              >
+                                ✗
+                              </button>
+                            )}
+                            {item.status !== "CANCELLED" && (
+                              <button
+                                onClick={() => handleItemAction(item.id, "CANCEL")}
+                                disabled={isProcessing}
+                                className={`px-2 py-1 rounded-md text-xs font-bold border transition-all cursor-pointer disabled:opacity-50 ${
+                                  item.status === "CANCELLED"
+                                    ? "bg-zinc-700 text-zinc-400 border-zinc-600"
+                                    : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:bg-zinc-700"
+                                }`}
+                                title="ביטול"
+                              >
+                                ⊘
+                              </button>
+                            )}
+                            {item.status !== "PENDING" && (
+                              <button
+                                onClick={() => handleItemAction(item.id, "RESET")}
+                                disabled={isProcessing}
+                                className="px-2 py-1 rounded-md text-xs font-bold bg-blue-900/20 text-blue-400 border border-blue-900/40 hover:bg-blue-900/40 transition-all cursor-pointer disabled:opacity-50"
+                                title="איפוס לממתין"
+                              >
+                                ↺
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-zinc-500 block text-center">—</span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -599,56 +631,58 @@ export function RequestDetailModal({
                     </div>
                   )}
                   
-                  <div className="flex gap-2 pt-2 border-t border-zinc-800 flex-wrap">
-                    {item.status !== "FULFILLED" && (
-                      <button
-                        onClick={() => handleItemAction(item.id, "FULFILL")}
-                        disabled={isProcessing}
-                        className={`flex-1 min-w-[80px] px-3 py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer disabled:opacity-50 ${
-                          item.status === "FULFILLED"
-                            ? "bg-green-900/40 text-green-300 border-green-900/60"
-                            : "bg-green-900/20 text-green-400 border-green-900/40 hover:bg-green-900/40"
-                        }`}
-                      >
-                        {getApproveLabel()}
-                      </button>
-                    )}
-                    {item.status !== "DENIED" && (
-                      <button
-                        onClick={() => handleItemAction(item.id, "DENY")}
-                        disabled={isProcessing}
-                        className={`flex-1 min-w-[80px] px-3 py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer disabled:opacity-50 ${
-                          item.status === "DENIED"
-                            ? "bg-red-900/40 text-red-300 border-red-900/60"
-                            : "bg-red-900/20 text-red-400 border-red-900/40 hover:bg-red-900/40"
-                        }`}
-                      >
-                        {getDenyLabel()}
-                      </button>
-                    )}
-                    {item.status !== "CANCELLED" && (
-                      <button
-                        onClick={() => handleItemAction(item.id, "CANCEL")}
-                        disabled={isProcessing}
-                        className={`px-3 py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer disabled:opacity-50 ${
-                          item.status === "CANCELLED"
-                            ? "bg-zinc-700 text-zinc-400 border-zinc-600"
-                            : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:bg-zinc-700"
-                        }`}
-                      >
-                        ביטול
-                      </button>
-                    )}
-                    {item.status !== "PENDING" && (
-                      <button
-                        onClick={() => handleItemAction(item.id, "RESET")}
-                        disabled={isProcessing}
-                        className="px-3 py-2 rounded-lg text-xs font-bold bg-blue-900/20 text-blue-400 border border-blue-900/40 hover:bg-blue-900/40 transition-all cursor-pointer disabled:opacity-50"
-                      >
-                        ↺
-                      </button>
-                    )}
-                  </div>
+                  {!isAdminEquipmentTransfer && (
+                    <div className="flex gap-2 pt-2 border-t border-zinc-800 flex-wrap">
+                      {item.status !== "FULFILLED" && (
+                        <button
+                          onClick={() => handleItemAction(item.id, "FULFILL")}
+                          disabled={isProcessing}
+                          className={`flex-1 min-w-[80px] px-3 py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer disabled:opacity-50 ${
+                            item.status === "FULFILLED"
+                              ? "bg-green-900/40 text-green-300 border-green-900/60"
+                              : "bg-green-900/20 text-green-400 border-green-900/40 hover:bg-green-900/40"
+                          }`}
+                        >
+                          {getApproveLabel()}
+                        </button>
+                      )}
+                      {item.status !== "DENIED" && (
+                        <button
+                          onClick={() => handleItemAction(item.id, "DENY")}
+                          disabled={isProcessing}
+                          className={`flex-1 min-w-[80px] px-3 py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer disabled:opacity-50 ${
+                            item.status === "DENIED"
+                              ? "bg-red-900/40 text-red-300 border-red-900/60"
+                              : "bg-red-900/20 text-red-400 border-red-900/40 hover:bg-red-900/40"
+                          }`}
+                        >
+                          {getDenyLabel()}
+                        </button>
+                      )}
+                      {item.status !== "CANCELLED" && (
+                        <button
+                          onClick={() => handleItemAction(item.id, "CANCEL")}
+                          disabled={isProcessing}
+                          className={`px-3 py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer disabled:opacity-50 ${
+                            item.status === "CANCELLED"
+                              ? "bg-zinc-700 text-zinc-400 border-zinc-600"
+                              : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:bg-zinc-700"
+                          }`}
+                        >
+                          ביטול
+                        </button>
+                      )}
+                      {item.status !== "PENDING" && (
+                        <button
+                          onClick={() => handleItemAction(item.id, "RESET")}
+                          disabled={isProcessing}
+                          className="px-3 py-2 rounded-lg text-xs font-bold bg-blue-900/20 text-blue-400 border border-blue-900/40 hover:bg-blue-900/40 transition-all cursor-pointer disabled:opacity-50"
+                        >
+                          ↺
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
-import { AuditEntity, Priority, RequestStatus, RequestType, Role } from "@prisma/client";
+import { AssignmentStatus, AuditEntity, Priority, RequestStatus, RequestType, Role } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
 
@@ -412,6 +412,207 @@ export async function moveToBoxAction(formData: FormData): Promise<{ success: bo
   revalidatePath(`/admin/users/${parsed.data.userId}`);
   revalidatePath("/admin/boxes");
   revalidatePath("/admin/storage");
+  return { success: true };
+}
+
+const TransferAssignmentSchema = z.object({
+  fromUserId: z.string().min(1),
+  toUserId: z.string().min(1),
+  assignmentId: z.string().min(1),
+  quantity: z.coerce.number().int().min(1).max(1000),
+  adminNotes: z.string().min(1, "הערות הן שדה חובה"),
+});
+
+export async function adminTransferAssignmentAction(formData: FormData): Promise<{ success: boolean; error?: string }> {
+  const session = await requireRole(Role.ADMIN);
+
+  const parsed = TransferAssignmentSchema.safeParse({
+    fromUserId: formData.get("fromUserId"),
+    toUserId: formData.get("toUserId"),
+    assignmentId: formData.get("assignmentId"),
+    quantity: formData.get("quantity"),
+    adminNotes: formData.get("adminNotes"),
+  });
+
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    return { success: false, error: first?.message || "נתונים לא תקינים." };
+  }
+
+  if (parsed.data.fromUserId === parsed.data.toUserId) {
+    return { success: false, error: "לא ניתן להעביר ציוד לאותו משתמש." };
+  }
+
+  const auditAssignmentId = parsed.data.assignmentId;
+
+  try {
+    await prisma.$transaction(
+      async (tx) => {
+        const assignment = await tx.assignment.findUnique({
+          where: { id: parsed.data.assignmentId },
+          include: {
+            equipmentItem: { select: { id: true, name: true, isWeapon: true, isSight: true } },
+            user: { select: { id: true, name: true } },
+          },
+        });
+
+        if (!assignment) throw new Error("הקצאה לא נמצאה.");
+        if (assignment.userId !== parsed.data.fromUserId) throw new Error("הקצאה לא שייכת למשתמש המקור.");
+        if (!assignment.active || assignment.status !== AssignmentStatus.ASSIGNED) {
+          throw new Error("הקצאה לא פעילה להעברה.");
+        }
+        if (parsed.data.quantity > assignment.quantity) {
+          throw new Error("לא ניתן להעביר יותר מהכמות המוקצית.");
+        }
+
+        if (assignment.serialNumber && parsed.data.quantity !== assignment.quantity) {
+          throw new Error("בפריט עם מספר סידורי יש להעביר את כל הכמות.");
+        }
+
+        const toUser = await tx.user.findUnique({
+          where: { id: parsed.data.toUserId },
+          select: { id: true, name: true, active: true },
+        });
+        if (!toUser?.active) throw new Error("משתמש היעד לא נמצא או לא פעיל.");
+
+        const fromUser = await tx.user.findUnique({
+          where: { id: parsed.data.fromUserId },
+          select: { name: true },
+        });
+        if (!fromUser) throw new Error("משתמש המקור לא נמצא.");
+
+        if (assignment.serialNumber) {
+          const dup = await tx.assignment.findFirst({
+            where: {
+              userId: parsed.data.toUserId,
+              equipmentItemId: assignment.equipmentItemId,
+              serialNumber: assignment.serialNumber,
+              active: true,
+              status: AssignmentStatus.ASSIGNED,
+            },
+          });
+          if (dup) throw new Error("לנמען כבר רשומת שיוך עם אותו מספר סידורי לפריט זה.");
+        }
+
+        const now = new Date();
+        const q = parsed.data.quantity;
+        const adminNoteFull = parsed.data.adminNotes.trim();
+
+        if (assignment.serialNumber) {
+          await tx.assignment.update({
+            where: { id: assignment.id },
+            data: {
+              userId: parsed.data.toUserId,
+              assignedById: session.user.id,
+              assignedAt: now,
+            },
+          });
+        } else {
+          const existingOnTarget = await tx.assignment.findFirst({
+            where: {
+              userId: parsed.data.toUserId,
+              equipmentItemId: assignment.equipmentItemId,
+              active: true,
+              status: AssignmentStatus.ASSIGNED,
+              serialNumber: null,
+            },
+          });
+
+          if (q < assignment.quantity) {
+            await tx.assignment.update({
+              where: { id: assignment.id },
+              data: { quantity: assignment.quantity - q },
+            });
+            if (existingOnTarget) {
+              await tx.assignment.update({
+                where: { id: existingOnTarget.id },
+                data: { quantity: existingOnTarget.quantity + q },
+              });
+            } else {
+              await tx.assignment.create({
+                data: {
+                  userId: parsed.data.toUserId,
+                  equipmentItemId: assignment.equipmentItemId,
+                  quantity: q,
+                  status: AssignmentStatus.ASSIGNED,
+                  active: true,
+                  assignedById: session.user.id,
+                  assignedAt: now,
+                  serialNumber: null,
+                  clothingSize: assignment.clothingSize,
+                  shoeSize: assignment.shoeSize,
+                },
+              });
+            }
+          } else if (existingOnTarget && existingOnTarget.id !== assignment.id) {
+            await tx.assignment.update({
+              where: { id: existingOnTarget.id },
+              data: { quantity: existingOnTarget.quantity + q },
+            });
+            await tx.assignment.delete({ where: { id: assignment.id } });
+          } else {
+            await tx.assignment.update({
+              where: { id: assignment.id },
+              data: {
+                userId: parsed.data.toUserId,
+                assignedById: session.user.id,
+                assignedAt: now,
+              },
+            });
+          }
+        }
+
+        await tx.request.create({
+          data: {
+            requesterId: parsed.data.toUserId,
+            recipientId: parsed.data.fromUserId,
+            type: RequestType.ADMIN_EQUIPMENT_TRANSFER,
+            priority: Priority.MEDIUM,
+            status: RequestStatus.FULFILLED,
+            adminNotes: `העברה מ${fromUser.name} אל ${toUser.name}. ${adminNoteFull}`,
+            resolvedById: session.user.id,
+            resolvedAt: now,
+            items: {
+              create: {
+                equipmentItemId: assignment.equipmentItemId,
+                quantity: q,
+                status: "FULFILLED",
+                serialNumber: assignment.serialNumber,
+                clothingSize: assignment.clothingSize,
+                shoeSize: assignment.shoeSize,
+              },
+            },
+          },
+        });
+
+        await writeAuditLog(tx, {
+          actorId: session.user.id,
+          entity: AuditEntity.ASSIGNMENT,
+          entityId: auditAssignmentId,
+          action: "ADMIN_TRANSFER_ASSIGNMENT",
+          beforeJson: { userId: assignment.userId, quantity: assignment.quantity },
+          metadataJson: {
+            fromUserId: parsed.data.fromUserId,
+            fromUserName: fromUser.name,
+            toUserId: parsed.data.toUserId,
+            toUserName: toUser.name,
+            equipmentItemName: assignment.equipmentItem.name,
+            quantity: q,
+            adminNotes: adminNoteFull,
+          },
+        });
+      },
+      { maxWait: 10000, timeout: 15000 },
+    );
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "אירעה שגיאה בלתי צפויה.";
+    return { success: false, error: message };
+  }
+
+  revalidatePath(`/admin/users/${parsed.data.fromUserId}`);
+  revalidatePath(`/admin/users/${parsed.data.toUserId}`);
+  revalidatePath("/admin/users");
+  revalidatePath("/admin/requests");
   return { success: true };
 }
 

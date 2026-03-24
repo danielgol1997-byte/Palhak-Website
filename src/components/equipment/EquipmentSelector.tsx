@@ -46,6 +46,8 @@ interface EquipmentSelectorProps {
   selectedItems: SelectedItem[];
   onItemsChange: (items: SelectedItem[]) => void;
   mode?: "request" | "assign";
+  /** ימ״ח — כמות זמינה במלאי לפי מזהה פריט (רק במצב הקצאת מנהל) */
+  stockByItemId?: Record<string, number>;
 }
 
 export function EquipmentSelector({
@@ -54,6 +56,7 @@ export function EquipmentSelector({
   selectedItems,
   onItemsChange,
   mode = "request",
+  stockByItemId,
 }: EquipmentSelectorProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDivision, setSelectedDivision] = useState<Division | "ALL">("ALL");
@@ -340,6 +343,11 @@ export function EquipmentSelector({
                           <div className="text-xs text-zinc-500 mt-0.5">
                             {divisionLabel(item.category.division)} · {item.category.name}
                           </div>
+                          {mode === "assign" && stockByItemId && (
+                            <div className="text-[11px] text-emerald-500/90 mt-0.5 tabular-nums">
+                              במלאי ימ״ח: {stockByItemId[item.id] ?? 0}
+                            </div>
+                          )}
                         </div>
                       </div>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-500">

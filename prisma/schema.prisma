@@ -447,6 +447,8 @@ enum RequestType {
   STOLEN
   USED
   ADMIN_ASSIGNMENT
+  /// Admin moved equipment between users (recorded under ניהול שרירותי, not soldier transfer flow)
+  ADMIN_EQUIPMENT_TRANSFER
   TRANSFER
 }
 

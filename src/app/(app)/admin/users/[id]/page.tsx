@@ -9,7 +9,8 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
   const resolvedParams = await params;
   await requireRole(Role.ADMIN);
 
-  const [user, departments, positions, activeEquipmentItems, unitTemplates, boxTemplate, userBox] = await Promise.all([
+  const [user, departments, positions, activeEquipmentItems, unitTemplates, boxTemplate, userBox, transferTargets] =
+    await Promise.all([
     prisma.user.findUnique({
       where: { id: resolvedParams.id },
       select: {
@@ -164,7 +165,26 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
         },
       },
     }),
+    prisma.user.findMany({
+      where: { active: true, id: { not: resolvedParams.id } },
+      orderBy: [{ name: "asc" }],
+      select: { id: true, name: true, personalNumber: true },
+    }),
   ]);
+
+  const yamahLoc = await prisma.storageLocation.findFirst({
+    where: { name: "ימ״ח", active: true },
+    select: { id: true },
+  });
+  const yamahStockRows = yamahLoc
+    ? await prisma.storageInventory.findMany({
+        where: { locationId: yamahLoc.id },
+        select: { equipmentItemId: true, quantity: true },
+      })
+    : [];
+  const yamahStockByItemId: Record<string, number> = Object.fromEntries(
+    yamahStockRows.map((r) => [r.equipmentItemId, r.quantity]),
+  );
 
   if (!user) {
     return (
@@ -190,7 +210,7 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
         </div>
       </section>
 
-      <UserDetailTabs 
+      <UserDetailTabs
         user={user}
         departments={departments}
         positions={positions}
@@ -198,6 +218,8 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
         unitTemplates={unitTemplates}
         boxTemplate={boxTemplate}
         userBox={userBox}
+        transferTargets={transferTargets}
+        yamahStockByItemId={yamahStockByItemId}
       />
     </div>
   );

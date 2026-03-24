@@ -544,6 +544,9 @@ export async function handleRequestItemAction(formData: FormData) {
       },
     });
     if (!request) throw new Error("בקשה לא נמצאה.");
+    if (request.type === RequestType.ADMIN_EQUIPMENT_TRANSFER) {
+      throw new Error("רשומת העברה ניהולית — לא ניתן לשנות מכאן.");
+    }
 
     const requestItem = request.items.find((item) => item.id === parsed.data.requestItemId);
     if (!requestItem) throw new Error("פריט לא נמצא.");

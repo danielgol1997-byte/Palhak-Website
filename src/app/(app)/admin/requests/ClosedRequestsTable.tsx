@@ -29,6 +29,11 @@ interface Request {
     id: string;
     name: string;
   } | null;
+  recipient?: {
+    id: string;
+    name: string;
+    personalNumber: string | null;
+  } | null;
   items: {
     id: string;
     quantity: number;
@@ -94,6 +99,7 @@ export function ClosedRequestsTable({
       if (searchTerm) {
         const search = searchTerm.toLowerCase();
         const matchesRequester = req.requester.name.toLowerCase().includes(search);
+        const matchesRecipient = req.recipient?.name.toLowerCase().includes(search) ?? false;
         const matchesItem = req.items.some((item) =>
           item.equipmentItem.name.toLowerCase().includes(search)
         );
@@ -116,7 +122,7 @@ export function ClosedRequestsTable({
           item.shoeSize?.toLowerCase().includes(search)
         );
         
-        if (!matchesRequester && !matchesItem && !matchesDivision && !matchesType && !matchesPriority && !matchesNotes && !matchesSerial && !matchesAssignmentSerial && !matchesClothingSize && !matchesShoeSize) {
+        if (!matchesRequester && !matchesRecipient && !matchesItem && !matchesDivision && !matchesType && !matchesPriority && !matchesNotes && !matchesSerial && !matchesAssignmentSerial && !matchesClothingSize && !matchesShoeSize) {
           return false;
         }
       }
@@ -297,12 +303,12 @@ export function ClosedRequestsTable({
             <table className="w-full">
               <thead>
                 <tr className="bg-zinc-900/50 text-xs font-bold text-zinc-500 uppercase tracking-wider">
-                  <th 
+                  <th
                     className="px-4 py-3 text-right cursor-pointer hover:text-zinc-300 transition-colors select-none"
                     onClick={() => handleSort("requester")}
                   >
                     <div className="flex items-center justify-end gap-1">
-                      מבקש
+                      משתמש / כיוון
                       {sortField === "requester" && (
                         <span className="text-zinc-400">{sortDirection === "asc" ? "↑" : "↓"}</span>
                       )}
@@ -391,7 +397,20 @@ export function ClosedRequestsTable({
                       className="border-t border-zinc-800 hover:bg-zinc-900/50 transition-colors cursor-pointer"
                     >
                       <td className="px-4 py-3 text-sm font-medium text-zinc-50">
-                        {req.requester.name}
+                        {req.type === RequestType.ADMIN_EQUIPMENT_TRANSFER && req.recipient ? (
+                          <div>
+                            <div>
+                              <span className="text-zinc-500 text-xs font-normal">אל </span>
+                              {req.requester.name}
+                            </div>
+                            <div className="text-xs text-zinc-400 mt-0.5">
+                              <span className="text-zinc-500">מאת </span>
+                              {req.recipient.name}
+                            </div>
+                          </div>
+                        ) : (
+                          req.requester.name
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <div className="text-sm text-zinc-300 mb-1">{getItemsSummary(req)}</div>

@@ -53,6 +53,8 @@ export function requestTypeLabel(t: RequestType, userId?: string, requesterId?: 
       return "שומש";
     case "ADMIN_ASSIGNMENT":
       return "ניהול שרירותי";
+    case "ADMIN_EQUIPMENT_TRANSFER":
+      return "העברת ציוד (ניהול)";
     case "TRANSFER":
       // Context-aware label for transfers
       if (userId && recipientId && userId === recipientId) {
@@ -91,7 +93,7 @@ export function requestItemStatusLabel(s: string, requestType?: RequestType): st
       if (requestType === "RETURN_EQUIPMENT") {
         return "הוחזר";
       }
-      if (requestType === "TRANSFER") {
+      if (requestType === "TRANSFER" || requestType === "ADMIN_EQUIPMENT_TRANSFER") {
         return "הועבר";
       }
       return "אושר";

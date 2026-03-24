@@ -152,11 +152,14 @@ export default async function RequestsPage({
   // Split requests into new equipment, declarations, returns, admin assignments, in-progress, and closed
   // The key is: if ANY item is still PENDING, the request is "in progress"
   
-  // Administrative assignments - all ADMIN_ASSIGNMENT type requests
-  const adminAssignmentRequests = equipmentRequests.filter((r) => r.type === "ADMIN_ASSIGNMENT");
-  
-  // Filter out admin assignments from other categories
-  const regularRequests = equipmentRequests.filter((r) => r.type !== "ADMIN_ASSIGNMENT");
+  // ניהול שרירותי: הקצאות מנהל + העברות ציוד שבוצעו ע״י מנהל (לא בטאב העברות חיילים)
+  const adminAssignmentRequests = equipmentRequests.filter(
+    (r) => r.type === "ADMIN_ASSIGNMENT" || r.type === "ADMIN_EQUIPMENT_TRANSFER",
+  );
+
+  const regularRequests = equipmentRequests.filter(
+    (r) => r.type !== "ADMIN_ASSIGNMENT" && r.type !== "ADMIN_EQUIPMENT_TRANSFER",
+  );
   
   const openRequests = regularRequests.filter((r) => {
     if (r.type !== "NEW_EQUIPMENT") return false;

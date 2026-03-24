@@ -14,9 +14,21 @@ interface UserDetailTabsProps {
   unitTemplates: any[];
   boxTemplate: any;
   userBox: any;
+  transferTargets: { id: string; name: string; personalNumber: string | null }[];
+  yamahStockByItemId: Record<string, number>;
 }
 
-export function UserDetailTabs({ user, departments, positions, availableEquipment, unitTemplates, boxTemplate, userBox }: UserDetailTabsProps) {
+export function UserDetailTabs({
+  user,
+  departments,
+  positions,
+  availableEquipment,
+  unitTemplates,
+  boxTemplate,
+  userBox,
+  transferTargets,
+  yamahStockByItemId,
+}: UserDetailTabsProps) {
   const [activeTab, setActiveTab] = useState<TabType>("equipment");
 
   return (
@@ -48,12 +60,14 @@ export function UserDetailTabs({ user, departments, positions, availableEquipmen
 
         <div className="p-6">
           {activeTab === "equipment" && (
-            <EquipmentTab 
+            <EquipmentTab
               user={user}
               availableEquipment={availableEquipment}
               unitTemplates={unitTemplates}
               boxTemplate={boxTemplate}
               userBox={userBox}
+              transferTargets={transferTargets}
+              yamahStockByItemId={yamahStockByItemId}
             />
           )}
           {activeTab === "personal" && (

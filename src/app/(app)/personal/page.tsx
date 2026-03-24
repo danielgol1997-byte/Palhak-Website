@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
-import { AssignmentStatus, Role } from "@prisma/client";
+import { AssignmentStatus, RequestType, Role } from "@prisma/client";
 import { isPrivilegedOperator } from "@/lib/rbac";
 import { PersonalTabs } from "./PersonalTabs";
 import { EquipmentTab } from "./EquipmentTab";
@@ -43,7 +43,10 @@ export default async function PersonalPage() {
     }),
     // Requests sent by the user
     prisma.request.findMany({
-      where: { requesterId: session.user.id },
+      where: {
+        requesterId: session.user.id,
+        type: { not: RequestType.ADMIN_EQUIPMENT_TRANSFER },
+      },
       orderBy: [{ createdAt: "desc" }],
       select: {
         id: true,

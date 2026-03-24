@@ -121,6 +121,7 @@ export function RequestTabs({
     const search = searchTerm.toLowerCase();
     return requests.filter((req) => {
       const matchesRequester = req.requester.name.toLowerCase().includes(search);
+      const matchesRecipient = req.recipient?.name.toLowerCase().includes(search) ?? false;
       const matchesItem = req.items.some((item) =>
         item.equipmentItem.name.toLowerCase().includes(search)
       );
@@ -143,7 +144,7 @@ export function RequestTabs({
         item.shoeSize?.toLowerCase().includes(search)
       );
       
-      return matchesRequester || matchesItem || matchesDivision || matchesType || matchesPriority || matchesNotes || matchesSerial || matchesAssignmentSerial || matchesClothingSize || matchesShoeSize;
+      return matchesRequester || matchesRecipient || matchesItem || matchesDivision || matchesType || matchesPriority || matchesNotes || matchesSerial || matchesAssignmentSerial || matchesClothingSize || matchesShoeSize;
     });
   };
 
