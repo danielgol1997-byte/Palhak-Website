@@ -173,7 +173,57 @@ export async function deleteItemAction(formData: FormData): Promise<{ success: b
         item.requestItems.length > 0 ||
         item.transferItems.length > 0;
 
-      if (hasHistory) {
+      if (item.discontinued) {
+        // Second-step permanent removal: strip all references, then delete the row
+        const requestItemRows = await tx.requestItem.findMany({
+          where: { equipmentItemId: id },
+          select: { requestId: true },
+        });
+        const affectedRequestIds = [...new Set(requestItemRows.map((r) => r.requestId))];
+
+        const transferItemRows = await tx.transferItem.findMany({
+          where: { equipmentItemId: id },
+          select: { transferId: true },
+        });
+        const affectedTransferIds = [...new Set(transferItemRows.map((t) => t.transferId))];
+
+        if (affectedRequestIds.length > 0) {
+          await tx.adminNotification.deleteMany({ where: { requestId: { in: affectedRequestIds } } });
+        }
+
+        await tx.requestItem.deleteMany({ where: { equipmentItemId: id } });
+        if (affectedRequestIds.length > 0) {
+          await tx.request.deleteMany({
+            where: { id: { in: affectedRequestIds }, items: { none: {} } },
+          });
+        }
+
+        await tx.transferItem.deleteMany({ where: { equipmentItemId: id } });
+        if (affectedTransferIds.length > 0) {
+          await tx.transfer.deleteMany({
+            where: { id: { in: affectedTransferIds }, items: { none: {} } },
+          });
+        }
+
+        await tx.assignment.deleteMany({ where: { equipmentItemId: id } });
+        await tx.storageInventory.deleteMany({ where: { equipmentItemId: id } });
+        await tx.unitTemplateItem.deleteMany({ where: { equipmentItemId: id } });
+        await tx.boxTemplateItemAlt.deleteMany({ where: { equipmentItemId: id } });
+        await tx.boxTemplateItem.deleteMany({ where: { equipmentItemId: id } });
+        await tx.boxItem.deleteMany({ where: { equipmentItemId: id } });
+        await tx.user.updateMany({ where: { weaponItemId: id }, data: { weaponItemId: null } });
+
+        await tx.equipmentItem.delete({ where: { id } });
+
+        await writeAuditLog(tx, {
+          actorId: session.user.id,
+          entity: AuditEntity.ITEM,
+          entityId: id,
+          action: "ITEM_PURGED",
+          beforeJson: { name: item.name, discontinued: true },
+          afterJson: null,
+        });
+      } else if (hasHistory) {
         // Soft delete: mark as discontinued so FK references in request history remain valid
         await tx.equipmentItem.update({
           where: { id },

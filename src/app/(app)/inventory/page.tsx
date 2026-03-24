@@ -78,32 +78,34 @@ export default async function InventoryPage({
   );
 
   return (
-    <div className="flex flex-col gap-6">
-      <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-sm">
+    <div className="flex w-full min-w-0 max-w-full flex-col gap-6">
+      <section className="w-full min-w-0 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 shadow-sm sm:p-6">
         <h1 className="text-2xl font-bold text-zinc-50">מלאי כולל</h1>
         <p className="mt-2 text-sm text-zinc-400">מעקב אחר כמויות ציוד משויכות ובמחסן.</p>
       </section>
 
-      <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-sm">
-        <div className="flex flex-col gap-6">
-          <TableToolbar 
-            placeholder="חיפוש לפי שם פריט" 
-            showDivisionFilter 
-            divisionLabels={divisionLabels} 
-          />
+      <section className="w-full min-w-0 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 shadow-sm sm:p-6">
+        <div className="flex w-full min-w-0 flex-col gap-6">
+          <div className="w-full min-w-0">
+            <TableToolbar 
+              placeholder="חיפוש לפי שם פריט" 
+              showDivisionFilter 
+              divisionLabels={divisionLabels} 
+            />
+          </div>
 
-          <div className="flex flex-col gap-4">
+          <div className="flex w-full min-w-0 flex-col gap-4">
             {rowsWithTotals.map((item) => (
-              <div key={item.id} className="rounded-3xl border border-zinc-800 bg-zinc-950 p-6 shadow-inner transition-all hover:border-zinc-700">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <a href={`/inventory/item/${item.id}`} className="text-lg font-bold hover:underline text-zinc-50 decoration-zinc-500 underline-offset-4">
+              <div key={item.id} className="w-full min-w-0 overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950 p-4 shadow-inner transition-all hover:border-zinc-700 sm:p-6">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <a href={`/inventory/item/${item.id}`} className="break-words text-lg font-bold text-zinc-50 underline decoration-zinc-500 underline-offset-4 hover:underline">
                       {item.name}
                     </a>
                     <div className="mt-1 text-sm text-zinc-400">
                       {divisionLabel(item.category.division)}
                     </div>
-                    <div className="mt-4 grid grid-cols-3 gap-4 border-t border-zinc-800/50 pt-4">
+                    <div className="mt-4 grid grid-cols-1 gap-3 border-t border-zinc-800/50 pt-4 sm:grid-cols-3 sm:gap-4">
                       <div className="text-center">
                         <div className="text-xs font-bold text-zinc-500 uppercase">סה״כ</div>
                         <div className="text-xl font-bold text-zinc-50">{item.total}</div>
@@ -120,7 +122,7 @@ export default async function InventoryPage({
                 </div>
                   <a
                     href={`/inventory/item/${item.id}`}
-                    className="inline-flex h-10 items-center justify-center rounded-xl bg-zinc-800 px-4 text-xs font-bold text-zinc-100 transition-all hover:bg-zinc-700 hover:scale-105 active:scale-95 cursor-pointer"
+                    className="inline-flex h-10 w-full shrink-0 items-center justify-center self-start rounded-xl bg-zinc-800 px-4 text-xs font-bold text-zinc-100 transition-all hover:bg-zinc-700 active:scale-[0.98] sm:w-auto sm:hover:scale-105 sm:active:scale-95"
                   >
                     פירוט
                   </a>

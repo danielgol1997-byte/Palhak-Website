@@ -140,7 +140,7 @@ export default async function AppLayout({
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl px-4 py-5 pb-24">
+      <main className="mx-auto w-full min-w-0 max-w-5xl overflow-x-hidden px-4 py-5 pb-24">
         {children}
       </main>
     </div>

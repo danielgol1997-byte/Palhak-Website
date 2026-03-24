@@ -55,8 +55,8 @@ export function TableToolbar({
   }, [q, division, pathname, router, params]);
 
   return (
-    <div className="flex flex-col gap-4 sm:flex-row">
-      <div className="relative flex-1">
+    <div className="flex w-full min-w-0 flex-col gap-4 sm:flex-row sm:items-stretch">
+      <div className="relative min-w-0 flex-1">
         <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-500"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
         </div>
@@ -72,7 +72,7 @@ export function TableToolbar({
         <select
           value={division}
           onChange={(e) => setDivision(e.target.value)}
-          className="h-14 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 text-base text-zinc-50 outline-none focus:ring-2 focus:ring-zinc-500 transition-all cursor-pointer min-w-[140px]"
+          className="h-14 w-full min-w-0 shrink-0 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 text-base text-zinc-50 outline-none focus:ring-2 focus:ring-zinc-500 transition-all cursor-pointer sm:w-auto sm:min-w-[140px]"
       >
           <option value="ALL">כל החלוקות</option>
           {Object.values(Division).map((d) => (
