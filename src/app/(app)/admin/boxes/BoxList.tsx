@@ -42,9 +42,18 @@ interface TransferUser {
   personalNumber: string | null;
 }
 
+interface TemplateItemForAdd {
+  equipmentItemId: string;
+  equipmentItemName: string;
+  quantity: number;
+  alternatives: { equipmentItemId: string; equipmentItemName: string }[];
+}
+
 interface BoxListProps {
   rows: BoxRow[];
   allUsers: TransferUser[];
+  templateItemsForAdd: TemplateItemForAdd[];
+  yamahStockByItemId: Record<string, number>;
 }
 
 type SortField = "userName" | "department" | "pct" | "inBoxTotal" | "createdAt";
@@ -64,7 +73,7 @@ function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: 
   );
 }
 
-export function BoxList({ rows, allUsers }: BoxListProps) {
+export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemId }: BoxListProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | "complete" | "incomplete">("all");
   const [expandedBoxId, setExpandedBoxId] = useState<string | null>(null);
@@ -504,6 +513,23 @@ export function BoxList({ rows, allUsers }: BoxListProps) {
           <BoxEditModal
             box={{ id: boxRow.id, userId: boxRow.userId, userName: boxRow.userName, personalNumber: boxRow.personalNumber, items: boxRow.items }}
             allUsers={allUsers}
+            addableItems={(() => {
+              return templateItemsForAdd.flatMap((tplItem) => {
+                const groupIds = [tplItem.equipmentItemId, ...tplItem.alternatives.map((a) => a.equipmentItemId)];
+                const inBox = boxRow.items
+                  .filter((bi) => groupIds.includes(bi.equipmentItemId))
+                  .reduce((s, bi) => s + bi.quantity, 0);
+                const remaining = tplItem.quantity - inBox;
+                const candidates: { id: string; name: string; stock: number; capacity: number }[] = [];
+                const addCandidate = (id: string, name: string) => {
+                  const stock = yamahStockByItemId[id] ?? 0;
+                  if (stock > 0 && remaining > 0) candidates.push({ id, name, stock, capacity: remaining });
+                };
+                addCandidate(tplItem.equipmentItemId, tplItem.equipmentItemName);
+                tplItem.alternatives.forEach((a) => addCandidate(a.equipmentItemId, a.equipmentItemName));
+                return candidates;
+              });
+            })()}
             onClose={() => setEditBoxId(null)}
           />
         );

@@ -205,6 +205,16 @@ export default async function BoxesPage() {
     };
   });
 
+  const templateItemsForAdd = boxTemplate.items.map((tplItem) => ({
+    equipmentItemId: tplItem.equipmentItemId,
+    equipmentItemName: tplItem.equipmentItem.name,
+    quantity: tplItem.quantity,
+    alternatives: tplItem.alternatives.map((a) => ({
+      equipmentItemId: a.equipmentItemId,
+      equipmentItemName: a.equipmentItem.name,
+    })),
+  }));
+
   return (
     <div className="flex flex-col gap-6">
       <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-sm">
@@ -214,7 +224,7 @@ export default async function BoxesPage() {
         </p>
       </section>
       <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-sm">
-        <BoxList rows={boxRows} allUsers={allActiveUsers} />
+        <BoxList rows={boxRows} allUsers={allActiveUsers} templateItemsForAdd={templateItemsForAdd} yamahStockByItemId={storageMap} />
       </section>
     </div>
   );

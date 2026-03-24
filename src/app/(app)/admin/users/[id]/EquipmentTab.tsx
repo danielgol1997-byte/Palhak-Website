@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Division } from "@prisma/client";
 import { divisionLabel } from "@/lib/he";
 import {
+  addToBoxDirectAction,
   adminAssignEquipmentAction,
   adminTransferAssignmentAction,
   adminUnassignEquipmentAction,
@@ -146,6 +147,11 @@ export function EquipmentTab({
   const [restoreModal, setRestoreModal] = useState<RestoreModal | null>(null);
   const [removeFromBoxModal, setRemoveFromBoxModal] = useState<RemoveFromBoxModal | null>(null);
   const [transferBoxModal, setTransferBoxModal] = useState<TransferBoxModal | null>(null);
+  const [addToBoxModal, setAddToBoxModal] = useState(false);
+  const [addToBoxItemId, setAddToBoxItemId] = useState<string | null>(null);
+  const [addToBoxQty, setAddToBoxQty] = useState(1);
+  const [addToBoxSerial, setAddToBoxSerial] = useState("");
+  const [addToBoxNotes, setAddToBoxNotes] = useState("");
 
   // Assign modal state
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
@@ -197,6 +203,33 @@ export function EquipmentTab({
         (t.personalNumber && t.personalNumber.toLowerCase().includes(q)),
     );
   }, [transferTargets, boxTransferSearch]);
+
+  // Items selectable for "add to box directly"
+  const addableBoxItems = useMemo(() => {
+    if (!boxTemplate) return [];
+    return boxTemplate.items.flatMap((tplItem) => {
+      // group = main item + alternatives
+      const groupIds = [tplItem.equipmentItemId, ...tplItem.alternatives.map((a) => a.equipmentItemId)];
+      // capacity remaining in current box
+      const inBox = userBox
+        ? userBox.items
+            .filter((bi) => groupIds.includes(bi.equipmentItemId))
+            .reduce((s, bi) => s + bi.quantity, 0)
+        : 0;
+      const remaining = tplItem.quantity - inBox;
+      // All items in group that have ימ״ח stock
+      const candidates: { id: string; name: string; stock: number; capacity: number }[] = [];
+      const addCandidate = (id: string, name: string) => {
+        const stock = yamahStockByItemId[id] ?? 0;
+        if (stock > 0 && remaining > 0) candidates.push({ id, name, stock, capacity: remaining });
+      };
+      addCandidate(tplItem.equipmentItemId, tplItem.equipmentItem.name);
+      tplItem.alternatives.forEach((a) => addCandidate(a.equipmentItemId, a.equipmentItem.name));
+      return candidates;
+    });
+  }, [boxTemplate, userBox, yamahStockByItemId]);
+
+  const selectedAddItem = addToBoxItemId ? addableBoxItems.find((i) => i.id === addToBoxItemId) ?? null : null;
 
   // ---------- Box template helpers ----------
   const findTemplateItemForEquipment = (equipmentItemId: string) => {
@@ -374,6 +407,34 @@ export function EquipmentTab({
       const result = await transferBoxItemAction(formData);
       if (!result.success) setError(result.error || "אירעה שגיאה");
       else { setTransferBoxModal(null); setBoxTransferToUserId(null); setBoxTransferSearch(""); router.refresh(); }
+    } catch {
+      setError("אירעה שגיאה בלתי צפויה");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleAddToBoxDirect = async () => {
+    if (!addToBoxItemId || !addToBoxNotes.trim()) return;
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append("userId", user.id);
+      formData.append("equipmentItemId", addToBoxItemId);
+      formData.append("quantity", addToBoxQty.toString());
+      if (addToBoxSerial.trim()) formData.append("serialNumber", addToBoxSerial.trim());
+      formData.append("adminNotes", addToBoxNotes);
+      const result = await addToBoxDirectAction(formData);
+      if (!result.success) setError(result.error || "אירעה שגיאה");
+      else {
+        setAddToBoxModal(false);
+        setAddToBoxItemId(null);
+        setAddToBoxQty(1);
+        setAddToBoxSerial("");
+        setAddToBoxNotes("");
+        router.refresh();
+      }
     } catch {
       setError("אירעה שגיאה בלתי צפויה");
     } finally {
@@ -705,6 +766,13 @@ export function EquipmentTab({
                 </span>
               )}
             </h3>
+            <button
+              onClick={() => { setAddToBoxModal(true); setAddToBoxItemId(null); setAddToBoxQty(1); setAddToBoxSerial(""); setAddToBoxNotes(""); setError(null); }}
+              className="mr-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-900/20 text-emerald-400 border border-emerald-900/40 hover:bg-emerald-900/40 transition-all cursor-pointer"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+              הוסף לקרטון
+            </button>
           </div>
 
           {(!userBox || userBox.items.length === 0) ? (
@@ -1506,6 +1574,110 @@ export function EquipmentTab({
                   {isSubmitting ? <LoadingSpinner size="sm" /> : "העבר לקרטון"}
                 </button>
                 <button onClick={() => setTransferBoxModal(null)} disabled={isSubmitting} className="flex-1 h-14 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-base font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer disabled:opacity-50">ביטול</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        </ModalPortal>
+      )}
+
+      {/* ===== ADD TO BOX DIRECTLY MODAL ===== */}
+      {addToBoxModal && (
+        <ModalPortal>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
+          <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => !isSubmitting && setAddToBoxModal(false)} />
+          <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold text-emerald-400">הוספה ישירה לקרטון</h3>
+              <button onClick={() => !isSubmitting && setAddToBoxModal(false)} className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-zinc-50 cursor-pointer" disabled={isSubmitting}>
+                <CloseIcon />
+              </button>
+            </div>
+            <p className="text-sm text-zinc-400 mb-6">בחר פריט מתבנית הקרטון עם מלאי זמין בימ״ח. הפריט ינוכה מהמלאי ויוסף ישירות לקרטון.</p>
+
+            <div className="space-y-5">
+              {/* Item selector */}
+              <div>
+                <label className="text-sm font-bold text-zinc-400 mb-2 block">פריט <span className="text-red-500">*</span></label>
+                {addableBoxItems.length === 0 ? (
+                  <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-950 text-sm text-zinc-500 text-center">
+                    אין פריטים זמינים להוספה (כל הפריטים מלאים או אין מלאי בימ״ח).
+                  </div>
+                ) : (
+                  <div className="max-h-56 overflow-y-auto rounded-xl border border-zinc-800 divide-y divide-zinc-800">
+                    {addableBoxItems.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => { setAddToBoxItemId(item.id); setAddToBoxQty(1); setAddToBoxSerial(""); }}
+                        className={`w-full flex items-center justify-between px-4 py-3 text-right transition-colors cursor-pointer ${addToBoxItemId === item.id ? "bg-emerald-900/30 text-emerald-300" : "hover:bg-zinc-800 text-zinc-300"}`}
+                      >
+                        <div className="text-right">
+                          <div className="text-sm font-bold">{item.name}</div>
+                          <div className="text-xs text-zinc-500 mt-0.5">
+                            מלאי ימ״ח: {item.stock} | נותר בקרטון: {item.capacity}
+                          </div>
+                        </div>
+                        {addToBoxItemId === item.id && (
+                          <svg className="flex-shrink-0 text-emerald-400" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Quantity */}
+              {selectedAddItem && (
+                <>
+                  <div>
+                    <label className="text-sm font-bold text-zinc-400 mb-2 block">כמות</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max={Math.min(selectedAddItem.stock, selectedAddItem.capacity)}
+                      value={addToBoxQty}
+                      onChange={(e) => setAddToBoxQty(Math.min(Math.max(1, parseInt(e.target.value) || 1), selectedAddItem.stock, selectedAddItem.capacity))}
+                      className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-lg font-bold text-zinc-50 focus:ring-2 focus:ring-zinc-500 outline-none transition-all"
+                    />
+                    <p className="mt-1 text-xs text-zinc-500">מקסימום: {Math.min(selectedAddItem.stock, selectedAddItem.capacity)}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-bold text-zinc-400 mb-2 block">מספר סידורי (אופציונלי)</label>
+                    <input
+                      type="text"
+                      value={addToBoxSerial}
+                      onChange={(e) => { setAddToBoxSerial(e.target.value); if (e.target.value.trim()) setAddToBoxQty(1); }}
+                      placeholder="אם ישים (ינעל כמות=1)..."
+                      className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-sm text-zinc-50 placeholder:text-zinc-600 outline-none focus:ring-2 focus:ring-zinc-500 transition-all font-mono"
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Admin notes */}
+              <div>
+                <label className="text-sm font-bold text-emerald-400 mb-2 block">הערות <span className="text-red-500">*</span></label>
+                <textarea
+                  value={addToBoxNotes}
+                  onChange={(e) => setAddToBoxNotes(e.target.value)}
+                  rows={3}
+                  placeholder="סיבת ההוספה הישירה לקרטון (חובה) — יתועד בניהול שרירותי..."
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-50 placeholder:text-zinc-600 outline-none focus:ring-2 focus:ring-zinc-500 transition-all resize-none"
+                />
+              </div>
+
+              {error && <div className="rounded-xl border border-red-900/40 bg-red-900/10 p-3 text-sm text-red-400">{error}</div>}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={handleAddToBoxDirect}
+                  disabled={isSubmitting || !addToBoxItemId || !addToBoxNotes.trim()}
+                  className="flex-1 h-14 inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-base font-bold text-white hover:bg-emerald-500 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? <LoadingSpinner size="sm" /> : "הוסף לקרטון"}
+                </button>
+                <button onClick={() => setAddToBoxModal(false)} disabled={isSubmitting} className="flex-1 h-14 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-base font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer disabled:opacity-50">ביטול</button>
               </div>
             </div>
           </div>
