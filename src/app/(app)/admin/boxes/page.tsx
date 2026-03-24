@@ -102,6 +102,12 @@ export default async function BoxesPage() {
     },
   });
 
+  const allActiveUsers = await prisma.user.findMany({
+    where: { active: true },
+    select: { id: true, name: true, personalNumber: true },
+    orderBy: { name: "asc" },
+  });
+
   const YAMAH_NAME = "ימ״ח";
   const yamah = await prisma.storageLocation.findUnique({ where: { name: YAMAH_NAME } });
   let storageMap: Record<string, number> = {};
@@ -188,6 +194,14 @@ export default async function BoxesPage() {
       inBoxTotal,
       totalRequired: totalTemplateQuantity,
       templateStatus,
+      items: box.items.map((i) => ({
+        id: i.id,
+        equipmentItemId: i.equipmentItemId,
+        quantity: i.quantity,
+        serialNumber: i.serialNumber,
+        movedAt: i.movedAt,
+        equipmentItem: { id: i.equipmentItem.id, name: i.equipmentItem.name },
+      })),
     };
   });
 
@@ -200,7 +214,7 @@ export default async function BoxesPage() {
         </p>
       </section>
       <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-sm">
-        <BoxList rows={boxRows} />
+        <BoxList rows={boxRows} allUsers={allActiveUsers} />
       </section>
     </div>
   );

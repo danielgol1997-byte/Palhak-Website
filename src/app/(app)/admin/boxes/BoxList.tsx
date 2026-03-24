@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, Fragment } from "react";
+import { BoxEditModal } from "./BoxEditModal";
 
 interface TemplateItemStatus {
   equipmentItemId: string;
@@ -10,6 +11,15 @@ interface TemplateItemStatus {
   missing: number;
   missingReason: string | null;
   inStorage: number;
+}
+
+interface BoxItemRow {
+  id: string;
+  equipmentItemId: string;
+  quantity: number;
+  serialNumber: string | null;
+  movedAt: Date;
+  equipmentItem: { id: string; name: string };
 }
 
 interface BoxRow {
@@ -23,10 +33,18 @@ interface BoxRow {
   inBoxTotal: number;
   totalRequired: number;
   templateStatus: TemplateItemStatus[];
+  items: BoxItemRow[];
+}
+
+interface TransferUser {
+  id: string;
+  name: string;
+  personalNumber: string | null;
 }
 
 interface BoxListProps {
   rows: BoxRow[];
+  allUsers: TransferUser[];
 }
 
 type SortField = "userName" | "department" | "pct" | "inBoxTotal" | "createdAt";
@@ -46,10 +64,11 @@ function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: 
   );
 }
 
-export function BoxList({ rows }: BoxListProps) {
+export function BoxList({ rows, allUsers }: BoxListProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | "complete" | "incomplete">("all");
   const [expandedBoxId, setExpandedBoxId] = useState<string | null>(null);
+  const [editBoxId, setEditBoxId] = useState<string | null>(null);
   const [sortField, setSortField] = useState<SortField>("userName");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [selectedItemFilters, setSelectedItemFilters] = useState<Set<string>>(new Set());
@@ -325,6 +344,7 @@ export function BoxList({ rows }: BoxListProps) {
                 <SortHeader field="pct" label="מילוי" className="text-center" />
                 <SortHeader field="createdAt" label="תאריך יצירה" className="text-right" />
                 <th className="px-4 py-3 text-center">פרטים</th>
+                <th className="px-4 py-3 text-center">עריכה</th>
               </tr>
             </thead>
             <tbody>
@@ -396,10 +416,18 @@ export function BoxList({ rows }: BoxListProps) {
                           </svg>
                         </button>
                       </td>
+                      <td className="px-4 py-4 text-center">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setEditBoxId(row.id); }}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-900/20 text-amber-400 border border-amber-900/40 hover:bg-amber-900/40 transition-all cursor-pointer"
+                        >
+                          עריכה
+                        </button>
+                      </td>
                     </tr>
                     {isExpanded && (
                       <tr>
-                        <td colSpan={6} className="bg-zinc-950/70 px-4 pb-4 pt-2">
+                        <td colSpan={7} className="bg-zinc-950/70 px-4 pb-4 pt-2">
                           <div className="rounded-xl border border-zinc-800 overflow-hidden">
                             <table className="w-full">
                               <thead>
@@ -467,6 +495,19 @@ export function BoxList({ rows }: BoxListProps) {
           </table>
         </div>
       )}
+
+      {/* Box Edit Modal */}
+      {editBoxId && (() => {
+        const boxRow = rows.find((r) => r.id === editBoxId);
+        if (!boxRow) return null;
+        return (
+          <BoxEditModal
+            box={{ id: boxRow.id, userId: boxRow.userId, userName: boxRow.userName, personalNumber: boxRow.personalNumber, items: boxRow.items }}
+            allUsers={allUsers}
+            onClose={() => setEditBoxId(null)}
+          />
+        );
+      })()}
     </div>
   );
 }

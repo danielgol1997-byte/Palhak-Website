@@ -9,7 +9,9 @@ import {
   adminTransferAssignmentAction,
   adminUnassignEquipmentAction,
   moveToBoxAction,
+  removeFromBoxAction,
   restoreFromBoxAction,
+  transferBoxItemAction,
 } from "./equipment-actions";
 import { EquipmentSelector } from "@/components/equipment/EquipmentSelector";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
@@ -105,6 +107,8 @@ type UnassignModal = { assignment: Assignment; quantity: number };
 type MoveToBoxModal = { assignment: Assignment; quantity: number; maxQuantity: number };
 type TransferModal = { assignment: Assignment; quantity: number };
 type RestoreModal = { boxItem: BoxItemData; quantity: number };
+type RemoveFromBoxModal = { boxItem: BoxItemData; quantity: number };
+type TransferBoxModal = { boxItem: BoxItemData; quantity: number };
 
 type BulkMode = "unassign" | "moveToBox" | "transfer";
 
@@ -139,6 +143,8 @@ export function EquipmentTab({
   const [moveToBoxModal, setMoveToBoxModal] = useState<MoveToBoxModal | null>(null);
   const [transferModal, setTransferModal] = useState<TransferModal | null>(null);
   const [restoreModal, setRestoreModal] = useState<RestoreModal | null>(null);
+  const [removeFromBoxModal, setRemoveFromBoxModal] = useState<RemoveFromBoxModal | null>(null);
+  const [transferBoxModal, setTransferBoxModal] = useState<TransferBoxModal | null>(null);
 
   // Assign modal state
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
@@ -163,6 +169,10 @@ export function EquipmentTab({
   const [transferAdminNotes, setTransferAdminNotes] = useState("");
   const [bulkTransferAdminNotes, setBulkTransferAdminNotes] = useState("");
 
+  // Box-item transfer state (separate from assignment transfer)
+  const [boxTransferSearch, setBoxTransferSearch] = useState("");
+  const [boxTransferToUserId, setBoxTransferToUserId] = useState<string | null>(null);
+
   const filteredTransferTargets = useMemo(() => {
     const q = transferRecipientSearch.trim().toLowerCase();
     if (!q) return transferTargets;
@@ -176,6 +186,16 @@ export function EquipmentTab({
   const selectedTransferRecipientName = transferToUserId
     ? transferTargets.find((t) => t.id === transferToUserId)?.name ?? null
     : null;
+
+  const filteredBoxTransferTargets = useMemo(() => {
+    const q = boxTransferSearch.trim().toLowerCase();
+    if (!q) return transferTargets;
+    return transferTargets.filter(
+      (t) =>
+        t.name.toLowerCase().includes(q) ||
+        (t.personalNumber && t.personalNumber.toLowerCase().includes(q)),
+    );
+  }, [transferTargets, boxTransferSearch]);
 
   // ---------- Box template helpers ----------
   const findTemplateItemForEquipment = (equipmentItemId: string) => {
@@ -314,6 +334,45 @@ export function EquipmentTab({
       const result = await restoreFromBoxAction(formData);
       if (!result.success) setError(result.error || "אירעה שגיאה");
       else setRestoreModal(null);
+    } catch {
+      setError("אירעה שגיאה בלתי צפויה");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRemoveFromBox = async () => {
+    if (!removeFromBoxModal) return;
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append("userId", user.id);
+      formData.append("boxItemId", removeFromBoxModal.boxItem.id);
+      formData.append("quantity", removeFromBoxModal.quantity.toString());
+      const result = await removeFromBoxAction(formData);
+      if (!result.success) setError(result.error || "אירעה שגיאה");
+      else { setRemoveFromBoxModal(null); router.refresh(); }
+    } catch {
+      setError("אירעה שגיאה בלתי צפויה");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleTransferBoxItem = async () => {
+    if (!transferBoxModal || !boxTransferToUserId) return;
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append("fromUserId", user.id);
+      formData.append("toUserId", boxTransferToUserId);
+      formData.append("boxItemId", transferBoxModal.boxItem.id);
+      formData.append("quantity", transferBoxModal.quantity.toString());
+      const result = await transferBoxItemAction(formData);
+      if (!result.success) setError(result.error || "אירעה שגיאה");
+      else { setTransferBoxModal(null); setBoxTransferToUserId(null); setBoxTransferSearch(""); router.refresh(); }
     } catch {
       setError("אירעה שגיאה בלתי צפויה");
     } finally {
@@ -681,12 +740,28 @@ export function EquipmentTab({
                         {new Date(boxItem.movedAt).toLocaleDateString("he-IL")}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <button
-                          onClick={() => { setRestoreModal({ boxItem, quantity: boxItem.quantity }); setError(null); }}
-                          className="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-900/20 text-blue-400 border border-blue-900/40 hover:bg-blue-900/40 transition-all cursor-pointer"
-                        >
-                          שחזר מקרטון
-                        </button>
+                        <div className="flex items-center justify-center gap-2 flex-wrap">
+                          <button
+                            onClick={() => { setRestoreModal({ boxItem, quantity: boxItem.quantity }); setError(null); }}
+                            className="px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-900/20 text-blue-400 border border-blue-900/40 hover:bg-blue-900/40 transition-all cursor-pointer"
+                          >
+                            שחזר מקרטון
+                          </button>
+                          {transferTargets.length > 0 && (
+                            <button
+                              onClick={() => { setBoxTransferSearch(""); setBoxTransferToUserId(null); setTransferBoxModal({ boxItem, quantity: boxItem.quantity }); setError(null); }}
+                              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-900/20 text-sky-400 border border-sky-900/40 hover:bg-sky-900/40 transition-all cursor-pointer"
+                            >
+                              העבר לקרטון אחר
+                            </button>
+                          )}
+                          <button
+                            onClick={() => { setRemoveFromBoxModal({ boxItem, quantity: boxItem.quantity }); setError(null); }}
+                            className="px-3 py-1.5 rounded-lg text-xs font-bold bg-red-900/20 text-red-400 border border-red-900/40 hover:bg-red-900/40 transition-all cursor-pointer"
+                          >
+                            הסר מקרטון
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1296,6 +1371,123 @@ export function EquipmentTab({
                   {isSubmitting ? <LoadingSpinner size="sm" /> : "שחזר לחייל"}
                 </button>
                 <button onClick={() => setRestoreModal(null)} disabled={isSubmitting} className="flex-1 h-14 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-base font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer disabled:opacity-50">ביטול</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== REMOVE FROM BOX MODAL ===== */}
+      {removeFromBoxModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => !isSubmitting && setRemoveFromBoxModal(null)} />
+          <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold text-red-400">הסרה מקרטון</h3>
+              <button onClick={() => !isSubmitting && setRemoveFromBoxModal(null)} className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-zinc-50 cursor-pointer" disabled={isSubmitting}>
+                <CloseIcon />
+              </button>
+            </div>
+            <div className="mb-6 p-4 rounded-xl border border-red-900/40 bg-red-950/10">
+              <div className="text-lg font-bold text-zinc-50">{removeFromBoxModal.boxItem.equipmentItem.name}</div>
+              <div className="text-sm text-zinc-400 mt-1">כמות בקרטון: {removeFromBoxModal.boxItem.quantity}</div>
+              {removeFromBoxModal.boxItem.serialNumber && (
+                <div className="text-sm text-zinc-400 mt-1">מספר סידורי: <span className="font-mono text-zinc-300">{removeFromBoxModal.boxItem.serialNumber}</span></div>
+              )}
+              <div className="text-sm text-amber-400 mt-2">הפריט יוחזר למלאי ימ״ח.</div>
+            </div>
+            <div className="space-y-6">
+              {!removeFromBoxModal.boxItem.serialNumber && (
+                <div>
+                  <label className="text-sm font-bold text-zinc-400 mb-2 block">כמות להסרה</label>
+                  <input type="number" min="1" max={removeFromBoxModal.boxItem.quantity} value={removeFromBoxModal.quantity}
+                    onChange={(e) => setRemoveFromBoxModal({ ...removeFromBoxModal, quantity: Math.min(Math.max(1, parseInt(e.target.value) || 1), removeFromBoxModal.boxItem.quantity) })}
+                    className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-lg font-bold text-zinc-50 focus:ring-2 focus:ring-zinc-500 outline-none transition-all" />
+                </div>
+              )}
+              {error && <div className="rounded-xl border border-red-900/40 bg-red-900/10 p-3 text-sm text-red-400">{error}</div>}
+              <div className="flex gap-3">
+                <button onClick={handleRemoveFromBox} disabled={isSubmitting} className="flex-1 h-14 inline-flex items-center justify-center gap-2 rounded-2xl bg-red-600 text-base font-bold text-white hover:bg-red-500 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                  {isSubmitting ? <LoadingSpinner size="sm" /> : "הסר מקרטון"}
+                </button>
+                <button onClick={() => setRemoveFromBoxModal(null)} disabled={isSubmitting} className="flex-1 h-14 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-base font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer disabled:opacity-50">ביטול</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== TRANSFER BOX ITEM TO ANOTHER USER'S BOX MODAL ===== */}
+      {transferBoxModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => !isSubmitting && setTransferBoxModal(null)} />
+          <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold text-sky-400">העברה לקרטון אחר</h3>
+              <button onClick={() => !isSubmitting && setTransferBoxModal(null)} className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-zinc-50 cursor-pointer" disabled={isSubmitting}>
+                <CloseIcon />
+              </button>
+            </div>
+            <div className="mb-6 p-4 rounded-xl border border-sky-900/40 bg-sky-950/10">
+              <div className="text-lg font-bold text-zinc-50">{transferBoxModal.boxItem.equipmentItem.name}</div>
+              <div className="text-sm text-zinc-400 mt-1">כמות בקרטון: {transferBoxModal.boxItem.quantity}</div>
+              {transferBoxModal.boxItem.serialNumber && (
+                <div className="text-sm text-zinc-400 mt-1">מספר סידורי: <span className="font-mono text-zinc-300">{transferBoxModal.boxItem.serialNumber}</span></div>
+              )}
+            </div>
+            <div className="space-y-5">
+              {!transferBoxModal.boxItem.serialNumber && (
+                <div>
+                  <label className="text-sm font-bold text-zinc-400 mb-2 block">כמות להעברה</label>
+                  <input type="number" min="1" max={transferBoxModal.boxItem.quantity} value={transferBoxModal.quantity}
+                    onChange={(e) => setTransferBoxModal({ ...transferBoxModal, quantity: Math.min(Math.max(1, parseInt(e.target.value) || 1), transferBoxModal.boxItem.quantity) })}
+                    className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-lg font-bold text-zinc-50 focus:ring-2 focus:ring-zinc-500 outline-none transition-all" />
+                </div>
+              )}
+              <div>
+                <label className="text-sm font-bold text-zinc-400 mb-2 block">חייל יעד</label>
+                <input
+                  type="text"
+                  value={boxTransferSearch}
+                  onChange={(e) => { setBoxTransferSearch(e.target.value); setBoxTransferToUserId(null); }}
+                  placeholder="חיפוש לפי שם או מ״א..."
+                  className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-sm text-zinc-50 placeholder:text-zinc-600 outline-none focus:ring-2 focus:ring-zinc-500 transition-all mb-2"
+                />
+                <div className="max-h-52 overflow-y-auto rounded-xl border border-zinc-800 divide-y divide-zinc-800">
+                  {filteredBoxTransferTargets.length === 0 ? (
+                    <div className="py-4 text-center text-sm text-zinc-500">לא נמצאו חיילים</div>
+                  ) : filteredBoxTransferTargets.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setBoxTransferToUserId(t.id)}
+                      className={`w-full flex items-center gap-3 px-4 py-3 text-right transition-colors cursor-pointer ${boxTransferToUserId === t.id ? "bg-sky-900/30 text-sky-300" : "hover:bg-zinc-800 text-zinc-300"}`}
+                    >
+                      <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-400 flex-shrink-0">
+                        {t.name.charAt(0)}
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-bold">{t.name}</div>
+                        {t.personalNumber && <div className="text-xs text-zinc-500">מ״א: {t.personalNumber}</div>}
+                      </div>
+                      {boxTransferToUserId === t.id && (
+                        <svg className="mr-auto flex-shrink-0 text-sky-400" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+                      )}
+                    </button>
+                  ))}
+                </div>
+                {boxTransferToUserId && (
+                  <div className="mt-2 text-sm text-sky-400 font-bold">
+                    נבחר: {transferTargets.find((t) => t.id === boxTransferToUserId)?.name}
+                  </div>
+                )}
+              </div>
+              {error && <div className="rounded-xl border border-red-900/40 bg-red-900/10 p-3 text-sm text-red-400">{error}</div>}
+              <div className="flex gap-3">
+                <button onClick={handleTransferBoxItem} disabled={isSubmitting || !boxTransferToUserId} className="flex-1 h-14 inline-flex items-center justify-center gap-2 rounded-2xl bg-sky-600 text-base font-bold text-white hover:bg-sky-500 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                  {isSubmitting ? <LoadingSpinner size="sm" /> : "העבר לקרטון"}
+                </button>
+                <button onClick={() => setTransferBoxModal(null)} disabled={isSubmitting} className="flex-1 h-14 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-base font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer disabled:opacity-50">ביטול</button>
               </div>
             </div>
           </div>
