@@ -45,7 +45,6 @@ export function UsersTable({ users }: UsersTableProps) {
 
   // Create-user modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createName, setCreateName] = useState("");
   const [createEmail, setCreateEmail] = useState("");
   const [createPersonalNumber, setCreatePersonalNumber] = useState("");
   const [createPhone, setCreatePhone] = useState("");
@@ -54,8 +53,15 @@ export function UsersTable({ users }: UsersTableProps) {
   const [createError, setCreateError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
 
+  const createFullNamePreview = useMemo(() => {
+    const f = createFirstName.trim();
+    const l = createLastName.trim();
+    if (!f && !l) return "";
+    return `${f} ${l}`.trim();
+  }, [createFirstName, createLastName]);
+
   const resetCreateForm = () => {
-    setCreateName(""); setCreateEmail(""); setCreatePersonalNumber("");
+    setCreateEmail(""); setCreatePersonalNumber("");
     setCreatePhone(""); setCreateFirstName(""); setCreateLastName("");
     setCreateError(null); setIsCreating(false);
   };
@@ -64,12 +70,11 @@ export function UsersTable({ users }: UsersTableProps) {
     setIsCreating(true);
     setCreateError(null);
     const fd = new FormData();
-    fd.append("name", createName);
+    fd.append("firstName", createFirstName.trim());
+    fd.append("lastName", createLastName.trim());
     fd.append("email", createEmail);
     if (createPersonalNumber.trim()) fd.append("personalNumber", createPersonalNumber.trim());
     if (createPhone.trim()) fd.append("phoneNumber", createPhone.trim());
-    if (createFirstName.trim()) fd.append("firstName", createFirstName.trim());
-    if (createLastName.trim()) fd.append("lastName", createLastName.trim());
     const res = await adminCreateUserAction(fd);
     setIsCreating(false);
     if (!res.success) {
@@ -327,32 +332,31 @@ export function UsersTable({ users }: UsersTableProps) {
                 </button>
               </div>
               <p className="text-sm text-zinc-400 mb-6">
-                שדות חובה: שם ואימייל (של חשבון Google). שאר השדות אופציונליים — המשתמש ישלים אותם בכניסה הראשונה.
+                שדות חובה: שם פרטי, שם משפחה ואימייל (של חשבון Google). המערכת יוצרת אוטומטית שם מלא לתצוגה. שאר השדות אופציונליים — המשתמש ישלים אותם בכניסה הראשונה.
               </p>
               <div className="grid gap-4">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
-                    <label className="text-xs font-bold text-zinc-400 mb-1 block">שם מלא <span className="text-red-500">*</span></label>
-                    <input type="text" value={createName} onChange={(e) => setCreateName(e.target.value)}
+                    <label className="text-xs font-bold text-zinc-400 mb-1 block">שם פרטי <span className="text-red-500">*</span></label>
+                    <input type="text" value={createFirstName} onChange={(e) => setCreateFirstName(e.target.value)}
                       className="h-11 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-sm text-zinc-50 focus:ring-2 focus:ring-zinc-500 outline-none transition-all" required />
                   </div>
                   <div>
-                    <label className="text-xs font-bold text-zinc-400 mb-1 block">אימייל (Google) <span className="text-red-500">*</span></label>
-                    <input type="email" dir="ltr" value={createEmail} onChange={(e) => setCreateEmail(e.target.value)}
-                      className="h-11 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-sm text-zinc-50 focus:ring-2 focus:ring-zinc-500 outline-none transition-all text-left" required />
+                    <label className="text-xs font-bold text-zinc-400 mb-1 block">שם משפחה <span className="text-red-500">*</span></label>
+                    <input type="text" value={createLastName} onChange={(e) => setCreateLastName(e.target.value)}
+                      className="h-11 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-sm text-zinc-50 focus:ring-2 focus:ring-zinc-500 outline-none transition-all" required />
                   </div>
                 </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className="text-xs font-bold text-zinc-400 mb-1 block">שם פרטי</label>
-                    <input type="text" value={createFirstName} onChange={(e) => setCreateFirstName(e.target.value)}
-                      className="h-11 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-sm text-zinc-50 focus:ring-2 focus:ring-zinc-500 outline-none transition-all" />
+                {createFullNamePreview && (
+                  <div className="rounded-xl border border-zinc-700/60 bg-zinc-950/50 px-4 py-3 text-sm">
+                    <span className="text-zinc-500">שם מלא שיוצג במערכת: </span>
+                    <span className="font-bold text-zinc-200">{createFullNamePreview}</span>
                   </div>
-                  <div>
-                    <label className="text-xs font-bold text-zinc-400 mb-1 block">שם משפחה</label>
-                    <input type="text" value={createLastName} onChange={(e) => setCreateLastName(e.target.value)}
-                      className="h-11 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-sm text-zinc-50 focus:ring-2 focus:ring-zinc-500 outline-none transition-all" />
-                  </div>
+                )}
+                <div>
+                  <label className="text-xs font-bold text-zinc-400 mb-1 block">אימייל (Google) <span className="text-red-500">*</span></label>
+                  <input type="email" dir="ltr" value={createEmail} onChange={(e) => setCreateEmail(e.target.value)}
+                    className="h-11 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-sm text-zinc-50 focus:ring-2 focus:ring-zinc-500 outline-none transition-all text-left" required />
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
@@ -374,7 +378,7 @@ export function UsersTable({ users }: UsersTableProps) {
                 <div className="flex gap-3 mt-2">
                   <button
                     onClick={handleCreateUser}
-                    disabled={isCreating || !createName.trim() || !createEmail.trim()}
+                    disabled={isCreating || !createFirstName.trim() || !createLastName.trim() || !createEmail.trim()}
                     className="flex-1 h-12 inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-sm font-bold text-white hover:bg-emerald-500 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isCreating ? <LoadingSpinner size="sm" /> : "צור משתמש"}

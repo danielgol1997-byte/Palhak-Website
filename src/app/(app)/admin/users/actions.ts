@@ -218,12 +218,11 @@ export async function adminUpdateUserDepartmentsPositionsAction(formData: FormDa
 
 
 const CreateUserSchema = z.object({
-  name: z.string().trim().min(1, "שם חובה"),
+  firstName: z.string().trim().min(1, "שם פרטי חובה"),
+  lastName: z.string().trim().min(1, "שם משפחה חובה"),
   email: z.string().trim().email("כתובת אימייל לא תקינה").transform((v) => v.toLowerCase()),
   personalNumber: z.string().trim().optional().transform((v) => v || undefined),
   phoneNumber: z.string().trim().optional().transform((v) => v || undefined),
-  firstName: z.string().trim().optional().transform((v) => v || undefined),
-  lastName: z.string().trim().optional().transform((v) => v || undefined),
 });
 
 export async function adminCreateUserAction(
@@ -232,12 +231,11 @@ export async function adminCreateUserAction(
   const session = await requireRole(Role.ADMIN);
 
   const parsed = CreateUserSchema.safeParse({
-    name: formData.get("name"),
+    firstName: formData.get("firstName"),
+    lastName: formData.get("lastName"),
     email: formData.get("email"),
     personalNumber: formData.get("personalNumber") || undefined,
     phoneNumber: formData.get("phoneNumber") || undefined,
-    firstName: formData.get("firstName") || undefined,
-    lastName: formData.get("lastName") || undefined,
   });
   if (!parsed.success) {
     const first = parsed.error.issues[0];
@@ -262,14 +260,16 @@ export async function adminCreateUserAction(
         if (existingPN) throw new Error("כבר קיים משתמש עם מספר אישי זה.");
       }
 
+      const fullName = `${parsed.data.firstName} ${parsed.data.lastName}`.trim();
+
       const user = await tx.user.create({
         data: {
-          name: parsed.data.name,
+          name: fullName,
           email: parsed.data.email,
           personalNumber: parsed.data.personalNumber ?? null,
           phoneNumber: parsed.data.phoneNumber ?? null,
-          firstName: parsed.data.firstName ?? null,
-          lastName: parsed.data.lastName ?? null,
+          firstName: parsed.data.firstName,
+          lastName: parsed.data.lastName,
           active: true,
           // onboardedAt is intentionally null — user will complete onboarding on first login
         },

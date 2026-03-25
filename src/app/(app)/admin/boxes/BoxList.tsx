@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useMemo, Fragment } from "react";
+import { useRouter } from "next/navigation";
 import { BoxEditModal } from "./BoxEditModal";
+import { createEmptyBoxAction } from "./actions";
 
 interface TemplateItemStatus {
   equipmentItemId: string;
@@ -49,12 +51,20 @@ interface TemplateItemForAdd {
   alternatives: { equipmentItemId: string; equipmentItemName: string }[];
 }
 
+interface UserWithoutBox {
+  id: string;
+  name: string;
+  personalNumber: string | null;
+  department: string | null;
+}
+
 interface BoxListProps {
   rows: BoxRow[];
   allUsers: TransferUser[];
   templateItemsForAdd: TemplateItemForAdd[];
   yamahStockByItemId: Record<string, number>;
   totalActiveUsers: number;
+  usersWithoutBox: UserWithoutBox[];
 }
 
 type SortField = "userName" | "department" | "pct" | "inBoxTotal" | "createdAt";
@@ -74,15 +84,17 @@ function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: 
   );
 }
 
-export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemId, totalActiveUsers }: BoxListProps) {
+export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemId, totalActiveUsers, usersWithoutBox }: BoxListProps) {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterStatus, setFilterStatus] = useState<"all" | "complete" | "incomplete">("all");
+  const [statFilter, setStatFilter] = useState<"all" | "complete" | "incomplete" | "nobox">("all");
   const [expandedBoxId, setExpandedBoxId] = useState<string | null>(null);
   const [editBoxId, setEditBoxId] = useState<string | null>(null);
   const [sortField, setSortField] = useState<SortField>("userName");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [selectedItemFilters, setSelectedItemFilters] = useState<Set<string>>(new Set());
   const [showItemFilter, setShowItemFilter] = useState(false);
+  const [creatingBoxForUserId, setCreatingBoxForUserId] = useState<string | null>(null);
 
   // Derive template items from any row (all rows share the same template)
   const templateItems = useMemo<TemplateItemStatus[]>(() => {
@@ -120,22 +132,21 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
   const clearItemFilters = () => setSelectedItemFilters(new Set());
 
   const filteredAndSorted = useMemo(() => {
+    if (statFilter === "nobox") return [];
+
     let result = rows.filter((r) => {
-      // Text search
       const matchesSearch =
         !searchQuery ||
         r.userName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (r.personalNumber && r.personalNumber.includes(searchQuery)) ||
         (r.department && r.department.toLowerCase().includes(searchQuery.toLowerCase()));
 
-      // Complete / incomplete
       const isComplete = r.inBoxTotal >= r.totalRequired;
       const matchesStatus =
-        filterStatus === "all" ||
-        (filterStatus === "complete" && isComplete) ||
-        (filterStatus === "incomplete" && !isComplete);
+        statFilter === "all" ||
+        (statFilter === "complete" && isComplete) ||
+        (statFilter === "incomplete" && !isComplete);
 
-      // Item filter: show only rows missing ANY of the selected items
       const matchesItems =
         selectedItemFilters.size === 0 ||
         r.templateStatus.some(
@@ -145,7 +156,6 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
       return matchesSearch && matchesStatus && matchesItems;
     });
 
-    // Sort
     result = [...result].sort((a, b) => {
       let cmp = 0;
       const pctA = a.totalRequired > 0 ? a.inBoxTotal / a.totalRequired : 0;
@@ -172,11 +182,31 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
     });
 
     return result;
-  }, [rows, searchQuery, filterStatus, selectedItemFilters, sortField, sortDir]);
+  }, [rows, searchQuery, statFilter, selectedItemFilters, sortField, sortDir]);
+
+  const filteredNoBoxUsers = useMemo(() => {
+    if (statFilter !== "nobox") return [];
+    if (!searchQuery) return usersWithoutBox;
+    const q = searchQuery.toLowerCase();
+    return usersWithoutBox.filter(
+      (u) =>
+        u.name.toLowerCase().includes(q) ||
+        (u.personalNumber && u.personalNumber.includes(q)) ||
+        (u.department && u.department.toLowerCase().includes(q))
+    );
+  }, [statFilter, usersWithoutBox, searchQuery]);
+
+  const handleCreateEmptyBox = async (userId: string) => {
+    setCreatingBoxForUserId(userId);
+    const res = await createEmptyBoxAction(userId);
+    setCreatingBoxForUserId(null);
+    if (res.success) {
+      router.refresh();
+    }
+  };
 
   const totalBoxes = rows.length;
   const completeBoxes = rows.filter((r) => r.inBoxTotal >= r.totalRequired).length;
-  const usersWithoutBox = totalActiveUsers - totalBoxes;
 
   // Count how many boxes are missing each item (for the filter chips)
   const missingCountByItem = useMemo(() => {
@@ -213,33 +243,57 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Stats Bar */}
+      {/* Stats Bar — clickable filters */}
       <div className="flex flex-wrap gap-3">
-        <div className="flex-1 min-w-[140px] rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+        <button
+          onClick={() => setStatFilter("all")}
+          className={`flex-1 min-w-[140px] rounded-xl border p-4 text-right transition-all cursor-pointer ${
+            statFilter === "all"
+              ? "border-zinc-500 bg-zinc-800 ring-2 ring-zinc-500/30"
+              : "border-zinc-800 bg-zinc-950 hover:border-zinc-700"
+          }`}
+        >
           <div className="text-2xl font-bold text-zinc-50">{totalBoxes}</div>
           <div className="text-xs text-zinc-500 mt-1">סה״כ קרטונים</div>
-        </div>
-        <div className="flex-1 min-w-[140px] rounded-xl border border-emerald-900/40 bg-emerald-950/10 p-4">
+        </button>
+        <button
+          onClick={() => setStatFilter("complete")}
+          className={`flex-1 min-w-[140px] rounded-xl border p-4 text-right transition-all cursor-pointer ${
+            statFilter === "complete"
+              ? "border-emerald-500 bg-emerald-950/30 ring-2 ring-emerald-500/30"
+              : "border-emerald-900/40 bg-emerald-950/10 hover:border-emerald-700/60"
+          }`}
+        >
           <div className="text-2xl font-bold text-emerald-400">{completeBoxes}</div>
           <div className="text-xs text-zinc-500 mt-1">מלאים</div>
-        </div>
-        <div className="flex-1 min-w-[140px] rounded-xl border border-amber-900/40 bg-amber-950/10 p-4">
+        </button>
+        <button
+          onClick={() => setStatFilter("incomplete")}
+          className={`flex-1 min-w-[140px] rounded-xl border p-4 text-right transition-all cursor-pointer ${
+            statFilter === "incomplete"
+              ? "border-amber-500 bg-amber-950/30 ring-2 ring-amber-500/30"
+              : "border-amber-900/40 bg-amber-950/10 hover:border-amber-700/60"
+          }`}
+        >
           <div className="text-2xl font-bold text-amber-400">{totalBoxes - completeBoxes}</div>
           <div className="text-xs text-zinc-500 mt-1">חסרים</div>
-        </div>
-        <div className="flex-1 min-w-[140px] rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-          <div className="text-2xl font-bold text-zinc-50">{totalActiveUsers}</div>
-          <div className="text-xs text-zinc-500 mt-1">משתמשים פעילים</div>
-        </div>
-        {usersWithoutBox > 0 && (
-          <div className="flex-1 min-w-[140px] rounded-xl border border-red-900/40 bg-red-950/10 p-4">
-            <div className="text-2xl font-bold text-red-400">{usersWithoutBox}</div>
+        </button>
+        {usersWithoutBox.length > 0 && (
+          <button
+            onClick={() => setStatFilter("nobox")}
+            className={`flex-1 min-w-[140px] rounded-xl border p-4 text-right transition-all cursor-pointer ${
+              statFilter === "nobox"
+                ? "border-red-500 bg-red-950/30 ring-2 ring-red-500/30"
+                : "border-red-900/40 bg-red-950/10 hover:border-red-700/60"
+            }`}
+          >
+            <div className="text-2xl font-bold text-red-400">{usersWithoutBox.length}</div>
             <div className="text-xs text-zinc-500 mt-1">ללא קרטון</div>
-          </div>
+          </button>
         )}
       </div>
 
-      {/* Search + Status filter row */}
+      {/* Search + Item filter toggle */}
       <div className="flex flex-wrap gap-3">
         <input
           type="text"
@@ -248,44 +302,26 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
           placeholder="חיפוש לפי שם, מ״א או מחלקה..."
           className="h-12 flex-1 min-w-[200px] rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-sm text-zinc-50 placeholder:text-zinc-600 focus:ring-2 focus:ring-zinc-500 outline-none transition-all"
         />
-        <div className="flex gap-2">
-          {(["all", "complete", "incomplete"] as const).map((status) => (
-            <button
-              key={status}
-              onClick={() => setFilterStatus(status)}
-              className={`h-12 px-5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                filterStatus === status
-                  ? status === "all"
-                    ? "bg-zinc-50 text-zinc-950"
-                    : status === "complete"
-                      ? "bg-emerald-600 text-white"
-                      : "bg-amber-600 text-white"
-                  : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
-              }`}
-            >
-              {status === "all" ? "הכל" : status === "complete" ? "מלאים" : "חסרים"}
-            </button>
-          ))}
-        </div>
-        {/* Toggle item filter panel */}
-        <button
-          onClick={() => setShowItemFilter((v) => !v)}
-          className={`h-12 px-5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
-            showItemFilter || selectedItemFilters.size > 0
-              ? "bg-violet-600 text-white"
-              : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
-          }`}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-          </svg>
-          סינון לפי פריט
-          {selectedItemFilters.size > 0 && (
-            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/20 text-white text-[10px] font-black">
-              {selectedItemFilters.size}
-            </span>
-          )}
-        </button>
+        {statFilter !== "nobox" && (
+          <button
+            onClick={() => setShowItemFilter((v) => !v)}
+            className={`h-12 px-5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              showItemFilter || selectedItemFilters.size > 0
+                ? "bg-violet-600 text-white"
+                : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
+            }`}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+            </svg>
+            סינון לפי פריט
+            {selectedItemFilters.size > 0 && (
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/20 text-white text-[10px] font-black">
+                {selectedItemFilters.size}
+              </span>
+            )}
+          </button>
+        )}
       </div>
 
       {/* Item filter panel */}
@@ -345,12 +381,54 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
         </div>
       )}
 
-      {/* Table */}
-      {filteredAndSorted.length === 0 ? (
+      {/* "No box" users table */}
+      {statFilter === "nobox" && (
+        <>
+          {filteredNoBoxUsers.length === 0 ? (
+            <div className="py-10 text-center text-sm text-zinc-500 bg-zinc-950/50 rounded-2xl border border-zinc-800 border-dashed">
+              {usersWithoutBox.length === 0 ? "כל המשתמשים הפעילים מחזיקים קרטון" : "לא נמצאו משתמשים תואמים"}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-zinc-800 overflow-hidden">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-zinc-950 text-xs font-bold text-zinc-500 uppercase tracking-wider border-b border-zinc-800">
+                    <th className="px-4 py-3 text-right">חייל</th>
+                    <th className="px-4 py-3 text-right">מ״א</th>
+                    <th className="px-4 py-3 text-right">מחלקה</th>
+                    <th className="px-4 py-3 text-center">פעולות</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredNoBoxUsers.map((u) => (
+                    <tr key={u.id} className="border-b border-zinc-800 hover:bg-zinc-900/50 transition-colors">
+                      <td className="px-4 py-4 font-bold text-sm text-zinc-50">{u.name}</td>
+                      <td className="px-4 py-4 text-sm text-zinc-400">{u.personalNumber ?? "-"}</td>
+                      <td className="px-4 py-4 text-sm text-zinc-400">{u.department ?? "-"}</td>
+                      <td className="px-4 py-4 text-center">
+                        <button
+                          onClick={() => handleCreateEmptyBox(u.id)}
+                          disabled={creatingBoxForUserId === u.id}
+                          className="px-4 py-1.5 rounded-lg text-xs font-bold bg-emerald-900/20 text-emerald-400 border border-emerald-900/40 hover:bg-emerald-900/40 transition-all cursor-pointer disabled:opacity-50"
+                        >
+                          {creatingBoxForUserId === u.id ? "יוצר..." : "צור קרטון"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Table — boxes with items */}
+      {statFilter !== "nobox" && filteredAndSorted.length === 0 ? (
         <div className="py-10 text-center text-sm text-zinc-500 bg-zinc-950/50 rounded-2xl border border-zinc-800 border-dashed">
           {rows.length === 0 ? "אין קרטונים במערכת" : "לא נמצאו קרטונים תואמים"}
         </div>
-      ) : (
+      ) : statFilter !== "nobox" && (
         <div className="rounded-xl border border-zinc-800 overflow-hidden">
           <table className="w-full">
             <thead>

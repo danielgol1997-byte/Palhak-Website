@@ -104,7 +104,12 @@ export default async function BoxesPage() {
 
   const allActiveUsers = await prisma.user.findMany({
     where: { active: true },
-    select: { id: true, name: true, personalNumber: true },
+    select: {
+      id: true,
+      name: true,
+      personalNumber: true,
+      userDepartments: { select: { department: { select: { name: true } } }, take: 1 },
+    },
     orderBy: { name: "asc" },
   });
 
@@ -223,6 +228,16 @@ export default async function BoxesPage() {
     })),
   }));
 
+  const boxUserIdSet = new Set(boxes.map((b) => b.userId));
+  const usersWithoutBox = allActiveUsers
+    .filter((u) => !boxUserIdSet.has(u.id))
+    .map((u) => ({
+      id: u.id,
+      name: u.name,
+      personalNumber: u.personalNumber,
+      department: u.userDepartments[0]?.department.name ?? null,
+    }));
+
   return (
     <div className="flex flex-col gap-6">
       <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-sm">
@@ -232,7 +247,14 @@ export default async function BoxesPage() {
         </p>
       </section>
       <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-sm">
-        <BoxList rows={boxRows} allUsers={allActiveUsers} templateItemsForAdd={templateItemsForAdd} yamahStockByItemId={storageMap} totalActiveUsers={allActiveUsers.length} />
+        <BoxList
+          rows={boxRows}
+          allUsers={allActiveUsers}
+          templateItemsForAdd={templateItemsForAdd}
+          yamahStockByItemId={storageMap}
+          totalActiveUsers={allActiveUsers.length}
+          usersWithoutBox={usersWithoutBox}
+        />
       </section>
     </div>
   );
