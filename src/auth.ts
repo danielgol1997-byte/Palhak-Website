@@ -17,21 +17,44 @@ function defaultUserName(email?: string | null): string {
 
 const adapter = PrismaAdapter(prisma) as Adapter;
 
-// Ensure `User.name` is always non-null (required by our schema).
+// When a Google user signs in for the first time, NextAuth calls createUser.
+// If an admin pre-created a User row with the same email we link to it
+// instead of creating a duplicate.
 adapter.createUser = async (data: Omit<AdapterUser, "id">) => {
-  const email = data.email?.trim().toLowerCase();
-  // Remove 'image' field as our User model doesn't include it
+  const email = data.email?.trim().toLowerCase() ?? data.email;
   const { image, ...userData } = data;
+
+  // Check if admin already created a user with this email
+  const existing = await prisma.user.findUnique({
+    where: { email },
+  });
+
+  if (existing) {
+    // Update name from Google profile if admin left it as placeholder
+    if (data.name && data.name !== existing.name) {
+      await prisma.user.update({
+        where: { id: existing.id },
+        data: { emailVerified: data.emailVerified ?? new Date() },
+      });
+    } else {
+      await prisma.user.update({
+        where: { id: existing.id },
+        data: { emailVerified: data.emailVerified ?? new Date() },
+      });
+    }
+    // Return the existing user — NextAuth will then link the Account to it
+    return existing as AdapterUser;
+  }
+
+  // No pre-existing user: create a brand-new one
   return prisma.user.create({
     data: {
       ...userData,
-      email: email ?? data.email,
+      email,
       name: data.name ?? defaultUserName(email),
-      // Open signup: anyone can create an account via Google.
       active: true,
-      // onboardedAt is intentionally left null for new users
     },
-  });
+  }) as Promise<AdapterUser>;
 };
 
 export const authOptions: NextAuthOptions = {
@@ -50,29 +73,22 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async signIn({ user, account }) {
-      // For new users being created, allow them through (adapter.createUser sets active: true)
       if (account?.provider === "google") {
-        // Check if user exists and is active
         const dbUser = await prisma.user.findUnique({
           where: { id: user.id },
           select: { active: true },
         });
-        
-        // If user doesn't exist yet, they're being created now - allow it
-        // If user exists, check if they're active
+        // New users (being created now): allow through
+        // Existing users: only if active
         return dbUser ? dbUser.active : true;
       }
       return true;
     },
     async jwt({ token, user }) {
-      // OAuth sign-in: attach user id to the token
       if (user?.id) {
         token.sub = user.id;
       }
 
-      // Refresh role / active / onboarding from DB on every request so admin role
-      // changes (e.g. יובל על חלל) apply without requiring sign-out. JWT alone
-      // would otherwise keep stale claims until re-login.
       if (token.sub) {
         try {
           const dbUser = await prisma.user.findUnique({

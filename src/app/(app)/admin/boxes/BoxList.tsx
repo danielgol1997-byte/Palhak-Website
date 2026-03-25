@@ -54,6 +54,7 @@ interface BoxListProps {
   allUsers: TransferUser[];
   templateItemsForAdd: TemplateItemForAdd[];
   yamahStockByItemId: Record<string, number>;
+  totalActiveUsers: number;
 }
 
 type SortField = "userName" | "department" | "pct" | "inBoxTotal" | "createdAt";
@@ -73,7 +74,7 @@ function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: 
   );
 }
 
-export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemId }: BoxListProps) {
+export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemId, totalActiveUsers }: BoxListProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | "complete" | "incomplete">("all");
   const [expandedBoxId, setExpandedBoxId] = useState<string | null>(null);
@@ -175,6 +176,7 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
 
   const totalBoxes = rows.length;
   const completeBoxes = rows.filter((r) => r.inBoxTotal >= r.totalRequired).length;
+  const usersWithoutBox = totalActiveUsers - totalBoxes;
 
   // Count how many boxes are missing each item (for the filter chips)
   const missingCountByItem = useMemo(() => {
@@ -226,9 +228,15 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
           <div className="text-xs text-zinc-500 mt-1">חסרים</div>
         </div>
         <div className="flex-1 min-w-[140px] rounded-xl border border-zinc-800 bg-zinc-950 p-4">
-          <div className="text-2xl font-bold text-zinc-50">{filteredAndSorted.length}</div>
-          <div className="text-xs text-zinc-500 mt-1">מוצגים</div>
+          <div className="text-2xl font-bold text-zinc-50">{totalActiveUsers}</div>
+          <div className="text-xs text-zinc-500 mt-1">משתמשים פעילים</div>
         </div>
+        {usersWithoutBox > 0 && (
+          <div className="flex-1 min-w-[140px] rounded-xl border border-red-900/40 bg-red-950/10 p-4">
+            <div className="text-2xl font-bold text-red-400">{usersWithoutBox}</div>
+            <div className="text-xs text-zinc-500 mt-1">ללא קרטון</div>
+          </div>
+        )}
       </div>
 
       {/* Search + Status filter row */}

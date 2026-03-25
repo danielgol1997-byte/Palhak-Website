@@ -232,7 +232,7 @@ export default async function BoxesPage() {
         </p>
       </section>
       <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-sm">
-        <BoxList rows={boxRows} allUsers={allActiveUsers} templateItemsForAdd={templateItemsForAdd} yamahStockByItemId={storageMap} />
+        <BoxList rows={boxRows} allUsers={allActiveUsers} templateItemsForAdd={templateItemsForAdd} yamahStockByItemId={storageMap} totalActiveUsers={allActiveUsers.length} />
       </section>
     </div>
   );

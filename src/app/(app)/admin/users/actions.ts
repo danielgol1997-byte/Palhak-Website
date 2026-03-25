@@ -216,3 +216,86 @@ export async function adminUpdateUserDepartmentsPositionsAction(formData: FormDa
 }
 
 
+
+const CreateUserSchema = z.object({
+  name: z.string().trim().min(1, "שם חובה"),
+  email: z.string().trim().email("כתובת אימייל לא תקינה").transform((v) => v.toLowerCase()),
+  personalNumber: z.string().trim().optional().transform((v) => v || undefined),
+  phoneNumber: z.string().trim().optional().transform((v) => v || undefined),
+  firstName: z.string().trim().optional().transform((v) => v || undefined),
+  lastName: z.string().trim().optional().transform((v) => v || undefined),
+});
+
+export async function adminCreateUserAction(
+  formData: FormData,
+): Promise<{ success: boolean; error?: string; userId?: string }> {
+  const session = await requireRole(Role.ADMIN);
+
+  const parsed = CreateUserSchema.safeParse({
+    name: formData.get("name"),
+    email: formData.get("email"),
+    personalNumber: formData.get("personalNumber") || undefined,
+    phoneNumber: formData.get("phoneNumber") || undefined,
+    firstName: formData.get("firstName") || undefined,
+    lastName: formData.get("lastName") || undefined,
+  });
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    return { success: false, error: first?.message || "נתונים לא תקינים." };
+  }
+
+  try {
+    const userId = await prisma.$transaction(async (tx) => {
+      // Duplicate email check
+      const existing = await tx.user.findUnique({
+        where: { email: parsed.data.email },
+        select: { id: true },
+      });
+      if (existing) throw new Error("כבר קיים משתמש עם כתובת אימייל זו.");
+
+      // Duplicate personalNumber check
+      if (parsed.data.personalNumber) {
+        const existingPN = await tx.user.findUnique({
+          where: { personalNumber: parsed.data.personalNumber },
+          select: { id: true },
+        });
+        if (existingPN) throw new Error("כבר קיים משתמש עם מספר אישי זה.");
+      }
+
+      const user = await tx.user.create({
+        data: {
+          name: parsed.data.name,
+          email: parsed.data.email,
+          personalNumber: parsed.data.personalNumber ?? null,
+          phoneNumber: parsed.data.phoneNumber ?? null,
+          firstName: parsed.data.firstName ?? null,
+          lastName: parsed.data.lastName ?? null,
+          active: true,
+          // onboardedAt is intentionally null — user will complete onboarding on first login
+        },
+      });
+
+      await writeAuditLog(tx, {
+        actorId: session.user.id,
+        entity: AuditEntity.USER,
+        entityId: user.id,
+        action: "ADMIN_CREATE_USER",
+        afterJson: {
+          name: user.name,
+          email: user.email,
+          personalNumber: user.personalNumber,
+        },
+      });
+
+      return user.id;
+    });
+
+    revalidatePath("/admin/users");
+    return { success: true, userId };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "אירעה שגיאה בלתי צפויה.",
+    };
+  }
+}
