@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { ModalPortal } from "@/components/ui/ModalPortal";
 import {
-  addToBoxDirectAction,
+  addToBoxDirectBulkAction,
   removeFromBoxAction,
   restoreFromBoxAction,
   transferBoxItemAction,
@@ -70,14 +70,47 @@ export function BoxEditModal({ box, allUsers, addableItems, onClose }: BoxEditMo
   const [transferSearch, setTransferSearch] = useState("");
   const [transferToUserId, setTransferToUserId] = useState<string | null>(null);
 
-  // Add-to-box state
+  // Add-to-box state (multi-select)
   const [showAddPanel, setShowAddPanel] = useState(false);
-  const [addItemId, setAddItemId] = useState<string | null>(null);
-  const [addQty, setAddQty] = useState(1);
-  const [addSerial, setAddSerial] = useState("");
+  /** equipmentItemId -> draft qty + optional serial */
+  const [addSelection, setAddSelection] = useState<Record<string, { qty: number; serial: string }>>({});
   const [addNotes, setAddNotes] = useState("");
 
-  const selectedAddItem = addItemId ? addableItems.find((i) => i.id === addItemId) ?? null : null;
+  const selectedCount = Object.keys(addSelection).length;
+
+  const toggleAddItem = (item: AddableItem) => {
+    setAddSelection((prev) => {
+      const next = { ...prev };
+      if (next[item.id]) delete next[item.id];
+      else next[item.id] = { qty: 1, serial: "" };
+      return next;
+    });
+  };
+
+  const setAddLineQty = (itemId: string, qty: number, cap: number, stock: number) => {
+    const max = Math.min(Math.max(1, cap), stock);
+    setAddSelection((prev) => {
+      if (!prev[itemId]) return prev;
+      return { ...prev, [itemId]: { ...prev[itemId], qty: Math.min(Math.max(1, qty), max) } };
+    });
+  };
+
+  const setAddLineSerial = (itemId: string, serial: string) => {
+    setAddSelection((prev) => {
+      if (!prev[itemId]) return prev;
+      return { ...prev, [itemId]: { ...prev[itemId], serial, qty: serial.trim() ? 1 : prev[itemId].qty } };
+    });
+  };
+
+  const selectAllAddable = () => {
+    const next: Record<string, { qty: number; serial: string }> = {};
+    for (const item of addableItems) {
+      next[item.id] = { qty: 1, serial: "" };
+    }
+    setAddSelection(next);
+  };
+
+  const clearAddSelection = () => setAddSelection({});
 
   // Exclude current box owner from transfer targets
   const transferTargets = useMemo(
@@ -155,24 +188,25 @@ export function BoxEditModal({ box, allUsers, addableItems, onClose }: BoxEditMo
   }, [pendingAction, box.userId, transferToUserId, router, onClose]);
 
   const handleAddDirect = useCallback(async () => {
-    if (!addItemId || !addNotes.trim()) return;
+    if (selectedCount === 0 || !addNotes.trim()) return;
+    const lines = Object.entries(addSelection).map(([equipmentItemId, draft]) => ({
+      equipmentItemId,
+      quantity: draft.serial.trim() ? 1 : draft.qty,
+      ...(draft.serial.trim() ? { serialNumber: draft.serial.trim() } : {}),
+    }));
     setIsSubmitting(true);
     setError(null);
     try {
       const fd = new FormData();
       fd.append("userId", box.userId);
-      fd.append("equipmentItemId", addItemId);
-      fd.append("quantity", addQty.toString());
-      if (addSerial.trim()) fd.append("serialNumber", addSerial.trim());
-      fd.append("adminNotes", addNotes);
-      const result = await addToBoxDirectAction(fd);
+      fd.append("adminNotes", addNotes.trim());
+      fd.append("lines", JSON.stringify(lines));
+      const result = await addToBoxDirectBulkAction(fd);
       if (!result.success) {
         setError(result.error || "אירעה שגיאה");
       } else {
         setShowAddPanel(false);
-        setAddItemId(null);
-        setAddQty(1);
-        setAddSerial("");
+        setAddSelection({});
         setAddNotes("");
         router.refresh();
         onClose();
@@ -182,7 +216,7 @@ export function BoxEditModal({ box, allUsers, addableItems, onClose }: BoxEditMo
     } finally {
       setIsSubmitting(false);
     }
-  }, [addItemId, addQty, addSerial, addNotes, box.userId, router, onClose]);
+  }, [selectedCount, addSelection, addNotes, box.userId, router, onClose]);
 
   // Close on Escape
   useEffect(() => {
@@ -270,48 +304,94 @@ export function BoxEditModal({ box, allUsers, addableItems, onClose }: BoxEditMo
         {/* Add to box panel */}
         {showAddPanel && (
           <div className="flex-shrink-0 px-6 pt-5 pb-4 border-b border-zinc-800 bg-emerald-950/10">
-            <h3 className="text-sm font-bold text-emerald-400 mb-3">הוספה ישירה לקרטון מימ״ח</h3>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <h3 className="text-sm font-bold text-emerald-400">הוספה ישירה לקרטון מימ״ח</h3>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={selectAllAddable}
+                  disabled={isSubmitting || addableItems.length === 0}
+                  className="text-[11px] font-bold px-2 py-1 rounded-lg border border-emerald-800 text-emerald-400 hover:bg-emerald-900/30 cursor-pointer disabled:opacity-40"
+                >
+                  בחר הכל
+                </button>
+                <button
+                  type="button"
+                  onClick={clearAddSelection}
+                  disabled={isSubmitting || selectedCount === 0}
+                  className="text-[11px] font-bold px-2 py-1 rounded-lg border border-zinc-700 text-zinc-400 hover:bg-zinc-800 cursor-pointer disabled:opacity-40"
+                >
+                  נקה בחירה
+                </button>
+              </div>
+            </div>
+            <p className="text-[11px] text-zinc-500 mb-2">סמן כמה פריטים, הגדר כמות לכל שורה (ומ״ס אם צריך), ואז אשר הוספה אחת.</p>
             <div className="space-y-3">
-              {/* Item list */}
-              <div className="max-h-40 overflow-y-auto rounded-xl border border-zinc-800 divide-y divide-zinc-800">
-                {addableItems.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => { setAddItemId(item.id); setAddQty(1); setAddSerial(""); }}
-                    className={`w-full flex items-center justify-between px-4 py-2 text-right transition-colors cursor-pointer ${addItemId === item.id ? "bg-emerald-900/30 text-emerald-300" : "hover:bg-zinc-800 text-zinc-300"}`}
-                  >
-                    <div>
-                      <div className="text-sm font-bold">{item.name}</div>
-                      <div className="text-xs text-zinc-500">מלאי ימ״ח: {item.stock} | נותר בקרטון: {item.capacity}</div>
+              <div className="max-h-44 overflow-y-auto rounded-xl border border-zinc-800 divide-y divide-zinc-800">
+                {addableItems.map((item) => {
+                  const checked = Boolean(addSelection[item.id]);
+                  return (
+                    <div
+                      key={item.id}
+                      className={`flex items-start gap-3 px-4 py-2.5 text-right ${checked ? "bg-emerald-900/20" : "hover:bg-zinc-800/50"}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleAddItem(item)}
+                        disabled={isSubmitting}
+                        className="mt-1 h-4 w-4 rounded border-zinc-600 accent-emerald-500 cursor-pointer"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => toggleAddItem(item)}
+                        disabled={isSubmitting}
+                        className="flex-1 text-right cursor-pointer disabled:cursor-not-allowed"
+                      >
+                        <div className="text-sm font-bold text-zinc-100">{item.name}</div>
+                        <div className="text-xs text-zinc-500">מלאי ימ״ח: {item.stock} | נותר בקרטון: {item.capacity}</div>
+                      </button>
                     </div>
-                    {addItemId === item.id && (
-                      <svg className="text-emerald-400 flex-shrink-0" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
-                    )}
-                  </button>
-                ))}
+                  );
+                })}
               </div>
 
-              {selectedAddItem && (
-                <div className="flex gap-2">
-                  <div className="flex-shrink-0">
-                    <label className="text-xs text-zinc-500 mb-1 block">כמות</label>
-                    <input
-                      type="number" min="1" max={Math.min(selectedAddItem.stock, selectedAddItem.capacity)}
-                      value={addQty}
-                      onChange={(e) => setAddQty(Math.min(Math.max(1, parseInt(e.target.value) || 1), selectedAddItem.stock, selectedAddItem.capacity))}
-                      className="h-9 w-20 rounded-lg border border-zinc-700 bg-zinc-950 px-3 text-sm font-bold text-zinc-50 focus:ring-1 focus:ring-zinc-500 outline-none"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <label className="text-xs text-zinc-500 mb-1 block">מ״ס (אופציונלי)</label>
-                    <input
-                      type="text" value={addSerial}
-                      onChange={(e) => { setAddSerial(e.target.value); if (e.target.value.trim()) setAddQty(1); }}
-                      placeholder="מספר סידורי..."
-                      className="h-9 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-50 placeholder:text-zinc-600 outline-none focus:ring-1 focus:ring-zinc-500 font-mono"
-                    />
-                  </div>
+              {selectedCount > 0 && (
+                <div className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-950/50 p-3 max-h-48 overflow-y-auto">
+                  <div className="text-xs font-bold text-zinc-400">פריטים שנבחרו ({selectedCount})</div>
+                  {addableItems.filter((i) => addSelection[i.id]).map((item) => {
+                    const draft = addSelection[item.id];
+                    const maxQ = Math.min(item.stock, item.capacity);
+                    return (
+                      <div key={item.id} className="flex flex-wrap gap-2 items-end border-b border-zinc-800/80 pb-2 last:border-0 last:pb-0">
+                        <div className="flex-1 min-w-[120px] text-xs font-bold text-zinc-200">{item.name}</div>
+                        <div className="flex-shrink-0">
+                          <label className="text-[10px] text-zinc-500 block mb-0.5">כמות</label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={maxQ}
+                            disabled={Boolean(draft.serial.trim())}
+                            value={draft.serial.trim() ? 1 : draft.qty}
+                            onChange={(e) =>
+                              setAddLineQty(item.id, parseInt(e.target.value, 10) || 1, item.capacity, item.stock)
+                            }
+                            className="h-8 w-16 rounded-lg border border-zinc-700 bg-zinc-950 px-2 text-sm font-bold text-zinc-50 outline-none disabled:opacity-50"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-[140px]">
+                          <label className="text-[10px] text-zinc-500 block mb-0.5">מ״ס</label>
+                          <input
+                            type="text"
+                            value={draft.serial}
+                            onChange={(e) => setAddLineSerial(item.id, e.target.value)}
+                            placeholder="אופציונלי"
+                            className="h-8 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-50 placeholder:text-zinc-600 font-mono outline-none"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
@@ -329,10 +409,16 @@ export function BoxEditModal({ box, allUsers, addableItems, onClose }: BoxEditMo
 
               <button
                 onClick={handleAddDirect}
-                disabled={isSubmitting || !addItemId || !addNotes.trim()}
+                disabled={isSubmitting || selectedCount === 0 || !addNotes.trim()}
                 className="w-full h-10 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 text-sm font-bold text-white hover:bg-emerald-600 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isSubmitting ? <LoadingSpinner size="sm" /> : "הוסף לקרטון"}
+                {isSubmitting ? (
+                  <LoadingSpinner size="sm" />
+                ) : selectedCount === 1 ? (
+                  "הוסף פריט לקרטון"
+                ) : (
+                  `הוסף ${selectedCount} פריטים לקרטון`
+                )}
               </button>
             </div>
           </div>

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Division } from "@prisma/client";
 import { divisionLabel } from "@/lib/he";
 import {
-  addToBoxDirectAction,
+  addToBoxDirectBulkAction,
   adminAssignEquipmentAction,
   adminTransferAssignmentAction,
   adminUnassignEquipmentAction,
@@ -148,9 +148,7 @@ export function EquipmentTab({
   const [removeFromBoxModal, setRemoveFromBoxModal] = useState<RemoveFromBoxModal | null>(null);
   const [transferBoxModal, setTransferBoxModal] = useState<TransferBoxModal | null>(null);
   const [addToBoxModal, setAddToBoxModal] = useState(false);
-  const [addToBoxItemId, setAddToBoxItemId] = useState<string | null>(null);
-  const [addToBoxQty, setAddToBoxQty] = useState(1);
-  const [addToBoxSerial, setAddToBoxSerial] = useState("");
+  const [addToBoxSelection, setAddToBoxSelection] = useState<Record<string, { qty: number; serial: string }>>({});
   const [addToBoxNotes, setAddToBoxNotes] = useState("");
 
   // Assign modal state
@@ -229,7 +227,41 @@ export function EquipmentTab({
     });
   }, [boxTemplate, userBox, yamahStockByItemId]);
 
-  const selectedAddItem = addToBoxItemId ? addableBoxItems.find((i) => i.id === addToBoxItemId) ?? null : null;
+  const addToBoxSelectedCount = Object.keys(addToBoxSelection).length;
+
+  const toggleAddToBoxItem = (item: { id: string; name: string; stock: number; capacity: number }) => {
+    setAddToBoxSelection((prev) => {
+      const next = { ...prev };
+      if (next[item.id]) delete next[item.id];
+      else next[item.id] = { qty: 1, serial: "" };
+      return next;
+    });
+  };
+
+  const setAddToBoxLineQty = (itemId: string, qty: number, cap: number, stock: number) => {
+    const max = Math.min(Math.max(1, cap), stock);
+    setAddToBoxSelection((prev) => {
+      if (!prev[itemId]) return prev;
+      return { ...prev, [itemId]: { ...prev[itemId], qty: Math.min(Math.max(1, qty), max) } };
+    });
+  };
+
+  const setAddToBoxLineSerial = (itemId: string, serial: string) => {
+    setAddToBoxSelection((prev) => {
+      if (!prev[itemId]) return prev;
+      return { ...prev, [itemId]: { ...prev[itemId], serial, qty: serial.trim() ? 1 : prev[itemId].qty } };
+    });
+  };
+
+  const selectAllAddToBoxItems = () => {
+    const next: Record<string, { qty: number; serial: string }> = {};
+    for (const item of addableBoxItems) {
+      next[item.id] = { qty: 1, serial: "" };
+    }
+    setAddToBoxSelection(next);
+  };
+
+  const clearAddToBoxSelection = () => setAddToBoxSelection({});
 
   // ---------- Box template helpers ----------
   const findTemplateItemForEquipment = (equipmentItemId: string) => {
@@ -415,23 +447,24 @@ export function EquipmentTab({
   };
 
   const handleAddToBoxDirect = async () => {
-    if (!addToBoxItemId || !addToBoxNotes.trim()) return;
+    if (addToBoxSelectedCount === 0 || !addToBoxNotes.trim()) return;
+    const lines = Object.entries(addToBoxSelection).map(([equipmentItemId, draft]) => ({
+      equipmentItemId,
+      quantity: draft.serial.trim() ? 1 : draft.qty,
+      ...(draft.serial.trim() ? { serialNumber: draft.serial.trim() } : {}),
+    }));
     setIsSubmitting(true);
     setError(null);
     try {
       const formData = new FormData();
       formData.append("userId", user.id);
-      formData.append("equipmentItemId", addToBoxItemId);
-      formData.append("quantity", addToBoxQty.toString());
-      if (addToBoxSerial.trim()) formData.append("serialNumber", addToBoxSerial.trim());
-      formData.append("adminNotes", addToBoxNotes);
-      const result = await addToBoxDirectAction(formData);
+      formData.append("adminNotes", addToBoxNotes.trim());
+      formData.append("lines", JSON.stringify(lines));
+      const result = await addToBoxDirectBulkAction(formData);
       if (!result.success) setError(result.error || "אירעה שגיאה");
       else {
         setAddToBoxModal(false);
-        setAddToBoxItemId(null);
-        setAddToBoxQty(1);
-        setAddToBoxSerial("");
+        setAddToBoxSelection({});
         setAddToBoxNotes("");
         router.refresh();
       }
@@ -767,7 +800,7 @@ export function EquipmentTab({
               )}
             </h3>
             <button
-              onClick={() => { setAddToBoxModal(true); setAddToBoxItemId(null); setAddToBoxQty(1); setAddToBoxSerial(""); setAddToBoxNotes(""); setError(null); }}
+              onClick={() => { setAddToBoxModal(true); setAddToBoxSelection({}); setAddToBoxNotes(""); setError(null); }}
               className="mr-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-900/20 text-emerald-400 border border-emerald-900/40 hover:bg-emerald-900/40 transition-all cursor-pointer"
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -1593,66 +1626,108 @@ export function EquipmentTab({
                 <CloseIcon />
               </button>
             </div>
-            <p className="text-sm text-zinc-400 mb-6">בחר פריט מתבנית הקרטון עם מלאי זמין בימ״ח. הפריט ינוכה מהמלאי ויוסף ישירות לקרטון.</p>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+              <p className="text-sm text-zinc-400 flex-1 min-w-[200px]">
+                סמנו כמה פריטים מתבנית הקרטון (מלאי ימ״ח). הכמויות והמ״ס לכל שורה, ואז אישור אחד.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={selectAllAddToBoxItems}
+                  disabled={isSubmitting || addableBoxItems.length === 0}
+                  className="text-xs font-bold px-3 py-1.5 rounded-xl border border-emerald-800 text-emerald-400 hover:bg-emerald-900/30 cursor-pointer disabled:opacity-40"
+                >
+                  בחר הכל
+                </button>
+                <button
+                  type="button"
+                  onClick={clearAddToBoxSelection}
+                  disabled={isSubmitting || addToBoxSelectedCount === 0}
+                  className="text-xs font-bold px-3 py-1.5 rounded-xl border border-zinc-700 text-zinc-400 hover:bg-zinc-800 cursor-pointer disabled:opacity-40"
+                >
+                  נקה בחירה
+                </button>
+              </div>
+            </div>
 
             <div className="space-y-5">
-              {/* Item selector */}
               <div>
-                <label className="text-sm font-bold text-zinc-400 mb-2 block">פריט <span className="text-red-500">*</span></label>
+                <label className="text-sm font-bold text-zinc-400 mb-2 block">פריטים זמינים</label>
                 {addableBoxItems.length === 0 ? (
                   <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-950 text-sm text-zinc-500 text-center">
                     אין פריטים זמינים להוספה (כל הפריטים מלאים או אין מלאי בימ״ח).
                   </div>
                 ) : (
                   <div className="max-h-56 overflow-y-auto rounded-xl border border-zinc-800 divide-y divide-zinc-800">
-                    {addableBoxItems.map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => { setAddToBoxItemId(item.id); setAddToBoxQty(1); setAddToBoxSerial(""); }}
-                        className={`w-full flex items-center justify-between px-4 py-3 text-right transition-colors cursor-pointer ${addToBoxItemId === item.id ? "bg-emerald-900/30 text-emerald-300" : "hover:bg-zinc-800 text-zinc-300"}`}
-                      >
-                        <div className="text-right">
-                          <div className="text-sm font-bold">{item.name}</div>
-                          <div className="text-xs text-zinc-500 mt-0.5">
-                            מלאי ימ״ח: {item.stock} | נותר בקרטון: {item.capacity}
-                          </div>
+                    {addableBoxItems.map((item) => {
+                      const checked = Boolean(addToBoxSelection[item.id]);
+                      return (
+                        <div
+                          key={item.id}
+                          className={`flex items-start gap-3 px-4 py-3 ${checked ? "bg-emerald-900/20" : "hover:bg-zinc-800/50"}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleAddToBoxItem(item)}
+                            disabled={isSubmitting}
+                            className="mt-1 h-4 w-4 rounded border-zinc-600 accent-emerald-500 cursor-pointer"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => toggleAddToBoxItem(item)}
+                            disabled={isSubmitting}
+                            className="flex-1 text-right cursor-pointer disabled:cursor-not-allowed"
+                          >
+                            <div className="text-sm font-bold text-zinc-100">{item.name}</div>
+                            <div className="text-xs text-zinc-500 mt-0.5">
+                              מלאי ימ״ח: {item.stock} | נותר בקרטון: {item.capacity}
+                            </div>
+                          </button>
                         </div>
-                        {addToBoxItemId === item.id && (
-                          <svg className="flex-shrink-0 text-emerald-400" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
-                        )}
-                      </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
 
-              {/* Quantity */}
-              {selectedAddItem && (
-                <>
-                  <div>
-                    <label className="text-sm font-bold text-zinc-400 mb-2 block">כמות</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max={Math.min(selectedAddItem.stock, selectedAddItem.capacity)}
-                      value={addToBoxQty}
-                      onChange={(e) => setAddToBoxQty(Math.min(Math.max(1, parseInt(e.target.value) || 1), selectedAddItem.stock, selectedAddItem.capacity))}
-                      className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-lg font-bold text-zinc-50 focus:ring-2 focus:ring-zinc-500 outline-none transition-all"
-                    />
-                    <p className="mt-1 text-xs text-zinc-500">מקסימום: {Math.min(selectedAddItem.stock, selectedAddItem.capacity)}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-bold text-zinc-400 mb-2 block">מספר סידורי (אופציונלי)</label>
-                    <input
-                      type="text"
-                      value={addToBoxSerial}
-                      onChange={(e) => { setAddToBoxSerial(e.target.value); if (e.target.value.trim()) setAddToBoxQty(1); }}
-                      placeholder="אם ישים (ינעל כמות=1)..."
-                      className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-sm text-zinc-50 placeholder:text-zinc-600 outline-none focus:ring-2 focus:ring-zinc-500 transition-all font-mono"
-                    />
-                  </div>
-                </>
+              {addToBoxSelectedCount > 0 && (
+                <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-950/50 p-4 max-h-56 overflow-y-auto">
+                  <div className="text-sm font-bold text-zinc-300">נבחרו {addToBoxSelectedCount} פריטים</div>
+                  {addableBoxItems.filter((i) => addToBoxSelection[i.id]).map((item) => {
+                    const draft = addToBoxSelection[item.id];
+                    const maxQ = Math.min(item.stock, item.capacity);
+                    return (
+                      <div key={item.id} className="flex flex-wrap gap-3 items-end border-b border-zinc-800/80 pb-3 last:border-0 last:pb-0">
+                        <div className="flex-1 min-w-[140px] text-sm font-bold text-zinc-200">{item.name}</div>
+                        <div>
+                          <label className="text-xs text-zinc-500 mb-1 block">כמות</label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={maxQ}
+                            disabled={Boolean(draft.serial.trim())}
+                            value={draft.serial.trim() ? 1 : draft.qty}
+                            onChange={(e) =>
+                              setAddToBoxLineQty(item.id, parseInt(e.target.value, 10) || 1, item.capacity, item.stock)
+                            }
+                            className="h-11 w-20 rounded-xl border border-zinc-800 bg-zinc-950 px-3 text-sm font-bold text-zinc-50 outline-none disabled:opacity-50"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-[160px]">
+                          <label className="text-xs text-zinc-500 mb-1 block">מ״ס (אופציונלי)</label>
+                          <input
+                            type="text"
+                            value={draft.serial}
+                            onChange={(e) => setAddToBoxLineSerial(item.id, e.target.value)}
+                            placeholder="מספר סידורי..."
+                            className="h-11 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-50 placeholder:text-zinc-600 outline-none font-mono"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
 
               {/* Admin notes */}
@@ -1672,10 +1747,16 @@ export function EquipmentTab({
               <div className="flex gap-3">
                 <button
                   onClick={handleAddToBoxDirect}
-                  disabled={isSubmitting || !addToBoxItemId || !addToBoxNotes.trim()}
+                  disabled={isSubmitting || addToBoxSelectedCount === 0 || !addToBoxNotes.trim()}
                   className="flex-1 h-14 inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-base font-bold text-white hover:bg-emerald-500 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isSubmitting ? <LoadingSpinner size="sm" /> : "הוסף לקרטון"}
+                  {isSubmitting ? (
+                    <LoadingSpinner size="sm" />
+                  ) : addToBoxSelectedCount === 1 ? (
+                    "הוסף פריט לקרטון"
+                  ) : (
+                    `הוסף ${addToBoxSelectedCount} פריטים לקרטון`
+                  )}
                 </button>
                 <button onClick={() => setAddToBoxModal(false)} disabled={isSubmitting} className="flex-1 h-14 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-base font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer disabled:opacity-50">ביטול</button>
               </div>

@@ -3,7 +3,16 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
-import { AssignmentStatus, AuditEntity, Priority, RequestItemStatus, RequestStatus, RequestType, Role } from "@prisma/client";
+import {
+  AssignmentStatus,
+  AuditEntity,
+  Prisma,
+  Priority,
+  RequestItemStatus,
+  RequestStatus,
+  RequestType,
+  Role,
+} from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
 
@@ -875,14 +884,131 @@ export async function transferBoxItemAction(formData: FormData): Promise<{ succe
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Add an item directly to a user's box, deducting from ימ״ח storage
+// Add item(s) directly to a user's box, deducting from ימ״ח storage
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** One line of stock → box (no request/audit). Used by single and bulk actions inside a transaction. */
+async function applyAddToBoxDirectLine(
+  tx: Prisma.TransactionClient,
+  actorId: string,
+  userId: string,
+  equipmentItemId: string,
+  quantity: number,
+  serialNumber: string | undefined,
+): Promise<{ boxId: string; userName: string; equipmentItemName: string }> {
+  const user = await tx.user.findUnique({ where: { id: userId }, select: { name: true, active: true } });
+  if (!user?.active) throw new Error("משתמש לא נמצא או לא פעיל.");
+
+  const equipmentItem = await tx.equipmentItem.findUnique({
+    where: { id: equipmentItemId },
+    select: { id: true, name: true },
+  });
+  if (!equipmentItem) throw new Error("פריט ציוד לא נמצא.");
+
+  const tpl = await tx.boxTemplate.findFirst({ include: { items: { include: { alternatives: true } } } });
+  if (!tpl) throw new Error("תבנית קרטון לא הוגדרה.");
+
+  const templateItem = tpl.items.find((i) => {
+    if (i.equipmentItemId === equipmentItemId) return true;
+    return i.alternatives.some((a) => a.equipmentItemId === equipmentItemId);
+  });
+  if (!templateItem) throw new Error("פריט זה לא מוגדר בתבנית הקרטון ולא ניתן להוסיפו.");
+
+  const groupIds = [templateItem.equipmentItemId, ...templateItem.alternatives.map((a) => a.equipmentItemId)];
+
+  let box = await tx.box.findUnique({ where: { userId } });
+  if (!box) box = await tx.box.create({ data: { userId } });
+
+  const currentBoxItems = await tx.boxItem.findMany({
+    where: { boxId: box.id, equipmentItemId: { in: groupIds } },
+  });
+  const currentQty = currentBoxItems.reduce((s, i) => s + i.quantity, 0);
+  const remaining = templateItem.quantity - currentQty;
+  if (quantity > remaining) {
+    throw new Error(
+      remaining <= 0
+        ? `הקרטון מלא עבור ${equipmentItem.name}.`
+        : `ניתן להוסיף עוד ${remaining} יחידות בלבד לקרטון עבור ${equipmentItem.name}.`,
+    );
+  }
+
+  if (serialNumber) {
+    const dup = await tx.boxItem.findFirst({
+      where: { boxId: box.id, equipmentItemId, serialNumber },
+    });
+    if (dup) throw new Error("מספר סידורי זה כבר קיים בקרטון.");
+    if (quantity !== 1) throw new Error("בפריט עם מספר סידורי יש לבחור כמות 1.");
+  }
+
+  const yamah = await tx.storageLocation.findFirst({ where: { name: "ימ״ח", active: true } });
+  if (!yamah) throw new Error("מיקום אחסון ימ״ח לא נמצא.");
+
+  const stockRow = await tx.storageInventory.findUnique({
+    where: { locationId_equipmentItemId: { locationId: yamah.id, equipmentItemId } },
+  });
+  const currentStock = stockRow?.quantity ?? 0;
+  if (currentStock < quantity) {
+    throw new Error(`אין מספיק מלאי בימ״ח עבור ${equipmentItem.name}. זמין: ${currentStock}.`);
+  }
+
+  await tx.storageInventory.update({
+    where: { locationId_equipmentItemId: { locationId: yamah.id, equipmentItemId } },
+    data: { quantity: currentStock - quantity },
+  });
+
+  if (serialNumber) {
+    await tx.boxItem.create({
+      data: {
+        boxId: box.id,
+        equipmentItemId,
+        quantity: 1,
+        serialNumber,
+        movedById: actorId,
+      },
+    });
+  } else {
+    const existingBoxItem = await tx.boxItem.findFirst({
+      where: { boxId: box.id, equipmentItemId, serialNumber: null },
+    });
+    if (existingBoxItem) {
+      await tx.boxItem.update({
+        where: { id: existingBoxItem.id },
+        data: { quantity: existingBoxItem.quantity + quantity },
+      });
+    } else {
+      await tx.boxItem.create({
+        data: {
+          boxId: box.id,
+          equipmentItemId,
+          quantity,
+          serialNumber: null,
+          movedById: actorId,
+        },
+      });
+    }
+  }
+
+  return { boxId: box.id, userName: user.name, equipmentItemName: equipmentItem.name };
+}
+
 const AddToBoxDirectSchema = z.object({
   userId: z.string().min(1),
   equipmentItemId: z.string().min(1),
   quantity: z.coerce.number().int().min(1).max(1000),
   serialNumber: z.string().optional(),
   adminNotes: z.string().min(1, "הערות הן שדה חובה"),
+});
+
+const AddToBoxDirectLineSchema = z.object({
+  equipmentItemId: z.string().min(1),
+  quantity: z.coerce.number().int().min(1).max(1000),
+  serialNumber: z.string().trim().optional().transform((v) => v || undefined),
+});
+
+const AddToBoxDirectBulkSchema = z.object({
+  userId: z.string().min(1),
+  adminNotes: z.string().min(1, "הערות הן שדה חובה"),
+  lines: z.array(AddToBoxDirectLineSchema).min(1, "בחר לפחות פריט אחד").max(100),
 });
 
 export async function addToBoxDirectAction(formData: FormData): Promise<{ success: boolean; error?: string }> {
@@ -902,106 +1028,15 @@ export async function addToBoxDirectAction(formData: FormData): Promise<{ succes
 
   try {
     await prisma.$transaction(async (tx) => {
-      const user = await tx.user.findUnique({ where: { id: parsed.data.userId }, select: { name: true, active: true } });
-      if (!user?.active) throw new Error("משתמש לא נמצא או לא פעיל.");
+      const { boxId, userName, equipmentItemName } = await applyAddToBoxDirectLine(
+        tx,
+        session.user.id,
+        parsed.data.userId,
+        parsed.data.equipmentItemId,
+        parsed.data.quantity,
+        parsed.data.serialNumber,
+      );
 
-      const equipmentItem = await tx.equipmentItem.findUnique({
-        where: { id: parsed.data.equipmentItemId },
-        select: { id: true, name: true },
-      });
-      if (!equipmentItem) throw new Error("פריט ציוד לא נמצא.");
-
-      // Validate item fits in the box template
-      const tpl = await tx.boxTemplate.findFirst({ include: { items: { include: { alternatives: true } } } });
-      if (!tpl) throw new Error("תבנית קרטון לא הוגדרה.");
-
-      const templateItem = tpl.items.find((i) => {
-        if (i.equipmentItemId === parsed.data.equipmentItemId) return true;
-        return i.alternatives.some((a) => a.equipmentItemId === parsed.data.equipmentItemId);
-      });
-      if (!templateItem) throw new Error("פריט זה לא מוגדר בתבנית הקרטון ולא ניתן להוסיפו.");
-
-      const groupIds = [templateItem.equipmentItemId, ...templateItem.alternatives.map((a) => a.equipmentItemId)];
-
-      // Get or create box
-      let box = await tx.box.findUnique({ where: { userId: parsed.data.userId } });
-      if (!box) box = await tx.box.create({ data: { userId: parsed.data.userId } });
-
-      // Check box capacity for this item group
-      const currentBoxItems = await tx.boxItem.findMany({
-        where: { boxId: box.id, equipmentItemId: { in: groupIds } },
-      });
-      const currentQty = currentBoxItems.reduce((s, i) => s + i.quantity, 0);
-      const remaining = templateItem.quantity - currentQty;
-      if (parsed.data.quantity > remaining) {
-        throw new Error(
-          remaining <= 0
-            ? "הקרטון מלא עבור פריט זה."
-            : `ניתן להוסיף עוד ${remaining} יחידות בלבד לקרטון עבור פריט זה.`,
-        );
-      }
-
-      // Validate serial number uniqueness if provided
-      if (parsed.data.serialNumber) {
-        const dup = await tx.boxItem.findFirst({
-          where: { boxId: box.id, equipmentItemId: parsed.data.equipmentItemId, serialNumber: parsed.data.serialNumber },
-        });
-        if (dup) throw new Error("מספר סידורי זה כבר קיים בקרטון.");
-        if (parsed.data.quantity !== 1) throw new Error("בפריט עם מספר סידורי יש לבחור כמות 1.");
-      }
-
-      // Check ימ״ח stock
-      const yamah = await tx.storageLocation.findFirst({ where: { name: "ימ״ח", active: true } });
-      if (!yamah) throw new Error("מיקום אחסון ימ״ח לא נמצא.");
-
-      const stockRow = await tx.storageInventory.findUnique({
-        where: { locationId_equipmentItemId: { locationId: yamah.id, equipmentItemId: parsed.data.equipmentItemId } },
-      });
-      const currentStock = stockRow?.quantity ?? 0;
-      if (currentStock < parsed.data.quantity) {
-        throw new Error(`אין מספיק מלאי בימ״ח. זמין: ${currentStock}.`);
-      }
-
-      // Deduct from ימ״ח
-      await tx.storageInventory.update({
-        where: { locationId_equipmentItemId: { locationId: yamah.id, equipmentItemId: parsed.data.equipmentItemId } },
-        data: { quantity: currentStock - parsed.data.quantity },
-      });
-
-      // Add to box
-      if (parsed.data.serialNumber) {
-        await tx.boxItem.create({
-          data: {
-            boxId: box.id,
-            equipmentItemId: parsed.data.equipmentItemId,
-            quantity: 1,
-            serialNumber: parsed.data.serialNumber,
-            movedById: session.user.id,
-          },
-        });
-      } else {
-        const existingBoxItem = await tx.boxItem.findFirst({
-          where: { boxId: box.id, equipmentItemId: parsed.data.equipmentItemId, serialNumber: null },
-        });
-        if (existingBoxItem) {
-          await tx.boxItem.update({
-            where: { id: existingBoxItem.id },
-            data: { quantity: existingBoxItem.quantity + parsed.data.quantity },
-          });
-        } else {
-          await tx.boxItem.create({
-            data: {
-              boxId: box.id,
-              equipmentItemId: parsed.data.equipmentItemId,
-              quantity: parsed.data.quantity,
-              serialNumber: null,
-              movedById: session.user.id,
-            },
-          });
-        }
-      }
-
-      // Create an ADMIN_ASSIGNMENT request record so it appears in the ניהול שרירותי tab
       const requestRecord = await tx.request.create({
         data: {
           type: RequestType.ADMIN_ASSIGNMENT,
@@ -1029,17 +1064,118 @@ export async function addToBoxDirectAction(formData: FormData): Promise<{ succes
       await writeAuditLog(tx, {
         actorId: session.user.id,
         entity: AuditEntity.BOX,
-        entityId: box.id,
+        entityId: boxId,
         action: "ADD_TO_BOX_DIRECT",
         metadataJson: {
           equipmentItemId: parsed.data.equipmentItemId,
-          equipmentItemName: equipmentItem.name,
-          userName: user.name,
+          equipmentItemName,
+          userName,
           quantity: parsed.data.quantity,
           serialNumber: parsed.data.serialNumber,
         },
       });
-    }, { maxWait: 10000, timeout: 15000 });
+    }, { maxWait: 10000, timeout: 30000 });
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : "אירעה שגיאה בלתי צפויה." };
+  }
+
+  revalidatePath(`/admin/users/${parsed.data.userId}`);
+  revalidatePath("/admin/boxes");
+  revalidatePath("/admin/storage");
+  revalidatePath("/admin/requests");
+  return { success: true };
+}
+
+export async function addToBoxDirectBulkAction(formData: FormData): Promise<{ success: boolean; error?: string }> {
+  const session = await requireRole(Role.ADMIN);
+
+  let linesRaw: unknown;
+  const linesField = formData.get("lines");
+  if (typeof linesField !== "string" || !linesField.trim()) {
+    return { success: false, error: "נתונים לא תקינים (שורות הוספה)." };
+  }
+  try {
+    linesRaw = JSON.parse(linesField);
+  } catch {
+    return { success: false, error: "נתונים לא תקינים (JSON)." };
+  }
+
+  const parsed = AddToBoxDirectBulkSchema.safeParse({
+    userId: formData.get("userId"),
+    adminNotes: formData.get("adminNotes"),
+    lines: linesRaw,
+  });
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    return { success: false, error: first?.message || "נתונים לא תקינים." };
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      let lastBoxId = "";
+      const auditLines: { equipmentItemId: string; name: string; quantity: number; serialNumber?: string }[] = [];
+
+      for (const line of parsed.data.lines) {
+        const { boxId, equipmentItemName } = await applyAddToBoxDirectLine(
+          tx,
+          session.user.id,
+          parsed.data.userId,
+          line.equipmentItemId,
+          line.quantity,
+          line.serialNumber,
+        );
+        lastBoxId = boxId;
+        auditLines.push({
+          equipmentItemId: line.equipmentItemId,
+          name: equipmentItemName,
+          quantity: line.quantity,
+          serialNumber: line.serialNumber,
+        });
+      }
+
+      const requestRecord = await tx.request.create({
+        data: {
+          type: RequestType.ADMIN_ASSIGNMENT,
+          status: RequestStatus.FULFILLED,
+          priority: Priority.MEDIUM,
+          requesterId: parsed.data.userId,
+          resolvedById: session.user.id,
+          resolvedAt: new Date(),
+          adminNotes: `[הוספה ישירות לקרטון — ${parsed.data.lines.length} פריטים] ${parsed.data.adminNotes.trim()}`,
+        },
+      });
+
+      for (const line of parsed.data.lines) {
+        await tx.requestItem.create({
+          data: {
+            requestId: requestRecord.id,
+            equipmentItemId: line.equipmentItemId,
+            quantity: line.quantity,
+            serialNumber: line.serialNumber ?? null,
+            status: RequestItemStatus.FULFILLED,
+            resolvedById: session.user.id,
+            resolvedAt: new Date(),
+          },
+        });
+      }
+
+      const user = await tx.user.findUnique({
+        where: { id: parsed.data.userId },
+        select: { name: true },
+      });
+
+      await writeAuditLog(tx, {
+        actorId: session.user.id,
+        entity: AuditEntity.BOX,
+        entityId: lastBoxId,
+        action: "ADD_TO_BOX_DIRECT_BULK",
+        metadataJson: {
+          userName: user?.name,
+          lineCount: parsed.data.lines.length,
+          lines: auditLines,
+        },
+      });
+    }, { maxWait: 10000, timeout: 60000 });
   } catch (err: unknown) {
     return { success: false, error: err instanceof Error ? err.message : "אירעה שגיאה בלתי צפויה." };
   }
