@@ -67,6 +67,17 @@ interface BoxListProps {
   usersWithoutBox: UserWithoutBox[];
 }
 
+interface ItemFilterOption {
+  id: string;
+  label: string;
+  subtitle: string;
+  kind: "primary" | "alt";
+}
+
+function qtyInBox(row: BoxRow, equipmentItemId: string): number {
+  return row.items.filter((bi) => bi.equipmentItemId === equipmentItemId).reduce((s, bi) => s + bi.quantity, 0);
+}
+
 type SortField = "userName" | "department" | "pct" | "inBoxTotal" | "createdAt";
 type SortDir = "asc" | "desc";
 
@@ -93,23 +104,68 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
   const [sortField, setSortField] = useState<SortField>("userName");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [selectedItemFilters, setSelectedItemFilters] = useState<Set<string>>(new Set());
+  const [itemFilterMode, setItemFilterMode] = useState<"missing" | "present">("missing");
+  const [itemSearchQuery, setItemSearchQuery] = useState("");
   const [showItemFilter, setShowItemFilter] = useState(false);
   const [creatingBoxForUserId, setCreatingBoxForUserId] = useState<string | null>(null);
 
-  // Derive template items from any row (all rows share the same template)
-  const templateItems = useMemo<TemplateItemStatus[]>(() => {
-    if (rows.length === 0) return [];
-    // Build a deduplicated list from first row
-    return rows[0].templateStatus.map((ts) => ({
-      equipmentItemId: ts.equipmentItemId,
-      name: ts.name,
-      required: ts.required,
-      inBox: 0,
-      missing: 0,
-      missingReason: null,
-      inStorage: ts.inStorage,
-    }));
-  }, [rows]);
+  const itemFilterOptions = useMemo<ItemFilterOption[]>(() => {
+    const out: ItemFilterOption[] = [];
+    for (const t of templateItemsForAdd) {
+      out.push({
+        id: t.equipmentItemId,
+        label: t.equipmentItemName,
+        subtitle:
+          t.alternatives.length > 0
+            ? `פריט ראשי בקבוצה · ${t.alternatives.length} חלופות`
+            : "פריט בתבנית הקרטון",
+        kind: "primary",
+      });
+      for (const a of t.alternatives) {
+        out.push({
+          id: a.equipmentItemId,
+          label: a.equipmentItemName,
+          subtitle: `חלופה ל־${t.equipmentItemName}`,
+          kind: "alt",
+        });
+      }
+    }
+    return out;
+  }, [templateItemsForAdd]);
+
+  const groupIdsByPrimary = useMemo(() => {
+    const m: Record<string, string[]> = {};
+    for (const t of templateItemsForAdd) {
+      m[t.equipmentItemId] = [t.equipmentItemId, ...t.alternatives.map((a) => a.equipmentItemId)];
+    }
+    return m;
+  }, [templateItemsForAdd]);
+
+  const filteredItemOptions = useMemo(() => {
+    const q = itemSearchQuery.trim().toLowerCase();
+    if (!q) return itemFilterOptions;
+    return itemFilterOptions.filter(
+      (o) => o.label.toLowerCase().includes(q) || o.subtitle.toLowerCase().includes(q),
+    );
+  }, [itemFilterOptions, itemSearchQuery]);
+
+  /** How many boxes match this mode for the given equipment id */
+  const filterMatchCountByItemId = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const opt of itemFilterOptions) {
+      let n = 0;
+      for (const row of rows) {
+        const q = qtyInBox(row, opt.id);
+        if (itemFilterMode === "missing") {
+          if (q === 0) n++;
+        } else if (q > 0) {
+          n++;
+        }
+      }
+      map[opt.id] = n;
+    }
+    return map;
+  }, [rows, itemFilterOptions, itemFilterMode]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -149,9 +205,10 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
 
       const matchesItems =
         selectedItemFilters.size === 0 ||
-        r.templateStatus.some(
-          (ts) => selectedItemFilters.has(ts.equipmentItemId) && ts.missing > 0
-        );
+        [...selectedItemFilters].some((fid) => {
+          const q = qtyInBox(r, fid);
+          return itemFilterMode === "missing" ? q === 0 : q > 0;
+        });
 
       return matchesSearch && matchesStatus && matchesItems;
     });
@@ -182,7 +239,7 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
     });
 
     return result;
-  }, [rows, searchQuery, statFilter, selectedItemFilters, sortField, sortDir]);
+  }, [rows, searchQuery, statFilter, selectedItemFilters, itemFilterMode, sortField, sortDir]);
 
   const filteredNoBoxUsers = useMemo(() => {
     if (statFilter !== "nobox") return [];
@@ -207,19 +264,6 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
 
   const totalBoxes = rows.length;
   const completeBoxes = rows.filter((r) => r.inBoxTotal >= r.totalRequired).length;
-
-  // Count how many boxes are missing each item (for the filter chips)
-  const missingCountByItem = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const row of rows) {
-      for (const ts of row.templateStatus) {
-        if (ts.missing > 0) {
-          map[ts.equipmentItemId] = (map[ts.equipmentItemId] ?? 0) + 1;
-        }
-      }
-    }
-    return map;
-  }, [rows]);
 
   const SortHeader = ({
     field,
@@ -307,7 +351,9 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
             onClick={() => setShowItemFilter((v) => !v)}
             className={`h-12 px-5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
               showItemFilter || selectedItemFilters.size > 0
-                ? "bg-violet-600 text-white"
+                ? itemFilterMode === "present"
+                  ? "bg-teal-600 text-white shadow-lg shadow-teal-900/30"
+                  : "bg-rose-600 text-white shadow-lg shadow-rose-900/30"
                 : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
             }`}
           >
@@ -316,7 +362,7 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
             </svg>
             סינון לפי פריט
             {selectedItemFilters.size > 0 && (
-              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/20 text-white text-[10px] font-black">
+              <span className="inline-flex items-center justify-center min-w-[22px] h-5 px-1 rounded-full bg-white/20 text-white text-[10px] font-black">
                 {selectedItemFilters.size}
               </span>
             )}
@@ -326,56 +372,162 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
 
       {/* Item filter panel */}
       {showItemFilter && (
-        <div className="rounded-2xl border border-violet-900/30 bg-violet-950/10 p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-sm font-bold text-zinc-300">
-              סנן לפי פריטים חסרים
-              <span className="text-xs text-zinc-500 font-normal mr-2">
-                — הצג רק חיילים שחסר להם הפריט
-              </span>
+        <div
+          className={`rounded-2xl border p-5 transition-colors ${
+            itemFilterMode === "present"
+              ? "border-teal-900/40 bg-gradient-to-br from-teal-950/25 to-zinc-950/80"
+              : "border-rose-900/40 bg-gradient-to-br from-rose-950/20 to-zinc-950/80"
+          }`}
+        >
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex-1 space-y-2">
+              <h4 className="text-sm font-bold text-zinc-100">סינון לפי פריט בקרטון</h4>
+              <p className="text-xs text-zinc-500 leading-relaxed max-w-xl">
+                בחרו גרסה מדויקת (כולל חלופות בתבנית). מצב &quot;חסר&quot; מציג מי <strong className="text-zinc-300">אין</strong> לו את
+                הפריט הזה בקרטון. מצב &quot;קיים&quot; מציג מי <strong className="text-zinc-300">יש</strong> לו — לפחות יחידה אחת מהמק&quot;ט
+                שנבחר.
+              </p>
+            </div>
+            {/* Mode switch */}
+            <div className="flex-shrink-0 flex rounded-2xl p-1 bg-zinc-900 border border-zinc-800 shadow-inner">
+              <button
+                type="button"
+                onClick={() => setItemFilterMode("missing")}
+                className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                  itemFilterMode === "missing"
+                    ? "bg-rose-600 text-white shadow-md"
+                    : "text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                <span className="inline-block w-2 h-2 rounded-full bg-current opacity-80" />
+                חסר בקרטון
+              </button>
+              <button
+                type="button"
+                onClick={() => setItemFilterMode("present")}
+                className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                  itemFilterMode === "present"
+                    ? "bg-teal-600 text-white shadow-md"
+                    : "text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                <span className="inline-block w-2 h-2 rounded-full bg-current opacity-80" />
+                קיים בקרטון
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+            <div className="relative flex-1 min-w-0 max-w-md">
+              <svg
+                className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 pointer-events-none"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.3-4.3" />
+              </svg>
+              <input
+                type="search"
+                value={itemSearchQuery}
+                onChange={(e) => setItemSearchQuery(e.target.value)}
+                placeholder="חיפוש לפי שם פריט או תיאור חלופה..."
+                className="h-11 w-full rounded-xl border border-zinc-800 bg-zinc-950 pr-10 pl-4 text-sm text-zinc-50 placeholder:text-zinc-600 focus:ring-2 focus:ring-zinc-500 outline-none transition-all"
+              />
             </div>
             {selectedItemFilters.size > 0 && (
               <button
+                type="button"
                 onClick={clearItemFilters}
-                className="text-xs text-violet-400 hover:text-violet-300 transition-colors cursor-pointer"
+                className={`text-xs font-bold px-4 py-2 rounded-xl border transition-colors cursor-pointer shrink-0 ${
+                  itemFilterMode === "present"
+                    ? "border-teal-800 text-teal-400 hover:bg-teal-950/40"
+                    : "border-rose-800 text-rose-400 hover:bg-rose-950/40"
+                }`}
               >
-                נקה הכל
+                נקה בחירת פריטים
               </button>
             )}
           </div>
-          <div className="flex flex-wrap gap-2">
-            {templateItems.map((item) => {
-              const missingCount = missingCountByItem[item.equipmentItemId] ?? 0;
-              const isActive = selectedItemFilters.has(item.equipmentItemId);
-              return (
-                <button
-                  key={item.equipmentItemId}
-                  onClick={() => toggleItemFilter(item.equipmentItemId)}
-                  className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
-                    isActive
-                      ? "bg-violet-600 text-white border-violet-500"
-                      : missingCount > 0
-                        ? "bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700"
-                        : "bg-zinc-900 text-zinc-600 border-zinc-800 hover:bg-zinc-800 hover:text-zinc-400"
-                  }`}
-                >
-                  {item.name}
-                  {missingCount > 0 && (
-                    <span
-                      className={`inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-black ${
-                        isActive ? "bg-white/20 text-white" : "bg-red-900/40 text-red-400"
+
+          <div className="mt-4 max-h-52 overflow-y-auto rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-2">
+            {filteredItemOptions.length === 0 ? (
+              <div className="py-8 text-center text-sm text-zinc-500">לא נמצאו פריטים תואמים לחיפוש</div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {filteredItemOptions.map((opt) => {
+                  const count = filterMatchCountByItemId[opt.id] ?? 0;
+                  const isActive = selectedItemFilters.has(opt.id);
+                  const dim = count === 0;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => toggleItemFilter(opt.id)}
+                      className={`group text-right rounded-2xl border px-3 py-2.5 transition-all cursor-pointer max-w-full sm:max-w-[280px] ${
+                        isActive
+                          ? itemFilterMode === "present"
+                            ? "bg-teal-600 border-teal-500 text-white shadow-md"
+                            : "bg-rose-600 border-rose-500 text-white shadow-md"
+                          : dim
+                            ? "border-zinc-800 bg-zinc-900/40 text-zinc-600 hover:border-zinc-700"
+                            : "border-zinc-700 bg-zinc-800/60 text-zinc-200 hover:border-zinc-600"
                       }`}
                     >
-                      {missingCount}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-black truncate">{opt.label}</span>
+                            {opt.kind === "alt" && (
+                              <span
+                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${
+                                  isActive
+                                    ? "border-white/30 bg-white/10 text-white"
+                                    : "border-amber-900/50 bg-amber-950/40 text-amber-400"
+                                }`}
+                              >
+                                חלופה
+                              </span>
+                            )}
+                          </div>
+                          <div className={`text-[10px] mt-1 leading-snug ${isActive ? "text-white/80" : "text-zinc-500"}`}>
+                            {opt.subtitle}
+                          </div>
+                        </div>
+                        <span
+                          className={`shrink-0 inline-flex items-center justify-center min-w-[26px] h-6 px-1.5 rounded-lg text-[10px] font-black ${
+                            isActive
+                              ? "bg-black/25 text-white"
+                              : itemFilterMode === "present"
+                                ? "bg-teal-950/50 text-teal-400"
+                                : "bg-rose-950/50 text-rose-400"
+                          }`}
+                        >
+                          {count}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
+
           {selectedItemFilters.size > 0 && (
-            <div className="mt-3 text-xs text-zinc-500">
-              מציג {filteredAndSorted.length} חיילים שחסר להם לפחות אחד מהפריטים שנבחרו
+            <div
+              className={`mt-4 text-xs font-medium px-3 py-2 rounded-xl border ${
+                itemFilterMode === "present"
+                  ? "border-teal-900/50 bg-teal-950/15 text-teal-100/90"
+                  : "border-rose-900/50 bg-rose-950/15 text-rose-100/90"
+              }`}
+            >
+              מציג <strong>{filteredAndSorted.length}</strong> קרטונים · התאמה אם <strong>לפחות אחד</strong> מהפריטים
+              המסומנים:{" "}
+              {itemFilterMode === "missing"
+                ? "אין לו אותו מק״ט בקרטון (כמות 0)."
+                : "יש לו לפחות יחידה אחת מאותו מק״ט בקרטון."}
             </div>
           )}
         </div>
@@ -537,23 +689,34 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
                               </thead>
                               <tbody>
                                 {row.templateStatus.map((ts) => {
-                                  const isFilteredItem = selectedItemFilters.has(ts.equipmentItemId);
+                                  const slotGroupIds = groupIdsByPrimary[ts.equipmentItemId] ?? [ts.equipmentItemId];
+                                  const isFilteredItem =
+                                    selectedItemFilters.size > 0 &&
+                                    [...selectedItemFilters].some((fid) => slotGroupIds.includes(fid));
                                   return (
                                     <tr
                                       key={ts.equipmentItemId}
                                       className={`border-b border-zinc-800 last:border-0 ${
-                                        ts.missing > 0
-                                          ? isFilteredItem
-                                            ? "bg-violet-950/20"
-                                            : "bg-red-950/5"
-                                          : ""
+                                        isFilteredItem
+                                          ? itemFilterMode === "present"
+                                            ? "bg-teal-950/25"
+                                            : "bg-rose-950/25"
+                                          : ts.missing > 0
+                                            ? "bg-red-950/5"
+                                            : ""
                                       }`}
                                     >
                                       <td className="px-4 py-2.5 text-sm font-medium text-zinc-50">
                                         <span className="flex items-center gap-2">
                                           {ts.name}
                                           {isFilteredItem && (
-                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-violet-900/30 text-violet-400 border border-violet-900/40">
+                                            <span
+                                              className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                                                itemFilterMode === "present"
+                                                  ? "bg-teal-900/30 text-teal-300 border-teal-800/50"
+                                                  : "bg-rose-900/30 text-rose-300 border-rose-800/50"
+                                              }`}
+                                            >
                                               מסונן
                                             </span>
                                           )}
