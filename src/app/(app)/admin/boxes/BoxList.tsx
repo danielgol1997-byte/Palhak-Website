@@ -105,6 +105,8 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [selectedItemFilters, setSelectedItemFilters] = useState<Set<string>>(new Set());
   const [itemFilterMode, setItemFilterMode] = useState<"missing" | "present">("missing");
+  /** When true, item chip counts in "חסר" mode also count active users who have no box row (treated as 0 for every SKU). Default off. */
+  const [includeNoBoxInItemCounts, setIncludeNoBoxInItemCounts] = useState(false);
   const [itemSearchQuery, setItemSearchQuery] = useState("");
   const [showItemFilter, setShowItemFilter] = useState(false);
   const [creatingBoxForUserId, setCreatingBoxForUserId] = useState<string | null>(null);
@@ -149,11 +151,13 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
     );
   }, [itemFilterOptions, itemSearchQuery]);
 
-  /** How many boxes match this mode for the given equipment id */
+  /** How many people match this mode for the given equipment id (box owners + optionally no-box users in "missing" mode). */
   const filterMatchCountByItemId = useMemo(() => {
     const map: Record<string, number> = {};
+    const noBoxExtra =
+      includeNoBoxInItemCounts && itemFilterMode === "missing" ? usersWithoutBox.length : 0;
     for (const opt of itemFilterOptions) {
-      let n = 0;
+      let n = noBoxExtra;
       for (const row of rows) {
         const q = qtyInBox(row, opt.id);
         if (itemFilterMode === "missing") {
@@ -165,7 +169,7 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
       map[opt.id] = n;
     }
     return map;
-  }, [rows, itemFilterOptions, itemFilterMode]);
+  }, [rows, itemFilterOptions, itemFilterMode, includeNoBoxInItemCounts, usersWithoutBox.length]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -385,7 +389,8 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
               <p className="text-xs text-zinc-500 leading-relaxed max-w-xl">
                 בחרו גרסה מדויקת (כולל חלופות בתבנית). מצב &quot;חסר&quot; מציג מי <strong className="text-zinc-300">אין</strong> לו את
                 הפריט הזה בקרטון. מצב &quot;קיים&quot; מציג מי <strong className="text-zinc-300">יש</strong> לו — לפחות יחידה אחת מהמק&quot;ט
-                שנבחר.
+                שנבחר. ברירת המחדל: המניין על הכפתורים מתייחס <strong className="text-zinc-300">רק לבעלי קרטון</strong> (אפשר לכלול
+                גם מי שאין לו קרטון — למטה).
               </p>
             </div>
             {/* Mode switch */}
@@ -416,6 +421,26 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
               </button>
             </div>
           </div>
+
+          {usersWithoutBox.length > 0 && (
+            <div className="mt-4 flex items-start gap-3 rounded-xl border border-zinc-800/90 bg-zinc-950/60 p-3.5">
+              <input
+                id="includeNoBoxInItemCounts"
+                type="checkbox"
+                checked={includeNoBoxInItemCounts}
+                onChange={(e) => setIncludeNoBoxInItemCounts(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-zinc-600 bg-zinc-900 text-rose-600 focus:ring-rose-500/40 cursor-pointer"
+              />
+              <label htmlFor="includeNoBoxInItemCounts" className="text-xs leading-relaxed cursor-pointer select-none">
+                <span className="font-bold text-zinc-100">לכלול במניין גם משתמשים ללא קרטון</span>
+                <span className="block text-zinc-500 mt-1">
+                  כבוי (ברירת מחדל): הספרה על כל פריט — רק מי שברשומת קרטון במערכת. דולק: במצב &quot;חסר&quot; נוספים{" "}
+                  <strong className="text-zinc-400">{usersWithoutBox.length}</strong> משתמשים פעילים ללא קרטון (נחשבים חסרים לכל
+                  פריט). במצב &quot;קיים&quot; אין שינוי. הטבלה למטה מציגה רק בעלי קרטון.
+                </span>
+              </label>
+            </div>
+          )}
 
           <div className="mt-4 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
             <div className="relative flex-1 min-w-0 max-w-md">
@@ -528,6 +553,13 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
               {itemFilterMode === "missing"
                 ? "אין לו אותו מק״ט בקרטון (כמות 0)."
                 : "יש לו לפחות יחידה אחת מאותו מק״ט בקרטון."}
+              {includeNoBoxInItemCounts && itemFilterMode === "missing" && usersWithoutBox.length > 0 && (
+                <span className="block mt-2 text-zinc-400">
+                  המניין על הכפתורים כולל גם{" "}
+                  <strong className="text-zinc-200">{usersWithoutBox.length}</strong> משתמשים פעילים ללא קרטון (לא מוצגים בטבלה —
+                  סינון &quot;ללא קרטון&quot; למעלה).
+                </span>
+              )}
             </div>
           )}
         </div>
