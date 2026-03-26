@@ -293,6 +293,7 @@ model BoxTemplateItem {
   boxTemplateId   String
   equipmentItemId String
   quantity        Int                  @default(1)
+  groupName       String?
   boxTemplate     BoxTemplate          @relation(fields: [boxTemplateId], references: [id], onDelete: Cascade)
   equipmentItem   EquipmentItem        @relation(fields: [equipmentItemId], references: [id])
   alternatives    BoxTemplateItemAlt[]

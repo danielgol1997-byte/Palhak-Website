@@ -47,6 +47,7 @@ interface TransferUser {
 interface TemplateItemForAdd {
   equipmentItemId: string;
   equipmentItemName: string;
+  groupName: string | null;
   quantity: number;
   alternatives: { equipmentItemId: string; equipmentItemName: string }[];
 }
@@ -68,10 +69,9 @@ interface BoxListProps {
 }
 
 interface ItemFilterOption {
-  id: string;
-  label: string;
-  subtitle: string;
-  kind: "primary" | "alt";
+  id: string;       // primary equipmentItemId — used for groupIdsByPrimary lookup
+  label: string;    // groupName if set, otherwise primary item name
+  altCount: number; // number of alternatives in the group
 }
 
 function qtyInBox(row: BoxRow, equipmentItemId: string): number {
@@ -111,29 +111,14 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
   const [showItemFilter, setShowItemFilter] = useState(false);
   const [creatingBoxForUserId, setCreatingBoxForUserId] = useState<string | null>(null);
 
-  const itemFilterOptions = useMemo<ItemFilterOption[]>(() => {
-    const out: ItemFilterOption[] = [];
-    for (const t of templateItemsForAdd) {
-      out.push({
-        id: t.equipmentItemId,
-        label: t.equipmentItemName,
-        subtitle:
-          t.alternatives.length > 0
-            ? `פריט ראשי בקבוצה · ${t.alternatives.length} חלופות`
-            : "פריט בתבנית הקרטון",
-        kind: "primary",
-      });
-      for (const a of t.alternatives) {
-        out.push({
-          id: a.equipmentItemId,
-          label: a.equipmentItemName,
-          subtitle: `חלופה ל־${t.equipmentItemName}`,
-          kind: "alt",
-        });
-      }
-    }
-    return out;
-  }, [templateItemsForAdd]);
+  /** One chip per template slot — uses groupName when set, otherwise the primary item name. */
+  const itemFilterOptions = useMemo<ItemFilterOption[]>(() =>
+    templateItemsForAdd.map((t) => ({
+      id: t.equipmentItemId,
+      label: t.groupName?.trim() || t.equipmentItemName,
+      altCount: t.alternatives.length,
+    })),
+  [templateItemsForAdd]);
 
   const groupIdsByPrimary = useMemo(() => {
     const m: Record<string, string[]> = {};
@@ -155,9 +140,7 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
   const filteredItemOptions = useMemo(() => {
     const q = itemSearchQuery.trim().toLowerCase();
     if (!q) return itemFilterOptions;
-    return itemFilterOptions.filter(
-      (o) => o.label.toLowerCase().includes(q) || o.subtitle.toLowerCase().includes(q),
-    );
+    return itemFilterOptions.filter((o) => o.label.toLowerCase().includes(q));
   }, [itemFilterOptions, itemSearchQuery]);
 
   /** How many people match this mode for the given equipment id.
@@ -495,7 +478,7 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
                       key={opt.id}
                       type="button"
                       onClick={() => toggleItemFilter(opt.id)}
-                      className={`group text-right rounded-2xl border px-3 py-2.5 transition-all cursor-pointer max-w-full sm:max-w-[280px] ${
+                      className={`inline-flex items-center gap-2 rounded-2xl border px-3 py-2 transition-all cursor-pointer ${
                         isActive
                           ? itemFilterMode === "present"
                             ? "bg-teal-600 border-teal-500 text-white shadow-md"
@@ -505,38 +488,19 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
                             : "border-zinc-700 bg-zinc-800/60 text-zinc-200 hover:border-zinc-600"
                       }`}
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-xs font-black truncate">{opt.label}</span>
-                            {opt.kind === "alt" && (
-                              <span
-                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${
-                                  isActive
-                                    ? "border-white/30 bg-white/10 text-white"
-                                    : "border-amber-900/50 bg-amber-950/40 text-amber-400"
-                                }`}
-                              >
-                                חלופה
-                              </span>
-                            )}
-                          </div>
-                          <div className={`text-[10px] mt-1 leading-snug ${isActive ? "text-white/80" : "text-zinc-500"}`}>
-                            {opt.subtitle}
-                          </div>
-                        </div>
-                        <span
-                          className={`shrink-0 inline-flex items-center justify-center min-w-[26px] h-6 px-1.5 rounded-lg text-[10px] font-black ${
-                            isActive
-                              ? "bg-black/25 text-white"
-                              : itemFilterMode === "present"
-                                ? "bg-teal-950/50 text-teal-400"
-                                : "bg-rose-950/50 text-rose-400"
-                          }`}
-                        >
-                          {count}
+                      <span className="text-xs font-bold">{opt.label}</span>
+                      {opt.altCount > 0 && (
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${
+                          isActive ? "border-white/30 bg-white/10 text-white" : "border-zinc-700 bg-zinc-800 text-zinc-400"
+                        }`}>
+                          +{opt.altCount}
                         </span>
-                      </div>
+                      )}
+                      <span className={`shrink-0 inline-flex items-center justify-center min-w-[22px] h-5 px-1 rounded-lg text-[10px] font-black ${
+                        isActive ? "bg-black/25 text-white" : itemFilterMode === "present" ? "bg-teal-950/50 text-teal-400" : "bg-rose-950/50 text-rose-400"
+                      }`}>
+                        {count}
+                      </span>
                     </button>
                   );
                 })}

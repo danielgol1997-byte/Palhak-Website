@@ -14,6 +14,7 @@ const tplSelect = {
       id: true,
       equipmentItemId: true,
       quantity: true,
+      groupName: true,
       equipmentItem: {
         select: {
           name: true,
@@ -80,6 +81,7 @@ export default async function BoxTemplatePage() {
               division={i.equipmentItem.category.division}
               categoryName={i.equipmentItem.category.name}
               quantity={i.quantity}
+              groupName={i.groupName}
               alternatives={i.alternatives.map((a) => ({
                 id: a.id,
                 equipmentItemId: a.equipmentItemId,

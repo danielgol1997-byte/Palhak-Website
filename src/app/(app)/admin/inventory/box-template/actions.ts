@@ -199,6 +199,52 @@ export async function addMultipleBoxTemplateItemsAction(
   return { success: true };
 }
 
+const UpdateGroupNameSchema = z.object({
+  templateItemId: z.string().min(1),
+  groupName: z.string().max(80),
+});
+
+export async function updateGroupNameAction(
+  formData: FormData
+): Promise<{ success: boolean; error?: string }> {
+  const session = await requireRole(Role.ADMIN);
+  const parsed = UpdateGroupNameSchema.safeParse({
+    templateItemId: formData.get("templateItemId"),
+    groupName: formData.get("groupName") ?? "",
+  });
+  if (!parsed.success) return { success: false, error: "נתונים לא תקינים." };
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const item = await tx.boxTemplateItem.findUnique({
+        where: { id: parsed.data.templateItemId },
+        select: { id: true, boxTemplateId: true },
+      });
+      if (!item) throw new Error("פריט תבנית לא נמצא.");
+
+      const nameValue = parsed.data.groupName.trim() || null;
+      await tx.boxTemplateItem.update({
+        where: { id: parsed.data.templateItemId },
+        data: { groupName: nameValue },
+      });
+
+      await writeAuditLog(tx, {
+        actorId: session.user.id,
+        entity: AuditEntity.BOX_TEMPLATE,
+        entityId: item.boxTemplateId,
+        action: "BOX_TEMPLATE_GROUP_NAME_UPDATED",
+        afterJson: { groupName: nameValue },
+        metadataJson: { templateItemId: parsed.data.templateItemId },
+      });
+    });
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : "אירעה שגיאה." };
+  }
+
+  revalidateBoxPaths();
+  return { success: true };
+}
+
 const AddAltSchema = z.object({
   templateItemId: z.string().min(1),
   alternativeItemId: z.string().min(1),

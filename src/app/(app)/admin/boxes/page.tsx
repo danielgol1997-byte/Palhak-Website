@@ -15,6 +15,7 @@ export default async function BoxesPage() {
         select: {
           equipmentItemId: true,
           quantity: true,
+          groupName: true,
           equipmentItem: {
             select: {
               id: true,
@@ -221,6 +222,7 @@ export default async function BoxesPage() {
   const templateItemsForAdd = boxTemplate.items.map((tplItem) => ({
     equipmentItemId: tplItem.equipmentItemId,
     equipmentItemName: tplItem.equipmentItem.name,
+    groupName: tplItem.groupName ?? null,
     quantity: tplItem.quantity,
     alternatives: tplItem.alternatives.map((a) => ({
       equipmentItemId: a.equipmentItemId,

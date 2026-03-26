@@ -8,6 +8,7 @@ import {
   removeBoxTemplateItemAction,
   addAlternativeAction,
   removeAlternativeAction,
+  updateGroupNameAction,
 } from "./actions";
 
 interface AltItem {
@@ -31,6 +32,7 @@ interface Props {
   division: Division;
   categoryName: string;
   quantity: number;
+  groupName: string | null;
   alternatives: AltItem[];
   availableItems: AvailableItem[];
 }
@@ -42,6 +44,7 @@ export function BoxTemplateItemActions({
   division,
   categoryName,
   quantity,
+  groupName,
   alternatives,
   availableItems,
 }: Props) {
@@ -49,6 +52,7 @@ export function BoxTemplateItemActions({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showAltPicker, setShowAltPicker] = useState(false);
   const [altSearch, setAltSearch] = useState("");
+  const [groupNameValue, setGroupNameValue] = useState(groupName ?? "");
 
   const existingIds = new Set([equipmentItemId, ...alternatives.map((a) => a.equipmentItemId)]);
 
@@ -118,6 +122,23 @@ export function BoxTemplateItemActions({
     }
   };
 
+  const handleSaveGroupName = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.append("templateItemId", templateItemId);
+      fd.append("groupName", groupNameValue);
+      const result = await updateGroupNameAction(fd);
+      if (!result.success) setError(result.error || "אירעה שגיאה");
+    } catch {
+      setError("אירעה שגיאה בלתי צפויה");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="rounded-3xl border border-zinc-800 bg-zinc-950 p-6 shadow-inner">
       <div className="flex flex-col gap-4">
@@ -160,6 +181,33 @@ export function BoxTemplateItemActions({
             </button>
           </form>
         </div>
+
+        {/* Group display name */}
+        <form onSubmit={handleSaveGroupName} className="border-t border-zinc-800 pt-4 mt-1">
+          <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">
+            שם קבוצה (לתצוגה בסינון)
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={groupNameValue}
+              onChange={(e) => setGroupNameValue(e.target.value)}
+              placeholder={itemName}
+              maxLength={80}
+              className="h-10 flex-1 rounded-xl border border-zinc-800 bg-zinc-900 px-4 text-sm text-zinc-50 placeholder:text-zinc-600 focus:ring-2 focus:ring-zinc-500 outline-none"
+            />
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="h-10 px-4 rounded-xl bg-zinc-800 text-xs font-bold text-zinc-100 hover:bg-zinc-700 transition-all cursor-pointer disabled:opacity-50 shrink-0"
+            >
+              שמור
+            </button>
+          </div>
+          <p className="mt-1 text-[11px] text-zinc-600">
+            שם גנרי לקבוצה זו בסינון הקרטונים. אם ריק — ישתמש בשם הפריט הראשי.
+          </p>
+        </form>
 
         {/* Alternatives section */}
         <div className="border-t border-zinc-800 pt-4 mt-1">
