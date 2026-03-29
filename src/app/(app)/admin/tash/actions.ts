@@ -425,3 +425,108 @@ export async function markTashLossAction(formData: FormData) {
 
   revalidatePath("/admin/tash");
 }
+
+// ─── Log correction (edit notes / undo mistaken entry + reverse inventory) ───
+
+async function adjustInventoryQuantity(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  itemId: string,
+  location: string,
+  delta: number
+) {
+  if (delta === 0) return;
+  const inv = await tx.tashInventory.findUnique({
+    where: { itemId_location: { itemId, location } },
+  });
+  if (delta > 0) {
+    await tx.tashInventory.upsert({
+      where: { itemId_location: { itemId, location } },
+      create: { itemId, location, quantity: delta },
+      update: { quantity: { increment: delta } },
+    });
+    return;
+  }
+  const remove = -delta;
+  if (!inv || inv.quantity < remove) {
+    throw new Error("לא ניתן לבטל רשומה זו — המלאי הנוכחי אינו תואם לפעולה המקורית.");
+  }
+  if (inv.quantity === remove) {
+    await tx.tashInventory.delete({
+      where: { itemId_location: { itemId, location } },
+    });
+  } else {
+    await tx.tashInventory.update({
+      where: { itemId_location: { itemId, location } },
+      data: { quantity: { decrement: remove } },
+    });
+  }
+}
+
+async function reverseTashLogEffect(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  log: { itemId: string; action: TashLogAction; quantity: number; fromLocation: string | null; toLocation: string | null }
+) {
+  const { itemId, action, quantity, fromLocation, toLocation } = log;
+  switch (action) {
+    case TashLogAction.ADDED: {
+      if (!toLocation) throw new Error("רשומה פגומה (חסר מיקום יעד).");
+      await adjustInventoryQuantity(tx, itemId, toLocation, -quantity);
+      break;
+    }
+    case TashLogAction.DEDUCTED: {
+      if (!fromLocation) throw new Error("רשומה פגומה (חסר מיקום מקור).");
+      await adjustInventoryQuantity(tx, itemId, fromLocation, quantity);
+      break;
+    }
+    case TashLogAction.MOVED:
+    case TashLogAction.RETURNED: {
+      if (!fromLocation || !toLocation) throw new Error("רשומה פגומה (חסרי מיקומים).");
+      await adjustInventoryQuantity(tx, itemId, toLocation, -quantity);
+      await adjustInventoryQuantity(tx, itemId, fromLocation, quantity);
+      break;
+    }
+    case TashLogAction.LOST:
+    case TashLogAction.STOLEN:
+    case TashLogAction.DAMAGED: {
+      if (!fromLocation) throw new Error("רשומה פגומה (חסר מיקום).");
+      await adjustInventoryQuantity(tx, itemId, fromLocation, quantity);
+      break;
+    }
+  }
+}
+
+const UpdateLogNotesSchema = z.object({
+  id: z.string().min(1),
+  notes: z.string().max(2000).optional(),
+});
+
+export async function updateTashLogNotesAction(formData: FormData) {
+  await requireRole(Role.ADMIN);
+  const parsed = UpdateLogNotesSchema.safeParse({
+    id: formData.get("id"),
+    notes: (formData.get("notes") as string) || "",
+  });
+  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "נתונים לא תקינים.");
+
+  await prisma.tashLog.update({
+    where: { id: parsed.data.id },
+    data: { notes: parsed.data.notes?.trim() ? parsed.data.notes.trim() : null },
+  });
+
+  revalidatePath("/admin/tash");
+}
+
+export async function deleteTashLogAction(formData: FormData) {
+  await requireRole(Role.ADMIN);
+  const id = formData.get("id") as string;
+  if (!id) throw new Error("מזהה חסר.");
+
+  await prisma.$transaction(async (tx) => {
+    const log = await tx.tashLog.findUnique({ where: { id } });
+    if (!log) throw new Error("רשומת היסטוריה לא נמצאה.");
+    await reverseTashLogEffect(tx, log);
+    await tx.tashLog.delete({ where: { id } });
+  });
+
+  revalidatePath("/admin/tash");
+}
