@@ -4,6 +4,7 @@ import { useState, useMemo, Fragment } from "react";
 import { useRouter } from "next/navigation";
 import { BoxEditModal } from "./BoxEditModal";
 import { createEmptyBoxAction } from "./actions";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 
 interface TemplateItemStatus {
   equipmentItemId: string;
@@ -110,6 +111,24 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
   const [itemSearchQuery, setItemSearchQuery] = useState("");
   const [showItemFilter, setShowItemFilter] = useState(false);
   const [creatingBoxForUserId, setCreatingBoxForUserId] = useState<string | null>(null);
+  const [recovering, setRecovering] = useState(false);
+  const [recoverResult, setRecoverResult] = useState<string | null>(null);
+
+  async function handleRecoverBoxes() {
+    if (!confirm("לשחזר קרטונים אוטומטית מהקצאות קיימות? פעולה זו תעביר הקצאות פעילות (שמוגדרות בתבנית הקרטון) לתוך הקרטונים.")) return;
+    setRecovering(true);
+    setRecoverResult(null);
+    try {
+      const res = await fetch("/api/admin/recover-boxes", { method: "POST" });
+      const data = await res.json() as { success: boolean; message: string; moved?: number; users?: number };
+      setRecoverResult(data.message);
+      if (data.success && (data.moved ?? 0) > 0) router.refresh();
+    } catch {
+      setRecoverResult("שגיאה בשחזור — בדוק את הקונסול");
+    } finally {
+      setRecovering(false);
+    }
+  }
 
   /** One chip per template slot — uses groupName when set, otherwise the primary item name. */
   const itemFilterOptions = useMemo<ItemFilterOption[]>(() =>
@@ -335,6 +354,24 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
           </button>
         )}
       </div>
+
+      {/* Recovery banner — shown when there are no boxes yet */}
+      {rows.length === 0 && (
+        <div className="rounded-xl border border-amber-800/60 bg-amber-950/30 px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-300">אין קרטונים — שחזר מהקצאות קיימות</p>
+            <p className="text-xs text-zinc-400 mt-0.5">אם יש לחיילים ציוד מוקצה שהיה בקרטונים, לחץ על שחזר כדי להעביר אותו בחזרה לקרטונים.</p>
+          </div>
+          <button
+            onClick={handleRecoverBoxes}
+            disabled={recovering}
+            className="shrink-0 inline-flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-bold text-zinc-950 hover:bg-amber-400 disabled:opacity-60 transition-colors"
+          >
+            {recovering ? <LoadingSpinner size="sm" /> : "♻ שחזר קרטונים"}
+          </button>
+          {recoverResult && <p className="text-xs text-emerald-400 sm:self-center">{recoverResult}</p>}
+        </div>
+      )}
 
       {/* Search + Item filter toggle */}
       <div className="flex flex-wrap gap-3">
