@@ -2,6 +2,7 @@ import {
   type ThemeTuning,
   mergeTuning,
   tuningScriptBody,
+  tuningToCssVars,
   applyTuningToDocumentElement,
   DEFAULT_TUNING,
 } from "@/lib/theme-tuning";
@@ -416,6 +417,58 @@ export const DEFAULT_THEME: SiteThemeData = {
 
 function esc(s: string): string {
   return JSON.stringify(s);
+}
+
+/**
+ * Theme snapshot for SSR on <html> / <body>.
+ * Must match what `buildThemeVarScript` applies so React hydration doesn't disagree with the DOM
+ * after the inline script runs (or if the script is delayed).
+ */
+export function getRootThemeServerSnapshot(
+  presetId: string,
+  effect: string,
+  tuningStored?: unknown
+): {
+  htmlStyle: Record<string, string>;
+  bodyStyle: { backgroundColor: string };
+  mode: ThemeMode;
+  effect: string;
+  hasImmersive: boolean;
+  cardFloat: boolean;
+  cardWiggle: boolean;
+} {
+  const p = getResolvedPreset(presetId);
+  const tun = mergeTuning(tuningStored);
+  const immersive = p.immersiveGradient;
+  const hasImmersive = immersive !== "transparent" && immersive.length > 2;
+
+  const htmlStyle: Record<string, string> = {
+    "--t-bg": p.bg,
+    "--t-surface": p.surface,
+    "--t-border": p.border,
+    "--t-accent": p.accent,
+    "--t-accent2": p.accent2,
+    "--t-glow": p.glow,
+    "--t-overlay": p.overlayColor,
+    "--t-fg": p.fg,
+    "--t-fg-muted": p.fgMuted,
+    "--t-photo-opacity": String(p.photoOpacity),
+    "--t-vignette": p.vignette,
+    "--t-immersive": immersive,
+  };
+  for (const [prop, val] of tuningToCssVars(tun)) {
+    htmlStyle[prop] = val;
+  }
+
+  return {
+    htmlStyle,
+    bodyStyle: { backgroundColor: p.bg },
+    mode: p.mode,
+    effect,
+    hasImmersive,
+    cardFloat: tun.cardFloat,
+    cardWiggle: tun.cardWiggle,
+  };
 }
 
 /** Inline script: apply theme before paint. Always include preset + effect + tuning from DB. */

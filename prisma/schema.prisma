@@ -42,6 +42,7 @@ model User {
   userDepartments      UserDepartment[]
   userPositions        UserPosition[]
   box                  Box?
+  tashLogs             TashLog[]        @relation("TashLogPerformedBy")
 
   @@index([role])
   @@index([active])
@@ -526,4 +527,63 @@ enum AuditEntity {
   REQUEST_ITEM
   BOX
   BOX_TEMPLATE
+  TASH_ITEM
+}
+
+enum TashLogAction {
+  ADDED
+  DEDUCTED
+  MOVED
+  RETURNED
+  LOST
+  STOLEN
+  DAMAGED
+}
+
+model TashItem {
+  id          String          @id @default(cuid())
+  name        String          @unique
+  description String?
+  unit        String          @default("יחידה")
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  inventory   TashInventory[]
+  logs        TashLog[]
+}
+
+model TashInventory {
+  id        String   @id @default(cuid())
+  itemId    String
+  location  String
+  quantity  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  item      TashItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, location])
+  @@index([itemId])
+}
+
+model TashLog {
+  id            String        @id @default(cuid())
+  itemId        String
+  action        TashLogAction
+  quantity      Int
+  fromLocation  String?
+  toLocation    String?
+  notes         String?
+  performedById String
+  createdAt     DateTime      @default(now())
+  item          TashItem      @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  performedBy   User          @relation("TashLogPerformedBy", fields: [performedById], references: [id])
+
+  @@index([itemId, createdAt])
+}
+
+model TashLocation {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  @@index([name])
 }
