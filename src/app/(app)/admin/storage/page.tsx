@@ -55,14 +55,38 @@ export default async function StoragePage() {
     },
   });
 
-  // Get box item counts per equipment item
-  const boxItemCounts = await prisma.boxItem.groupBy({
-    by: ["equipmentItemId"],
-    _sum: { quantity: true },
+  // Get box items with soldier details per equipment item
+  const boxItems = await prisma.boxItem.findMany({
+    select: {
+      equipmentItemId: true,
+      quantity: true,
+      box: {
+        select: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              personalNumber: true,
+            },
+          },
+        },
+      },
+    },
   });
+
   const boxCountMap: Record<string, number> = {};
-  for (const bi of boxItemCounts) {
-    boxCountMap[bi.equipmentItemId] = bi._sum.quantity ?? 0;
+  const boxSoldiersMap: Record<string, Array<{ userId: string; name: string; personalNumber: string | null; quantity: number }>> = {};
+  for (const bi of boxItems) {
+    boxCountMap[bi.equipmentItemId] = (boxCountMap[bi.equipmentItemId] ?? 0) + bi.quantity;
+    if (!boxSoldiersMap[bi.equipmentItemId]) {
+      boxSoldiersMap[bi.equipmentItemId] = [];
+    }
+    boxSoldiersMap[bi.equipmentItemId].push({
+      userId: bi.box.user.id,
+      name: bi.box.user.name,
+      personalNumber: bi.box.user.personalNumber,
+      quantity: bi.quantity,
+    });
   }
 
   // Calculate totals for each row
@@ -97,6 +121,7 @@ export default async function StoragePage() {
       },
       inStorage,
       inBoxes,
+      boxSoldiers: boxSoldiersMap[row.equipmentItem.id] ?? [],
       assignedHealthy,
       damaged,
       used,

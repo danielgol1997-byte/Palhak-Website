@@ -20,6 +20,13 @@ interface Assignment {
   };
 }
 
+interface BoxSoldier {
+  userId: string;
+  name: string;
+  personalNumber: string | null;
+  quantity: number;
+}
+
 interface StorageInventoryRow {
   id: string;
   equipmentItem: {
@@ -32,6 +39,7 @@ interface StorageInventoryRow {
   };
   inStorage: number;
   inBoxes: number;
+  boxSoldiers: BoxSoldier[];
   assignedHealthy: number;
   damaged: number;
   used: number;
@@ -517,16 +525,55 @@ export default function StorageList({ initialRows }: { initialRows: StorageInven
                 </div>
               </div>
             ) : statusModal.statusType === "inBoxes" ? (
-              <div className="rounded-xl border border-amber-900/40 bg-amber-900/10 p-6">
-                <div className="text-center">
-                  <div className="text-4xl sm:text-6xl font-black text-amber-400 mb-2">
-                    {statusModal.item.inBoxes}
+              <div>
+                <div className="mb-4 flex items-center gap-3">
+                  <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-amber-900/20 border border-amber-900/40">
+                    <span className="text-2xl font-black text-amber-400">{statusModal.item.inBoxes}</span>
                   </div>
-                  <div className="text-sm text-zinc-400">יחידות בקרטונים</div>
-                  <div className="mt-4 text-xs text-zinc-500">
-                    פריטים אלו מאוחסנים בקרטונים של חיילים. צפה ב<a href="/admin/boxes" className="text-amber-400 hover:underline">רשימת הקרטונים</a> לפרטים.
+                  <div>
+                    <div className="text-sm font-bold text-zinc-200">סה״כ יחידות בקרטונים</div>
+                    <div className="text-xs text-zinc-500">מפוזר בין {statusModal.item.boxSoldiers.length} חיילים</div>
                   </div>
                 </div>
+                {statusModal.item.boxSoldiers.length === 0 ? (
+                  <div className="py-10 text-center text-sm text-zinc-500">
+                    אין נתונים
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-zinc-800 overflow-hidden">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-zinc-950 text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                          <th className="px-4 py-3 text-right">חייל</th>
+                          <th className="px-4 py-3 text-right">מספר אישי</th>
+                          <th className="px-4 py-3 text-center">כמות בקרטון</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {statusModal.item.boxSoldiers.map((soldier) => (
+                          <tr key={soldier.userId} className="border-t border-zinc-800 hover:bg-zinc-900/40 transition-colors">
+                            <td className="px-4 py-3 text-sm font-medium">
+                              <Link
+                                href={`/admin/users/${soldier.userId}`}
+                                className="text-zinc-50 hover:text-amber-400 underline-offset-2 hover:underline"
+                              >
+                                {soldier.name}
+                              </Link>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-zinc-400">
+                              {soldier.personalNumber || "—"}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <div className="inline-flex items-center justify-center px-3 py-1 rounded-lg border border-amber-900/40 bg-amber-900/10 text-sm font-bold text-amber-400">
+                                {soldier.quantity}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             ) : (
               <div>
