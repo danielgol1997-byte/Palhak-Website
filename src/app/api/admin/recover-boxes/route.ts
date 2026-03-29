@@ -1,4 +1,3 @@
-"use server";
 // One-time recovery endpoint: rebuilds Box + BoxItem records from existing
 // ASSIGNED assignments that match the box template.
 // Safe to call multiple times – it skips any assignment already covered by a
