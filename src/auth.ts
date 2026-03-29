@@ -69,6 +69,8 @@ export const authOptions: NextAuthOptions = {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID ?? "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+      // Admin-created users exist with same email but no Account row yet; link Google OAuth to that User.
+      allowDangerousEmailAccountLinking: true,
     }),
   ],
   callbacks: {

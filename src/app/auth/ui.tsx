@@ -10,7 +10,7 @@ function errorToHebrew(code: string | null): string | null {
     case "OAuthCallback":
       return "אירעה שגיאה בהתחברות עם Google. נסה שוב.";
     case "OAuthAccountNotLinked":
-      return "החשבון כבר מקושר לשיטת התחברות אחרת. פנה למנהל.";
+      return "לא ניתן לקשר את Google לחשבון קיים. פנה למנהל או נסה שוב.";
     case "AccessDenied":
       return "אין הרשאה להתחבר.";
     default:

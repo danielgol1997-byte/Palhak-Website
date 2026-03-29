@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
-import { Role } from "@prisma/client";
+import { AssignmentStatus, Role } from "@prisma/client";
 import { UsersTable } from "./UsersTable";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +26,11 @@ export default async function UsersPage() {
       active: true,
       onboardedAt: true,
       createdAt: true,
-      _count: { select: { assignments: true } },
+      _count: {
+        select: {
+          assignments: { where: { active: true, status: AssignmentStatus.ASSIGNED } },
+        },
+      },
       userDepartments: {
         select: {
           department: {
