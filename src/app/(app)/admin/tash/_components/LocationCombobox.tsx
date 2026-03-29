@@ -5,6 +5,8 @@ import { deleteTashLocationAction } from "../actions";
 
 export type SavedLocation = { id: string; name: string };
 
+const YAMAH = "ימ״ח";
+
 interface LocationComboboxProps {
   name: string;
   value: string;
@@ -52,17 +54,33 @@ export function LocationCombobox({
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  async function handleDelete(loc: SavedLocation, e: React.MouseEvent) {
-    e.stopPropagation();
-    e.preventDefault();
+  async function removeFromSavedList(loc: SavedLocation) {
+    if (loc.name === YAMAH) return;
     const fd = new FormData();
     fd.set("id", loc.id);
     try {
       await deleteTashLocationAction(fd);
       onLocationsChange(locations.filter((l) => l.id !== loc.id));
+      if (value === loc.name) onChange("");
     } catch {
       // silently ignore
     }
+  }
+
+  function handleDeleteChip(loc: SavedLocation, e: React.MouseEvent) {
+    e.stopPropagation();
+    e.preventDefault();
+    void removeFromSavedList(loc);
+  }
+
+  function handleContextRemove(loc: SavedLocation, e: React.MouseEvent) {
+    if (loc.name === YAMAH) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof window !== "undefined" && !window.confirm(`להסיר את „${loc.name}” מהרשימה השמורה? (לא משנה מלאי)`)) {
+      return;
+    }
+    void removeFromSavedList(loc);
   }
 
   function selectLocation(locName: string) {
@@ -89,6 +107,46 @@ export function LocationCombobox({
         className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-500"
       />
 
+      {/* Saved locations — always visible chips; ✕ or right-click to remove (not ימ״ח) */}
+      {locations.filter((l) => l.name !== excludeLocation).length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {locations
+            .filter((l) => l.name !== excludeLocation)
+            .map((loc) => (
+              <span
+                key={loc.id}
+                onContextMenu={(e) => handleContextRemove(loc, e)}
+                title={loc.name === YAMAH ? YAMAH : `${loc.name} — לחיצה ימנית להסרה מהרשימה`}
+                className={`inline-flex max-w-full items-center gap-0.5 rounded-lg border pl-2 pr-0.5 py-0.5 text-xs ${
+                  loc.name === YAMAH
+                    ? "border-teal-800 bg-teal-950/40 text-teal-200"
+                    : "border-zinc-700 bg-zinc-800/80 text-zinc-200"
+                }`}
+              >
+                <button
+                  type="button"
+                  className="flex min-w-0 items-center gap-1 truncate text-right hover:opacity-90"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => selectLocation(loc.name)}
+                >
+                  <span className="shrink-0">{loc.name === YAMAH ? "🏭" : "📍"}</span>
+                  <span className="truncate">{loc.name}</span>
+                </button>
+                {loc.name !== YAMAH && (
+                  <button
+                    type="button"
+                    onClick={(e) => handleDeleteChip(loc, e)}
+                    className="shrink-0 rounded p-1 text-zinc-500 hover:bg-red-950/50 hover:text-red-400"
+                    title="הסר מהרשימה"
+                  >
+                    ✕
+                  </button>
+                )}
+              </span>
+            ))}
+        </div>
+      )}
+
       {open && (filtered.length > 0 || showAddNew) && (
         <div className="absolute z-50 mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl overflow-hidden">
           {/* Existing locations */}
@@ -96,24 +154,25 @@ export function LocationCombobox({
             <div
               key={loc.id}
               className="flex items-center justify-between px-3 py-2 hover:bg-zinc-800 cursor-pointer group"
+              onContextMenu={(e) => loc.name !== YAMAH && handleContextRemove(loc, e)}
               onMouseDown={(e) => {
                 e.preventDefault();
                 selectLocation(loc.name);
               }}
             >
               <div className="flex items-center gap-2 min-w-0">
-                {loc.name === "ימ״ח" ? (
+                {loc.name === YAMAH ? (
                   <span className="text-xs">🏭</span>
                 ) : (
                   <span className="text-xs text-zinc-500">📍</span>
                 )}
                 <span className="text-sm text-zinc-100 truncate">{loc.name}</span>
               </div>
-              {loc.name !== "ימ״ח" && (
+              {loc.name !== YAMAH && (
                 <button
                   type="button"
                   onMouseDown={(e) => e.stopPropagation()}
-                  onClick={(e) => handleDelete(loc, e)}
+                  onClick={(e) => handleDeleteChip(loc, e)}
                   className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-red-400 text-xs px-1 transition-opacity shrink-0"
                   title="הסר מהרשימה"
                 >

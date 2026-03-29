@@ -12,6 +12,7 @@ import {
   markTashLossAction,
   updateTashLogNotesAction,
   deleteTashLogAction,
+  deleteTashLocationAction,
 } from "../actions";
 import { LocationCombobox } from "./LocationCombobox";
 import type { SavedLocation } from "./LocationCombobox";
@@ -888,8 +889,18 @@ function ItemCard({
     return item.inventory.filter((inv) => inv.location === locationTab);
   }, [item.inventory, locationTab]);
 
+  function handleCardBackgroundClick(e: React.MouseEvent) {
+    const t = e.target as HTMLElement;
+    if (t.closest("button, a, input, textarea, select, label")) return;
+    setLocationsCollapsed((v) => !v);
+  }
+
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-900 overflow-hidden">
+    <div
+      role="presentation"
+      className="rounded-2xl border border-zinc-800 bg-zinc-900 overflow-hidden transition-colors hover:border-zinc-700/90"
+      onClick={handleCardBackgroundClick}
+    >
       <div className="flex items-start gap-2 px-4 py-3 sm:px-5 sm:py-4">
         <button
           type="button"
@@ -930,7 +941,7 @@ function ItemCard({
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-1.5 shrink-0">
+            <div className="flex flex-wrap gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
               <button
                 type="button"
                 onClick={() => onOpenModal({ type: "add-qty", item })}
@@ -969,7 +980,10 @@ function ItemCard({
           </div>
 
           {!locationsCollapsed && (
-            <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/40 overflow-hidden">
+            <div
+              className="rounded-xl border border-zinc-800/80 bg-zinc-950/40 overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
               {invRows.length === 0 ? (
                 <div className="px-4 py-4 text-sm text-zinc-500 text-center">
                   {locationTab
@@ -1066,6 +1080,15 @@ export function TashPage({
     window.location.reload();
   }
 
+  async function removeSavedLocation(saved: SavedLocation) {
+    if (!confirm(`להסיר את „${saved.name}” מרשימת המיקומים השמורים? (לא מוחק מלאי)`)) return;
+    const fd = new FormData();
+    fd.set("id", saved.id);
+    await deleteTashLocationAction(fd);
+    setLocations((prev) => prev.filter((l) => l.id !== saved.id));
+    setLocationTab((tab) => (tab === saved.name ? null : tab));
+  }
+
   return (
     <>
       <div className="flex flex-col gap-4">
@@ -1084,21 +1107,50 @@ export function TashPage({
             >
               כל הפריטים
             </button>
-            {locationTabNames.map((loc) => (
-              <button
-                key={loc}
-                type="button"
-                onClick={() => setLocationTab(loc)}
-                className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold border transition-colors max-w-[220px] truncate ${
-                  locationTab === loc
-                    ? "bg-teal-900/50 text-teal-100 border-teal-600"
-                    : "bg-zinc-900/80 text-zinc-300 border-zinc-700 hover:border-zinc-500"
-                }`}
-                title={loc}
-              >
-                {loc === YAMAH ? `🏭 ${loc}` : `📍 ${loc}`}
-              </button>
-            ))}
+            {locationTabNames.map((loc) => {
+              const saved = locations.find((l) => l.name === loc);
+              const canRemoveSaved = Boolean(saved && loc !== YAMAH);
+              const isActive = locationTab === loc;
+              return (
+                <div
+                  key={loc}
+                  onContextMenu={(e) => {
+                    if (!canRemoveSaved || !saved) return;
+                    e.preventDefault();
+                    void removeSavedLocation(saved);
+                  }}
+                  title={canRemoveSaved ? `${loc} — לחיצה ימנית או ✕ להסרה מהרשימה` : loc}
+                  className={`inline-flex shrink-0 items-stretch overflow-hidden rounded-full border text-sm font-semibold transition-colors max-w-[260px] ${
+                    isActive
+                      ? "border-teal-600 bg-teal-900/50 text-teal-100"
+                      : "border-zinc-700 bg-zinc-900/80 text-zinc-300 hover:border-zinc-500"
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setLocationTab(loc)}
+                    className="min-w-0 truncate px-4 py-2 text-right transition-colors hover:bg-white/5"
+                  >
+                    {loc === YAMAH ? `🏭 ${loc}` : `📍 ${loc}`}
+                  </button>
+                  {canRemoveSaved && saved && (
+                    <button
+                      type="button"
+                      title="הסר מיקום שמור"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void removeSavedLocation(saved);
+                      }}
+                      className={`shrink-0 border-s px-2.5 py-2 tabular-nums transition-colors hover:bg-red-950/50 hover:text-red-300 ${
+                        isActive ? "border-teal-700/40 text-teal-200/80" : "border-zinc-600/60 text-zinc-400"
+                      }`}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
           {locationTab && (
             <p className="text-xs text-zinc-400">
