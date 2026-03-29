@@ -1,4 +1,4 @@
-import { test, expect, type BrowserContext, type Page } from "@playwright/test";
+import { test, expect, type BrowserContext, type Locator, type Page } from "@playwright/test";
 import { encode } from "next-auth/jwt";
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
@@ -49,11 +49,19 @@ function itemCard(page: Page, name: string) {
   return page.locator("div.rounded-2xl").filter({ hasText: name }).first();
 }
 
+/** Ensures per-location rows are visible (chevron aria-expanded=true). */
+async function ensureCardLocationsExpanded(card: Locator, page: Page) {
+  const toggle = card.locator("button[aria-expanded]");
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") {
+    await toggle.click();
+    await page.waitForTimeout(400);
+  }
+}
+
 /** Expands an item card */
 async function expandCard(page: Page, name: string) {
   const card = itemCard(page, name);
-  await card.locator("div.cursor-pointer").first().click();
-  await page.waitForTimeout(400);
+  await ensureCardLocationsExpanded(card, page);
 }
 
 async function submitAndWaitForReload(page: Page, submitSelector: string) {
@@ -110,13 +118,13 @@ test.describe("Setup — clean prior test data", () => {
 
       const firstCard = testCards.first();
       const cardText = await firstCard.locator("span.font-bold").first().textContent().catch(() => "?");
-      await firstCard.locator("div.cursor-pointer").first().click();
+      await ensureCardLocationsExpanded(firstCard, page);
       await page.waitForTimeout(500);
 
       const deductBtns = firstCard.locator("button", { hasText: "−" });
 
       if ((await deductBtns.count()) === 0) {
-        const delBtn = firstCard.locator("button", { hasText: "🗑" });
+        const delBtn = firstCard.locator("button", { hasText: "מחק" });
         if ((await delBtn.count()) > 0) {
           await delBtn.click();
           await page.waitForTimeout(500);
@@ -135,9 +143,10 @@ test.describe("Setup — clean prior test data", () => {
         await page.waitForTimeout(500);
         const modal = page.locator(".fixed");
         if (await modal.isVisible()) {
-          const qtyText = await modal.locator("span.font-medium").nth(1).textContent().catch(() => "999");
-          const qty = parseInt(qtyText?.replace(/[^\d]/g, "") ?? "999") || 999;
-          await modal.locator('input[name="quantity"]').fill(String(qty));
+          const qtyInput = modal.locator('input[name="quantity"]');
+          const maxAttr = await qtyInput.getAttribute("max");
+          const qty = Math.max(1, parseInt(maxAttr ?? "", 10) || 1);
+          await qtyInput.fill(String(qty));
           // Use Promise.all to catch the reload navigation before it starts
           await Promise.all([
             page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 20000 }),
@@ -178,7 +187,7 @@ test.describe("ציוד ת״ש Feature", () => {
     await wait(page);
 
     await expect(page.locator("h1").filter({ hasText: "ציוד ת״ש" })).toBeVisible({ timeout: 15000 });
-    await expect(page.locator("button", { hasText: "+ הוסף פריט" })).toBeVisible();
+    await expect(page.locator("button", { hasText: "+ פריט" })).toBeVisible();
     expect(await page.locator("body").textContent()).not.toContain("An error occurred");
     console.log("✓ Page loaded");
   });
@@ -189,9 +198,9 @@ test.describe("ציוד ת״ש Feature", () => {
     await page.goto("/admin/tash");
     await wait(page);
 
-    await page.locator("button", { hasText: "+ הוסף פריט" }).click();
+    await page.locator("button", { hasText: "+ פריט" }).click();
     await page.waitForTimeout(500);
-    await expect(page.locator("text=הוספת פריט חדש")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator("text=פריט חדש")).toBeVisible({ timeout: 5000 });
 
     await page.locator('.fixed input[name="name"]').fill(TEST_ITEM_NAME);
     await page.locator('.fixed input[name="description"]').fill("פריט לצורכי בדיקה אוטומטית");
@@ -212,8 +221,7 @@ test.describe("ציוד ת״ש Feature", () => {
     const card = itemCard(page, TEST_ITEM_NAME);
     await expect(card).toBeVisible({ timeout: 10000 });
 
-    // Click the "+ הוסף" button INSIDE the card (title="הוסף כמות")
-    await card.locator('button[title="הוסף כמות"]').click();
+    await card.locator("button", { hasText: "+ כמות" }).click();
     await page.waitForTimeout(500);
 
     await expect(page.locator("text=הוספת כמות")).toBeVisible({ timeout: 5000 });
@@ -253,7 +261,7 @@ test.describe("ציוד ת״ש Feature", () => {
     await wait(page);
 
     const card = itemCard(page, TEST_ITEM_NAME);
-    await card.locator('button[title="הוסף כמות"]').click();
+    await card.locator("button", { hasText: "+ כמות" }).click();
     await page.waitForTimeout(500);
 
     await fillLocation(page, TEST_LOCATION_1);
@@ -272,7 +280,7 @@ test.describe("ציוד ת״ש Feature", () => {
     await wait(page);
 
     const card = itemCard(page, TEST_ITEM_NAME);
-    await card.locator('button[title="הוסף כמות"]').click();
+    await card.locator("button", { hasText: "+ כמות" }).click();
     await page.waitForTimeout(500);
 
     // Focus the location combobox to open dropdown
@@ -308,7 +316,7 @@ test.describe("ציוד ת״ש Feature", () => {
     await moveBtn.click();
     await page.waitForTimeout(500);
 
-    await expect(page.locator("text=העברה / החזרה")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator(".fixed").locator("text=העברה ·")).toBeVisible({ timeout: 5000 });
 
     // Click the location input to open the dropdown
     const toLocationInput = page.locator(".fixed input[type='text']").first();
@@ -356,10 +364,9 @@ test.describe("ציוד ת״ש Feature", () => {
     await moveBtn.click();
     await page.waitForTimeout(500);
 
-    await expect(page.locator("text=העברה / החזרה")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator(".fixed").locator("text=העברה ·")).toBeVisible({ timeout: 5000 });
 
-    // Click the in-modal "⮐ החזר לימ״ח" quick-fill button
-    const quickReturnBtn = page.locator(".fixed button").filter({ hasText: /החזר לימ.ח/ }).first();
+    const quickReturnBtn = page.locator(".fixed").locator("button", { hasText: "לימ״ח" }).first();
     await expect(quickReturnBtn).toBeVisible({ timeout: 3000 });
     await quickReturnBtn.click();
     await page.waitForTimeout(600); // Wait for React state update
@@ -384,12 +391,12 @@ test.describe("ציוד ת״ש Feature", () => {
 
     const card = itemCard(page, TEST_ITEM_NAME);
     // "הוצא" is unique to ימ״ח row — find its sibling ✕ button via title attribute
-    const lossBtn = card.locator('button[title="סמן כאבד/נגנב/ניזוק"]').first();
+    const lossBtn = card.locator('button[title="אובדן"]').first();
     await expect(lossBtn).toBeVisible({ timeout: 5000 });
     await lossBtn.click();
     await page.waitForTimeout(500);
 
-    await expect(page.locator("text=סימון סטטוס")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator(".fixed").locator("text=אובדן ·")).toBeVisible({ timeout: 5000 });
 
     await page.locator('.fixed select[name="action"]').selectOption("DAMAGED");
     await page.locator('.fixed input[name="quantity"]').fill("1");
@@ -406,10 +413,10 @@ test.describe("ציוד ת״ש Feature", () => {
     await wait(page);
 
     const card = itemCard(page, TEST_ITEM_NAME);
-    await card.locator("button", { hasText: "📋" }).click();
+    await card.locator("button", { hasText: "היסטוריה" }).click();
     await page.waitForTimeout(500);
 
-    await expect(page.locator("h2").filter({ hasText: "היסטוריה" })).toBeVisible({ timeout: 5000 });
+    await expect(page.locator(".fixed h2").first()).toContainText("היסטוריה", { timeout: 5000 });
 
     const modalText = await page.locator(".fixed").textContent();
     const hasAdded = modalText?.includes("נוסף");
@@ -429,7 +436,7 @@ test.describe("ציוד ת״ש Feature", () => {
     await wait(page);
 
     const card = itemCard(page, TEST_ITEM_NAME);
-    await card.locator("button", { hasText: "✎" }).click();
+    await card.locator("button", { hasText: "פריט" }).click();
     await page.waitForTimeout(500);
 
     await expect(page.locator("text=עריכת פריט")).toBeVisible({ timeout: 5000 });
@@ -446,7 +453,7 @@ test.describe("ציוד ת״ש Feature", () => {
     await page.goto("/admin/tash");
     await wait(page);
 
-    const searchInput = page.locator('input[placeholder*="חפש פריט"]');
+    const searchInput = page.locator('input[placeholder*="חיפוש"]');
     await expect(searchInput).toBeVisible({ timeout: 10000 });
 
     await searchInput.fill(TEST_ITEM_NAME.substring(0, 12));
@@ -455,7 +462,7 @@ test.describe("ציוד ת״ש Feature", () => {
 
     await searchInput.fill("xyz_impossible_9999");
     await page.waitForTimeout(400);
-    await expect(page.locator("text=לא נמצאו פריטים")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator("text=אין תוצאות")).toBeVisible({ timeout: 5000 });
 
     await searchInput.fill("");
     console.log("✓ Search filter works");
@@ -501,13 +508,13 @@ test.describe("Cleanup — remove all ציוד ת״ש test data", () => {
 
       const firstCard = testCards.first();
       const cardText = await firstCard.locator("span.font-bold").first().textContent().catch(() => "?");
-      await firstCard.locator("div.cursor-pointer").first().click();
+      await ensureCardLocationsExpanded(firstCard, page);
       await page.waitForTimeout(500);
 
       const deductBtns = firstCard.locator("button", { hasText: "−" });
 
       if ((await deductBtns.count()) === 0) {
-        const delBtn = firstCard.locator("button", { hasText: "🗑" });
+        const delBtn = firstCard.locator("button", { hasText: "מחק" });
         if ((await delBtn.count()) > 0) {
           await delBtn.click();
           await page.waitForTimeout(500);
@@ -529,9 +536,10 @@ test.describe("Cleanup — remove all ציוד ת״ש test data", () => {
         await page.waitForTimeout(500);
         const modal = page.locator(".fixed");
         if (await modal.isVisible()) {
-          const qtyText = await modal.locator("span.font-medium").nth(1).textContent().catch(() => "999");
-          const qty = parseInt(qtyText?.replace(/[^\d]/g, "") ?? "999") || 999;
-          await modal.locator('input[name="quantity"]').fill(String(qty));
+          const qtyInput = modal.locator('input[name="quantity"]');
+          const maxAttr = await qtyInput.getAttribute("max");
+          const qty = Math.max(1, parseInt(maxAttr ?? "", 10) || 1);
+          await qtyInput.fill(String(qty));
           await Promise.all([
             page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 20000 }),
             modal.locator('button[type="submit"]').click(),

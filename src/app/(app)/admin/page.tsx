@@ -92,7 +92,7 @@ const LINKS: {
   {
     href: "/admin/tash",
     title: "ציוד ת״ש",
-    desc: "ניהול ציוד ת״ש — מעקב כמויות, מיקומים והיסטוריה.",
+    desc: "כמויות לפי מיקום.",
     icon: (
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z" />

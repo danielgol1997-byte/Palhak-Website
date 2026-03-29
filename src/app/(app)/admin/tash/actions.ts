@@ -118,9 +118,6 @@ export async function deleteTashItemAction(formData: FormData) {
     if (!item) throw new Error("פריט לא נמצא.");
 
     const totalQty = item.inventory.reduce((sum, inv) => sum + inv.quantity, 0);
-    if (totalQty > 0) {
-      throw new Error("לא ניתן למחוק פריט עם כמות קיימת. יש להוריד את המלאי לאפס תחילה.");
-    }
 
     await tx.tashItem.delete({ where: { id } });
 
@@ -129,7 +126,13 @@ export async function deleteTashItemAction(formData: FormData) {
       entity: AuditEntity.TASH_ITEM,
       entityId: id,
       action: "TASH_ITEM_DELETED",
-      beforeJson: { name: item.name, description: item.description, unit: item.unit },
+      beforeJson: {
+        name: item.name,
+        description: item.description,
+        unit: item.unit,
+        totalQuantity: totalQty,
+        locations: item.inventory.map((i) => ({ location: i.location, quantity: i.quantity })),
+      },
       afterJson: null,
     });
   });
@@ -252,6 +255,127 @@ export async function deductTashQuantityAction(formData: FormData) {
         performedById: session.user.id,
       },
     });
+  });
+
+  revalidatePath("/admin/tash");
+}
+
+const SetInvQtySchema = z.object({
+  itemId: z.string().min(1),
+  location: z.string().trim().min(1),
+  newQuantity: z.coerce.number().int().min(0).max(100000),
+  notes: z.string().trim().optional(),
+});
+
+/** Set absolute quantity at one location; logs ADDED/DEDUCTED deltas for audit. */
+export async function setTashInventoryQuantityAction(formData: FormData) {
+  const session = await requireRole(Role.ADMIN);
+  const parsed = SetInvQtySchema.safeParse({
+    itemId: formData.get("itemId"),
+    location: formData.get("location"),
+    newQuantity: formData.get("newQuantity"),
+    notes: (formData.get("notes") as string) || undefined,
+  });
+  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "נתונים לא תקינים.");
+
+  await prisma.$transaction(async (tx) => {
+    const item = await tx.tashItem.findUnique({ where: { id: parsed.data.itemId } });
+    if (!item) throw new Error("פריט לא נמצא.");
+
+    const inv = await tx.tashInventory.findUnique({
+      where: {
+        itemId_location: {
+          itemId: parsed.data.itemId,
+          location: parsed.data.location,
+        },
+      },
+    });
+    const current = inv?.quantity ?? 0;
+    const target = parsed.data.newQuantity;
+    const delta = target - current;
+    if (delta === 0) return;
+
+    const notes = parsed.data.notes ?? null;
+
+    if (target === 0) {
+      if (inv) {
+        await tx.tashInventory.delete({
+          where: {
+            itemId_location: {
+              itemId: parsed.data.itemId,
+              location: parsed.data.location,
+            },
+          },
+        });
+        await tx.tashLog.create({
+          data: {
+            itemId: parsed.data.itemId,
+            action: TashLogAction.DEDUCTED,
+            quantity: current,
+            fromLocation: parsed.data.location,
+            notes,
+            performedById: session.user.id,
+          },
+        });
+      }
+      return;
+    }
+
+    if (!inv) {
+      await tx.tashInventory.create({
+        data: {
+          itemId: parsed.data.itemId,
+          location: parsed.data.location,
+          quantity: target,
+        },
+      });
+      await ensureTashLocation(tx, parsed.data.location);
+      await tx.tashLog.create({
+        data: {
+          itemId: parsed.data.itemId,
+          action: TashLogAction.ADDED,
+          quantity: target,
+          toLocation: parsed.data.location,
+          notes,
+          performedById: session.user.id,
+        },
+      });
+      return;
+    }
+
+    await tx.tashInventory.update({
+      where: {
+        itemId_location: {
+          itemId: parsed.data.itemId,
+          location: parsed.data.location,
+        },
+      },
+      data: { quantity: target },
+    });
+
+    if (delta > 0) {
+      await tx.tashLog.create({
+        data: {
+          itemId: parsed.data.itemId,
+          action: TashLogAction.ADDED,
+          quantity: delta,
+          toLocation: parsed.data.location,
+          notes,
+          performedById: session.user.id,
+        },
+      });
+    } else {
+      await tx.tashLog.create({
+        data: {
+          itemId: parsed.data.itemId,
+          action: TashLogAction.DEDUCTED,
+          quantity: -delta,
+          fromLocation: parsed.data.location,
+          notes,
+          performedById: session.user.id,
+        },
+      });
+    }
   });
 
   revalidatePath("/admin/tash");

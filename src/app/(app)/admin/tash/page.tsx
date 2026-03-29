@@ -42,9 +42,7 @@ export default async function TashAdminPage() {
     <div className="flex flex-col gap-6">
       <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-sm">
         <h1 className="text-2xl font-bold text-zinc-50">ציוד ת״ש</h1>
-        <p className="mt-2 text-sm text-zinc-400">
-          ניהול ציוד ת״ש — מעקב כמויות, מיקומים והיסטוריה
-        </p>
+        <p className="mt-2 text-sm text-zinc-400">כמויות לפי מיקום</p>
       </section>
 
       <TashPage initialItems={items} initialLocations={savedLocations} />

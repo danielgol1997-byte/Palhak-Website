@@ -8,6 +8,7 @@ import {
   deleteTashItemAction,
   addTashQuantityAction,
   deductTashQuantityAction,
+  setTashInventoryQuantityAction,
   moveTashQuantityAction,
   markTashLossAction,
   updateTashLogNotesAction,
@@ -51,6 +52,7 @@ type ModalState =
   | { type: "delete-item"; item: TashItemData }
   | { type: "add-qty"; item: TashItemData }
   | { type: "deduct-qty"; item: TashItemData; location: string; currentQty: number }
+  | { type: "set-qty"; item: TashItemData; location: string; currentQty: number }
   | { type: "move"; item: TashItemData; fromLocation: string; currentQty: number }
   | { type: "mark-loss"; item: TashItemData; location: string; currentQty: number }
   | { type: "history"; item: TashItemData; locationFilter?: string | null }
@@ -95,6 +97,14 @@ function formatDate(d: Date | string) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function FormattedDate({ value }: { value: Date | string }) {
+  return (
+    <span suppressHydrationWarning>
+      {formatDate(value)}
+    </span>
+  );
 }
 
 // ─── Shared modal wrapper ─────────────────────────────────────────────────────
@@ -178,17 +188,17 @@ function ItemFormModal({
   }
 
   return (
-    <Modal title={mode === "add" ? "הוספת פריט חדש" : "עריכת פריט"} onClose={onClose}>
+    <Modal title={mode === "add" ? "פריט חדש" : "עריכת פריט"} onClose={onClose}>
       <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
         {item && <input type="hidden" name="id" value={item.id} />}
-        <Field label="שם הפריט *">
-          <input className={inputCls} name="name" defaultValue={item?.name} placeholder="לדוג׳: שולחן, גיטרה, מיכל גז..." required />
+        <Field label="שם *">
+          <input className={inputCls} name="name" defaultValue={item?.name} required />
         </Field>
-        <Field label="תיאור (אופציונלי)">
-          <input className={inputCls} name="description" defaultValue={item?.description ?? ""} placeholder="תיאור קצר..." />
+        <Field label="תיאור">
+          <input className={inputCls} name="description" defaultValue={item?.description ?? ""} />
         </Field>
-        <Field label="יחידת מידה">
-          <input className={inputCls} name="unit" defaultValue={item?.unit ?? "יחידה"} placeholder="יחידה, זוג, ערכה..." />
+        <Field label="יחידה">
+          <input className={inputCls} name="unit" defaultValue={item?.unit ?? "יחידה"} />
         </Field>
         {error && <p className="text-sm text-red-400">{error}</p>}
         <div className="flex gap-3 pt-2">
@@ -197,7 +207,7 @@ function ItemFormModal({
             disabled={pending}
             className="flex-1 rounded-lg bg-zinc-100 py-2 text-sm font-bold text-zinc-900 hover:bg-white disabled:opacity-50 transition-colors"
           >
-            {pending ? "שומר..." : mode === "add" ? "הוסף פריט" : "שמור שינויים"}
+            {pending ? "שומר..." : mode === "add" ? "הוסף" : "שמור"}
           </button>
           <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-zinc-700 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors">
             ביטול
@@ -234,26 +244,23 @@ function DeleteModal({ item, onClose, onSuccess }: { item: TashItemData; onClose
     <Modal title="מחיקת פריט" onClose={onClose}>
       <div className="p-6 flex flex-col gap-4">
         <p className="text-sm text-zinc-300">
-          האם למחוק את הפריט <span className="font-bold text-zinc-50">{item.name}</span>?
+          <span className="font-bold text-zinc-50">{item.name}</span>
+          {total > 0 ? (
+            <> — יימחקו גם {total} {item.unit} בכל המיקומים וההיסטוריה.</>
+          ) : (
+            <> — יימחקו גם רשומות ההיסטוריה.</>
+          )}
         </p>
-        {total > 0 && (
-          <div className="rounded-lg border border-red-800 bg-red-900/20 p-3">
-            <p className="text-sm text-red-300">
-              לא ניתן למחוק — קיים מלאי של {total} {item.unit} בסך הכל.
-              יש לאפס את המלאי לפני המחיקה.
-            </p>
-          </div>
-        )}
         {error && <p className="text-sm text-red-400">{error}</p>}
         <div className="flex gap-3 pt-2">
           <button
             onClick={handleDelete}
-            disabled={pending || total > 0}
+            disabled={pending}
             className="flex-1 rounded-lg bg-red-600 py-2 text-sm font-bold text-white hover:bg-red-500 disabled:opacity-40 transition-colors"
           >
             {pending ? "מוחק..." : "מחק"}
           </button>
-          <button onClick={onClose} className="flex-1 rounded-lg border border-zinc-700 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors">
+          <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-zinc-700 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors">
             ביטול
           </button>
         </div>
@@ -299,7 +306,7 @@ function AddQtyModal({
   }
 
   return (
-    <Modal title={`הוספת כמות — ${item.name}`} onClose={onClose}>
+    <Modal title={`הוספת כמות · ${item.name}`} onClose={onClose}>
       <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
         <Field label="מיקום">
           <LocationCombobox
@@ -308,15 +315,15 @@ function AddQtyModal({
             onChange={setLocation}
             locations={locations}
             onLocationsChange={onLocationsChange}
-            placeholder="בחר או הקלד מיקום..."
+            placeholder="מיקום"
             required
           />
         </Field>
         <Field label={`כמות (${item.unit})`}>
           <input className={inputCls} name="quantity" type="number" min="1" placeholder="1" required />
         </Field>
-        <Field label="הערות (אופציונלי)">
-          <input className={inputCls} name="notes" placeholder="הערה..." />
+        <Field label="הערה">
+          <input className={inputCls} name="notes" />
         </Field>
         {error && <p className="text-sm text-red-400">{error}</p>}
         <div className="flex gap-3 pt-2">
@@ -368,24 +375,98 @@ function DeductQtyModal({
   }
 
   return (
-    <Modal title={`הורדת כמות — ${item.name}`} onClose={onClose}>
+    <Modal title={`הורדה · ${item.name}`} onClose={onClose}>
       <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
-        <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 px-4 py-3 text-sm">
-          <span className="text-zinc-400">מיקום: </span>
-          <span className="font-medium text-zinc-100">{location}</span>
-          <span className="text-zinc-400 mr-4">כמות קיימת: </span>
-          <span className="font-medium text-zinc-100">{currentQty} {item.unit}</span>
+        <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 px-4 py-3 text-sm text-zinc-200">
+          {location} — עכשיו {currentQty} {item.unit}
         </div>
-        <Field label={`כמות להורדה (${item.unit})`}>
+        <Field label={`כמה להוריד (${item.unit})`}>
           <input className={inputCls} name="quantity" type="number" min="1" max={currentQty} placeholder="1" required />
         </Field>
-        <Field label="הערות (אופציונלי)">
-          <input className={inputCls} name="notes" placeholder="סיבה / הערה..." />
+        <Field label="הערה">
+          <input className={inputCls} name="notes" />
         </Field>
         {error && <p className="text-sm text-red-400">{error}</p>}
         <div className="flex gap-3 pt-2">
           <button type="submit" disabled={pending} className="flex-1 rounded-lg bg-yellow-600 py-2 text-sm font-bold text-white hover:bg-yellow-500 disabled:opacity-50 transition-colors">
             {pending ? "שומר..." : "הורד"}
+          </button>
+          <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-zinc-700 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors">
+            ביטול
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+// ─── Set quantity at location (absolute) ──────────────────────────────────────
+
+function SetQtyModal({
+  item,
+  location,
+  currentQty,
+  onClose,
+  onSuccess,
+}: {
+  item: TashItemData;
+  location: string;
+  currentQty: number;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState("");
+  const [value, setValue] = useState(String(currentQty));
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError("");
+    const n = parseInt(value, 10);
+    if (Number.isNaN(n) || n < 0) {
+      setError("כמות לא תקינה");
+      return;
+    }
+    const fd = new FormData();
+    fd.set("itemId", item.id);
+    fd.set("location", location);
+    fd.set("newQuantity", String(n));
+    startTransition(async () => {
+      try {
+        await setTashInventoryQuantityAction(fd);
+        onSuccess();
+        onClose();
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "שגיאה");
+      }
+    });
+  }
+
+  return (
+    <Modal title={`כמות · ${item.name}`} onClose={onClose}>
+      <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
+        <div className="text-sm text-zinc-400">{location}</div>
+        <Field label={`כמות (${item.unit})`}>
+          <input
+            className={`${inputCls} text-lg font-semibold tabular-nums`}
+            type="number"
+            min={0}
+            max={100000}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            autoFocus
+            required
+          />
+        </Field>
+        <p className="text-xs text-zinc-500">0 — מסיר את השורה במיקום הזה</p>
+        {error && <p className="text-sm text-red-400">{error}</p>}
+        <div className="flex gap-3 pt-2">
+          <button
+            type="submit"
+            disabled={pending}
+            className="flex-1 rounded-lg bg-zinc-100 py-2 text-sm font-bold text-zinc-900 hover:bg-white disabled:opacity-50 transition-colors"
+          >
+            {pending ? "שומר..." : "עדכן"}
           </button>
           <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-zinc-700 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors">
             ביטול
@@ -439,16 +520,13 @@ function MoveModal({
   }
 
   return (
-    <Modal title={`העברה / החזרה — ${item.name}`} onClose={onClose}>
+    <Modal title={`העברה · ${item.name}`} onClose={onClose}>
       <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
-        <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 px-4 py-3 text-sm">
-          <span className="text-zinc-400">ממיקום: </span>
-          <span className="font-medium text-zinc-100">{fromLocation}</span>
-          <span className="text-zinc-400 mr-4">כמות: </span>
-          <span className="font-medium text-zinc-100">{currentQty} {item.unit}</span>
+        <div className="text-sm text-zinc-300">
+          מ־{fromLocation} · זמין {currentQty} {item.unit}
         </div>
 
-        <Field label="למיקום *">
+        <Field label="למיקום">
           <div className="flex flex-col gap-2">
             <LocationCombobox
               name="toLocation"
@@ -456,7 +534,7 @@ function MoveModal({
               onChange={setToLocation}
               locations={locations}
               onLocationsChange={onLocationsChange}
-              placeholder="בחר או הקלד מיקום יעד..."
+              placeholder="יעד"
               excludeLocation={fromLocation}
               required
             />
@@ -466,23 +544,17 @@ function MoveModal({
                 onClick={() => setToLocation(YAMAH)}
                 className="self-start rounded-lg border border-teal-700 bg-teal-900/30 px-3 py-1.5 text-xs font-bold text-teal-300 hover:bg-teal-900/50 transition-colors"
               >
-                ⮐ החזר לימ״ח
+                לימ״ח
               </button>
             )}
           </div>
         </Field>
 
-        {isReturn && (
-          <div className="rounded-lg border border-teal-800 bg-teal-900/20 px-3 py-2 text-xs text-teal-300">
-            ✓ פריט יוחזר ל{YAMAH}
-          </div>
-        )}
-
-        <Field label={`כמות להעברה (${item.unit})`}>
+        <Field label={`כמות (${item.unit})`}>
           <input className={inputCls} name="quantity" type="number" min="1" max={currentQty} placeholder="1" required />
         </Field>
-        <Field label="הערות (אופציונלי)">
-          <input className={inputCls} name="notes" placeholder="הערה..." />
+        <Field label="הערה">
+          <input className={inputCls} name="notes" />
         </Field>
 
         {error && <p className="text-sm text-red-400">{error}</p>}
@@ -541,16 +613,13 @@ function MarkLossModal({
   }
 
   return (
-    <Modal title={`סימון סטטוס — ${item.name}`} onClose={onClose}>
+    <Modal title={`אובדן · ${item.name}`} onClose={onClose}>
       <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
-        <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 px-4 py-3 text-sm">
-          <span className="text-zinc-400">מיקום: </span>
-          <span className="font-medium text-zinc-100">{location}</span>
-          <span className="text-zinc-400 mr-4">כמות: </span>
-          <span className="font-medium text-zinc-100">{currentQty} {item.unit}</span>
+        <div className="text-sm text-zinc-300">
+          {location} · {currentQty} {item.unit}
         </div>
 
-        <Field label="סטטוס">
+        <Field label="סוג">
           <select className={inputCls} name="action" required>
             <option value="LOST">אבד</option>
             <option value="STOLEN">נגנב</option>
@@ -562,13 +631,9 @@ function MarkLossModal({
           <input className={inputCls} name="quantity" type="number" min="1" max={currentQty} placeholder="1" required />
         </Field>
 
-        <Field label="הערות (אופציונלי)">
-          <input className={inputCls} name="notes" placeholder="פרטים נוספים..." />
+        <Field label="הערה">
+          <input className={inputCls} name="notes" />
         </Field>
-
-        <div className="rounded-lg border border-orange-800 bg-orange-900/20 px-3 py-2 text-xs text-orange-300">
-          ⚠️ הכמות תירשם כאבודה / גנובה / ניזוקה ותוסר מהמלאי.
-        </div>
 
         {error && <p className="text-sm text-red-400">{error}</p>}
         <div className="flex gap-3 pt-2">
@@ -661,10 +726,10 @@ function HistoryModal({
       <div className="w-full max-w-lg rounded-2xl border border-zinc-700 bg-zinc-900 shadow-2xl flex flex-col max-h-[85vh]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 shrink-0">
           <div>
-            <h2 className="text-lg font-bold text-zinc-50">היסטוריה — {item.name}</h2>
+            <h2 className="text-lg font-bold text-zinc-50">היסטוריה · {item.name}</h2>
             <p className="text-xs text-zinc-500 mt-0.5">
-              {logs.length} רשומות
-              {locationFilter ? ` · מסונן: ${locationFilter}` : ""}
+              {logs.length}
+              {locationFilter ? ` · ${locationFilter}` : ""}
             </p>
           </div>
           <button type="button" onClick={onClose} className="text-zinc-400 hover:text-zinc-200 text-xl leading-none">
@@ -684,7 +749,7 @@ function HistoryModal({
                     <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${ACTION_COLOR[log.action]}`}>
                       {ACTION_LABEL[log.action]}
                     </span>
-                    <span className="text-xs text-zinc-500 shrink-0">{formatDate(log.createdAt)}</span>
+                    <span className="text-xs text-zinc-500 shrink-0"><FormattedDate value={log.createdAt} /></span>
                   </div>
 
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
@@ -766,9 +831,7 @@ function HistoryModal({
 
                   {deleteId === log.id && (
                     <div className="rounded-lg border border-red-900/50 bg-red-950/30 p-2 space-y-2">
-                      <p className="text-xs text-red-200">
-                        מחיקה תבטל את השפעת הרשומה על המלאי (הפוך לפעולה). להמשיך?
-                      </p>
+                      <p className="text-xs text-red-200">לבטל רשומה ולהחזיר מלאי?</p>
                       <div className="flex gap-2">
                         <button
                           type="button"
@@ -776,7 +839,7 @@ function HistoryModal({
                           onClick={() => confirmDelete(log.id)}
                           className="rounded-lg bg-red-600 px-3 py-1 text-xs font-bold text-white hover:bg-red-500 disabled:opacity-50"
                         >
-                          {pending ? "מבצע..." : "כן, מחק ובטל במלאי"}
+                          {pending ? "מבצע..." : "אשר"}
                         </button>
                         <button
                           type="button"
@@ -805,12 +868,14 @@ function LocationRow({
   item,
   onMove,
   onDeduct,
+  onEditQty,
   onMarkLoss,
 }: {
   inv: TashInventoryData;
   item: TashItemData;
   onMove: () => void;
   onDeduct: () => void;
+  onEditQty: () => void;
   onMarkLoss: () => void;
 }) {
   const isYamah = inv.location === YAMAH;
@@ -829,40 +894,50 @@ function LocationRow({
         )}
       </div>
 
-      <span className="text-sm font-semibold text-zinc-100 shrink-0 tabular-nums">
-        {inv.quantity} <span className="text-xs text-zinc-500 font-normal">{item.unit}</span>
-      </span>
+      <button
+        type="button"
+        onClick={onEditQty}
+        title="ערוך כמות"
+        className="text-sm font-semibold text-zinc-100 shrink-0 tabular-nums rounded-md px-2 py-1 hover:bg-zinc-800 transition-colors"
+      >
+        {inv.quantity}
+        <span className="text-xs text-zinc-500 font-normal mr-0.5">{item.unit}</span>
+      </button>
 
       <div className="flex items-center gap-1 shrink-0">
         <button
+          type="button"
           onClick={onDeduct}
-          title="הורד כמות"
+          title="הורד"
           className="rounded-md px-2 py-1 text-xs text-yellow-400 hover:bg-yellow-900/30 transition-colors"
         >
           −
         </button>
         <button
+          type="button"
           onClick={onMove}
-          title={isYamah ? "הוצא ממחסן" : "העבר / החזר"}
+          title={isYamah ? "הוצא" : "העבר"}
           className="rounded-md px-2 py-1 text-xs text-blue-400 hover:bg-blue-900/30 transition-colors"
         >
           {isYamah ? "הוצא" : "הזז"}
         </button>
         {!isYamah && (
           <button
+            type="button"
             onClick={onMove}
-            title="החזר לימ״ח"
+            title="לימ״ח"
             className="rounded-md px-2 py-1 text-xs text-teal-400 hover:bg-teal-900/30 transition-colors font-semibold"
           >
-            ⮐ ימ״ח
+            ימ״ח
           </button>
         )}
         <button
+          type="button"
           onClick={onMarkLoss}
-          title="סמן כאבד/נגנב/ניזוק"
+          title="אובדן"
           className="rounded-md px-2 py-1 text-xs text-red-400 hover:bg-red-900/30 transition-colors"
         >
-          ✕
+          אובדן
         </button>
       </div>
     </div>
@@ -930,12 +1005,11 @@ function ItemCard({
                       : "bg-zinc-900 text-zinc-600 border-zinc-800"
                   }`}
                 >
-                  סה״כ: {total}
+                  ∑ {total}
                 </span>
                 {locationTab && (
                   <span className="text-xs text-teal-400 font-medium">
-                    במיקום &quot;{locationTab}&quot;:{" "}
-                    {item.inventory.find((i) => i.location === locationTab)?.quantity ?? 0}
+                    {locationTab}: {item.inventory.find((i) => i.location === locationTab)?.quantity ?? 0}
                   </span>
                 )}
               </div>
@@ -946,9 +1020,8 @@ function ItemCard({
                 type="button"
                 onClick={() => onOpenModal({ type: "add-qty", item })}
                 className="rounded-lg bg-emerald-900/30 border border-emerald-800 px-3 py-1.5 text-xs font-bold text-emerald-300 hover:bg-emerald-900/50 transition-colors"
-                title="הוסף כמות"
               >
-                + הוסף
+                + כמות
               </button>
               <button
                 type="button"
@@ -956,25 +1029,22 @@ function ItemCard({
                   onOpenModal({ type: "history", item, locationFilter: locationTab || undefined })
                 }
                 className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
-                title="היסטוריה"
               >
-                📋 היסטוריה
+                היסטוריה
               </button>
               <button
                 type="button"
                 onClick={() => onOpenModal({ type: "edit-item", item })}
                 className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
-                title="ערוך פריט"
               >
-                ✎ עריכה
+                פריט
               </button>
               <button
                 type="button"
                 onClick={() => onOpenModal({ type: "delete-item", item })}
-                className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-red-500 hover:text-red-400 hover:bg-zinc-800 transition-colors"
-                title="מחק פריט"
+                className="rounded-lg border border-red-900/50 px-2.5 py-1.5 text-xs text-red-400 hover:bg-red-950/40 transition-colors"
               >
-                🗑 מחיקה
+                מחק
               </button>
             </div>
           </div>
@@ -986,9 +1056,7 @@ function ItemCard({
             >
               {invRows.length === 0 ? (
                 <div className="px-4 py-4 text-sm text-zinc-500 text-center">
-                  {locationTab
-                    ? `אין מלאי במיקום „${locationTab}”.`
-                    : "אין מלאי — לחץ „+ הוסף”."}
+                  {locationTab ? `אין במיקום ${locationTab}` : "אין מלאי · + כמות"}
                 </div>
               ) : (
                 invRows.map((inv) => (
@@ -1007,6 +1075,14 @@ function ItemCard({
                     onDeduct={() =>
                       onOpenModal({
                         type: "deduct-qty",
+                        item,
+                        location: inv.location,
+                        currentQty: inv.quantity,
+                      })
+                    }
+                    onEditQty={() =>
+                      onOpenModal({
+                        type: "set-qty",
                         item,
                         location: inv.location,
                         currentQty: inv.quantity,
@@ -1094,7 +1170,6 @@ export function TashPage({
       <div className="flex flex-col gap-4">
         {/* Location tabs — see everything at a place */}
         <div className="flex flex-col gap-2">
-          <p className="text-xs font-medium text-zinc-500">מיקום</p>
           <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" dir="rtl">
             <button
               type="button"
@@ -1152,18 +1227,13 @@ export function TashPage({
               );
             })}
           </div>
-          {locationTab && (
-            <p className="text-xs text-zinc-400">
-              מציגים פריטים עם מלאי ב־„{locationTab}”. פתחו היסטוריה לפריט כדי לראות פעולות הקשורות למיקום (מסונן).
-            </p>
-          )}
         </div>
 
         {/* Toolbar */}
         <div className="flex items-center gap-3">
           <input
             className="flex-1 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-500"
-            placeholder="חפש פריט..."
+            placeholder="חיפוש..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -1172,26 +1242,23 @@ export function TashPage({
             onClick={() => setModal({ type: "add-item" })}
             className="shrink-0 rounded-xl bg-zinc-100 px-5 py-2.5 text-sm font-bold text-zinc-900 hover:bg-white transition-colors"
           >
-            + הוסף פריט
+            + פריט
           </button>
         </div>
 
         {/* Stats bar */}
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 px-5 py-3 flex flex-wrap gap-4 text-sm">
-          <span className="text-zinc-400">
-            <span className="font-semibold text-zinc-100">{items.length}</span> סוגי פריטים
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 px-5 py-3 flex flex-wrap gap-6 text-sm text-zinc-400">
+          <span>
+            <span className="font-semibold text-zinc-100">{items.length}</span> פריטים
           </span>
-          <span className="text-zinc-400">
-            <span className="font-semibold text-zinc-100">
-              {items.reduce((s, i) => s + totalQty(i), 0)}
-            </span>{" "}
-            יחידות בסה״כ
+          <span>
+            <span className="font-semibold text-zinc-100">{items.reduce((s, i) => s + totalQty(i), 0)}</span> יח׳
           </span>
-          <span className="text-zinc-400">
+          <span>
             <span className="font-semibold text-zinc-100">
               {new Set(items.flatMap((i) => i.inventory.map((inv) => inv.location))).size}
             </span>{" "}
-            מיקומים פעילים
+            מיקומים
           </span>
         </div>
 
@@ -1199,11 +1266,7 @@ export function TashPage({
         {list.length === 0 ? (
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-12 text-center">
             <p className="text-zinc-400 text-sm">
-              {locationTab
-                ? "אין פריטים עם מלאי במיקום שנבחר."
-                : search
-                  ? "לא נמצאו פריטים התואמים את החיפוש."
-                  : "אין פריטים עדיין. לחץ על ״+ הוסף פריט״ להתחיל."}
+              {locationTab ? "אין מלאי במיקום" : search ? "אין תוצאות" : "אין פריטים · + פריט"}
             </p>
           </div>
         ) : (
@@ -1241,6 +1304,15 @@ export function TashPage({
       )}
       {modal?.type === "deduct-qty" && (
         <DeductQtyModal
+          item={modal.item}
+          location={modal.location}
+          currentQty={modal.currentQty}
+          onClose={closeModal}
+          onSuccess={handleSuccess}
+        />
+      )}
+      {modal?.type === "set-qty" && (
+        <SetQtyModal
           item={modal.item}
           location={modal.location}
           currentQty={modal.currentQty}
