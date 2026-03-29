@@ -19,10 +19,32 @@ export type BoxMatrixUserRow = {
   slotQty: number[];
 };
 
-export async function fetchBoxMatrixExport(): Promise<{
+/** Per template slot: aggregate across all soldiers who have a box record */
+export type BoxMatrixTotalsRow = {
+  header: string;
+  requiredPerBox: number;
+  /** Sum of quantities observed in boxes for this slot */
+  totalInBoxes: number;
+  /** Required total minus in boxes, floored at 0 */
+  missing: number;
+  /** requiredPerBox × number of soldiers included in the export */
+  totalRequiredAllBoxes: number;
+};
+
+export type BoxMatrixExportData = {
   slots: BoxSlotColumn[];
   users: BoxMatrixUserRow[];
-} | null> {
+  totals: BoxMatrixTotalsRow[];
+  /** Soldiers with a Box row (shown on sheet & included in totals) */
+  usersWithBoxCount: number;
+  /** Active soldiers with no box at all — excluded from sheet & totals */
+  excludedWithoutBoxCount: number;
+};
+
+export const BOX_MATRIX_SUMMARY_NOTE =
+  "הסיכום מחושב רק עבור חיילים שיש להם רשומת קרטון במערכת — גם אם הקרטון ריק (למשל 0 מתוך כל הפריטים הנדרשים). חיילים שאין להם קרטון בכלל לא מוצגים בגליון ולא נספרים בסיכום.";
+
+export async function fetchBoxMatrixExport(): Promise<BoxMatrixExportData | null> {
   const tpl = await prisma.boxTemplate.findFirst({
     include: {
       items: {
@@ -56,24 +78,27 @@ export async function fetchBoxMatrixExport(): Promise<{
 
   const totalRequired = slots.reduce((s, sl) => s + sl.requiredQty, 0);
 
-  const usersRaw = await prisma.user.findMany({
-    where: { active: true },
-    select: {
-      id: true,
-      name: true,
-      personalNumber: true,
-      box: {
-        select: {
-          items: {
-            select: { equipmentItemId: true, quantity: true },
+  const [usersRaw, excludedWithoutBoxCount] = await Promise.all([
+    prisma.user.findMany({
+      where: { active: true, box: { isNot: null } },
+      select: {
+        id: true,
+        name: true,
+        personalNumber: true,
+        box: {
+          select: {
+            items: {
+              select: { equipmentItemId: true, quantity: true },
+            },
           },
         },
       },
-    },
-  });
+    }),
+    prisma.user.count({ where: { active: true, box: null } }),
+  ]);
 
   const users: BoxMatrixUserRow[] = usersRaw.map((u) => {
-    const items = u.box?.items ?? [];
+    const items = u.box!.items;
     const slotQty = slots.map((slot) =>
       items
         .filter((bi) => slot.groupIds.includes(bi.equipmentItemId))
@@ -99,7 +124,27 @@ export async function fetchBoxMatrixExport(): Promise<{
     return a.name.localeCompare(b.name, "he");
   });
 
-  return { slots, users };
+  const n = users.length;
+  const totals: BoxMatrixTotalsRow[] = slots.map((slot, slotIndex) => {
+    const totalInBoxes = users.reduce((s, u) => s + u.slotQty[slotIndex], 0);
+    const totalRequiredAllBoxes = slot.requiredQty * n;
+    const missing = Math.max(0, totalRequiredAllBoxes - totalInBoxes);
+    return {
+      header: slot.header,
+      requiredPerBox: slot.requiredQty,
+      totalInBoxes,
+      missing,
+      totalRequiredAllBoxes,
+    };
+  });
+
+  return {
+    slots,
+    users,
+    totals,
+    usersWithBoxCount: n,
+    excludedWithoutBoxCount,
+  };
 }
 
 /** Row background ARGB matching admin boxes UI: red → amber → emerald */

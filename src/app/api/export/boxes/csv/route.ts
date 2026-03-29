@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdminExportSession } from "../../_lib/adminExportAuth";
-import { fetchBoxMatrixExport } from "../../_lib/boxMatrixExport";
+import { BOX_MATRIX_SUMMARY_NOTE, fetchBoxMatrixExport } from "../../_lib/boxMatrixExport";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -22,7 +22,7 @@ export async function GET() {
     );
   }
 
-  const { slots, users } = data;
+  const { slots, users, totals, usersWithBoxCount, excludedWithoutBoxCount } = data;
   const headers = [
     "שם",
     "מספר אישי",
@@ -31,6 +31,24 @@ export async function GET() {
   ];
 
   const lines: string[] = [];
+  lines.push(csvEscape(BOX_MATRIX_SUMMARY_NOTE));
+  lines.push(["פריט (תא בקרטון)", "נדרש לקרטון", "סה״כ בקרטונים", "חסר"].map(csvEscape).join(","));
+  for (const t of totals) {
+    lines.push(
+      [t.header, String(t.requiredPerBox), String(t.totalInBoxes), String(t.missing)]
+        .map(csvEscape)
+        .join(","),
+    );
+  }
+  lines.push(csvEscape(`חיילים עם קרטון: ${usersWithBoxCount}`));
+  lines.push(
+    csvEscape(
+      excludedWithoutBoxCount > 0
+        ? `חיילים ללא קרטון (לא נכללו): ${excludedWithoutBoxCount}`
+        : "כל החיילים הפעילים כוללים קרטון.",
+    ),
+  );
+  lines.push("");
   lines.push(headers.map(csvEscape).join(","));
   for (const u of users) {
     const cells = [
