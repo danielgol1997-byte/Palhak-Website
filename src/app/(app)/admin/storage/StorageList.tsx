@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import { upsertStorageInventoryAction, recoverAssignmentToStorageAction } from "./actions";
 import { divisionLabel } from "@/lib/he";
 import { Division } from "@prisma/client";
@@ -566,8 +567,13 @@ export default function StorageList({ initialRows }: { initialRows: StorageInven
                         <tbody>
                           {relevantAssignments.map((assignment) => (
                             <tr key={assignment.id} className="border-t border-zinc-800">
-                              <td className="px-4 py-3 text-sm font-medium text-zinc-50">
-                                {assignment.user.name}
+                              <td className="px-4 py-3 text-sm font-medium">
+                                <Link
+                                  href={`/admin/users/${assignment.user.id}`}
+                                  className="text-zinc-50 hover:text-blue-400 underline-offset-2 hover:underline"
+                                >
+                                  {assignment.user.name}
+                                </Link>
                               </td>
                               <td className="px-4 py-3 text-sm text-zinc-400">
                                 {assignment.user.personalNumber || "-"}
@@ -654,7 +660,15 @@ export default function StorageList({ initialRows }: { initialRows: StorageInven
 
             <div className="mb-6 p-4 rounded-xl border border-zinc-800 bg-zinc-950 space-y-2">
               <div className="text-lg font-bold text-zinc-50">{recoveryModal.itemName}</div>
-              <div className="text-sm text-zinc-400">חייל: {recoveryModal.assignment.user.name}</div>
+              <div className="text-sm text-zinc-400">
+                חייל:{" "}
+                <Link
+                  href={`/admin/users/${recoveryModal.assignment.user.id}`}
+                  className="font-medium text-blue-400 hover:text-blue-300 underline-offset-2 hover:underline"
+                >
+                  {recoveryModal.assignment.user.name}
+                </Link>
+              </div>
               {recoveryModal.assignment.user.personalNumber && (
                 <div className="text-sm text-zinc-400">מספר אישי: {recoveryModal.assignment.user.personalNumber}</div>
               )}
