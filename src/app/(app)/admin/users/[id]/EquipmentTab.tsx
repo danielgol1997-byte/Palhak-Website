@@ -6,10 +6,12 @@ import { Division } from "@prisma/client";
 import { divisionLabel } from "@/lib/he";
 import {
   addToBoxDirectBulkAction,
-  adminAssignEquipmentAction,
+  adminAssignEquipmentBulkAction,
   adminTransferAssignmentAction,
   adminUnassignEquipmentAction,
+  adminUnassignEquipmentBulkAction,
   moveToBoxAction,
+  moveToBoxBulkAction,
   removeFromBoxAction,
   restoreFromBoxAction,
   transferBoxItemAction,
@@ -349,15 +351,20 @@ export function EquipmentTab({
     setIsSubmitting(true);
     setError(null);
     try {
-      for (const item of selectedItems) {
-        const formData = new FormData();
-        formData.append("userId", user.id);
-        formData.append("equipmentItemId", item.equipmentItemId);
-        formData.append("quantity", item.quantity.toString());
-        if (item.serialNumber) formData.append("serialNumber", item.serialNumber);
-        formData.append("adminNotes", adminNotes);
-        const result = await adminAssignEquipmentAction(formData);
-        if (!result.success) { setError(result.error || "אירעה שגיאה"); setIsSubmitting(false); return; }
+      const lines = selectedItems.map((item) => ({
+        equipmentItemId: item.equipmentItemId,
+        quantity: item.quantity,
+        ...(item.serialNumber ? { serialNumber: item.serialNumber } : {}),
+      }));
+      const formData = new FormData();
+      formData.append("userId", user.id);
+      formData.append("adminNotes", adminNotes);
+      formData.append("lines", JSON.stringify(lines));
+      const result = await adminAssignEquipmentBulkAction(formData);
+      if (!result.success) {
+        setError(result.error || "אירעה שגיאה");
+        setIsSubmitting(false);
+        return;
       }
       setAssignModal(false);
       setSelectedItems([]);
@@ -521,58 +528,65 @@ export function EquipmentTab({
   const handleBulkUnassign = async () => {
     if (!bulkUnassignNotes.trim()) return;
     const assignments = selectedAssignments;
-    setBulkProgress({ mode: "unassign", done: 0, total: assignments.length, errors: [], finished: false });
+    setBulkProgress({ mode: "unassign", done: 0, total: 1, errors: [], finished: false });
     setIsSubmitting(true);
     const errors: string[] = [];
-    for (let i = 0; i < assignments.length; i++) {
-      const assignment = assignments[i];
-      try {
-        const fd = new FormData();
-        fd.append("userId", user.id);
-        fd.append("assignmentId", assignment.id);
-        fd.append("quantity", assignment.quantity.toString());
-        fd.append("adminNotes", bulkUnassignNotes);
-        const result = await adminUnassignEquipmentAction(fd);
-        if (!result.success) errors.push(`${assignment.equipmentItem.name}: ${result.error || "שגיאה"}`);
-      } catch {
-        errors.push(`${assignment.equipmentItem.name}: שגיאה בלתי צפויה`);
-      }
-      setBulkProgress({ mode: "unassign", done: i + 1, total: assignments.length, errors: [...errors], finished: i === assignments.length - 1 });
+    try {
+      const fd = new FormData();
+      fd.append("userId", user.id);
+      fd.append("adminNotes", bulkUnassignNotes);
+      fd.append(
+        "lines",
+        JSON.stringify(
+          assignments.map((a) => ({
+            assignmentId: a.id,
+            quantity: a.quantity,
+          })),
+        ),
+      );
+      const result = await adminUnassignEquipmentBulkAction(fd);
+      if (!result.success) errors.push(result.error || "שגיאה");
+    } catch {
+      errors.push("שגיאה בלתי צפויה");
     }
+    setBulkProgress({ mode: "unassign", done: 1, total: 1, errors: [...errors], finished: true });
     setIsSubmitting(false);
     if (errors.length === 0) {
       setBulkUnassignModal(false);
       setBulkUnassignNotes("");
       clearSelection();
       setBulkProgress(null);
+      router.refresh();
     }
   };
 
   const handleBulkMoveToBox = async () => {
     const assignments = boxEligibleAssignments;
-    setBulkProgress({ mode: "moveToBox", done: 0, total: assignments.length, errors: [], finished: false });
+    setBulkProgress({ mode: "moveToBox", done: 0, total: 1, errors: [], finished: false });
     setIsSubmitting(true);
     const errors: string[] = [];
-    for (let i = 0; i < assignments.length; i++) {
-      const assignment = assignments[i];
-      const qty = Math.min(assignment.quantity, getBoxRemainingCapacity(assignment.equipmentItem.id));
-      try {
-        const fd = new FormData();
-        fd.append("userId", user.id);
-        fd.append("assignmentId", assignment.id);
-        fd.append("quantity", qty.toString());
-        const result = await moveToBoxAction(fd);
-        if (!result.success) errors.push(`${assignment.equipmentItem.name}: ${result.error || "שגיאה"}`);
-      } catch {
-        errors.push(`${assignment.equipmentItem.name}: שגיאה בלתי צפויה`);
+    try {
+      const lines = assignments.map((assignment) => ({
+        assignmentId: assignment.id,
+        quantity: Math.min(assignment.quantity, getBoxRemainingCapacity(assignment.equipmentItem.id)),
+      }));
+      const fd = new FormData();
+      fd.append("userId", user.id);
+      fd.append("lines", JSON.stringify(lines));
+      const result = await moveToBoxBulkAction(fd);
+      if (!result.success) {
+        errors.push(result.error || "שגיאה");
       }
-      setBulkProgress({ mode: "moveToBox", done: i + 1, total: assignments.length, errors: [...errors], finished: i === assignments.length - 1 });
+    } catch {
+      errors.push("שגיאה בלתי צפויה");
     }
+    setBulkProgress({ mode: "moveToBox", done: 1, total: 1, errors: [...errors], finished: true });
     setIsSubmitting(false);
     if (errors.length === 0) {
       setBulkMoveToBoxModal(false);
       clearSelection();
       setBulkProgress(null);
+      router.refresh();
     }
   };
 

@@ -3,7 +3,13 @@
 import { useState, useEffect } from "react";
 import { RequestType, RequestStatus, Priority, Division } from "@prisma/client";
 import { requestTypeLabel, requestStatusLabel, priorityLabel, divisionLabel, requestItemStatusLabel } from "@/lib/he";
-import { updateRequestPriorityAction, markRequestViewedAction, updateRequestNotesAction, handleRequestItemAction } from "./actions";
+import {
+  updateRequestPriorityAction,
+  markRequestViewedAction,
+  updateRequestNotesAction,
+  handleRequestItemAction,
+  handleRequestItemsBatchAction,
+} from "./actions";
 import { useRouter } from "next/navigation";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { ModalPortal } from "@/components/ui/ModalPortal";
@@ -88,6 +94,9 @@ export function RequestDetailModal({
     serialNumberLabel: string;
   } | null>(null);
   const [serialNumber, setSerialNumber] = useState("");
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
+  const [bulkFulfillDrafts, setBulkFulfillDrafts] = useState<Record<string, { quantity: number; serial: string }>>({});
+  const [bulkPanel, setBulkPanel] = useState<null | "fulfill">(null);
 
   // Check request type for appropriate action labels
   const isDeclaration = request.type === RequestType.DAMAGED || request.type === RequestType.STOLEN || request.type === RequestType.MISSING;
@@ -115,6 +124,117 @@ export function RequestDetailModal({
       markRequestViewedAction(formData).catch(console.error);
     }
   }, [request.id, request.viewedAt]);
+
+  useEffect(() => {
+    setSelectedItemIds(new Set());
+    setBulkPanel(null);
+    setBulkFulfillDrafts({});
+  }, [request.id]);
+
+  const toggleItemSelect = (itemId: string) => {
+    setSelectedItemIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
+  };
+
+  const selectAllPendingItems = () => {
+    setSelectedItemIds(new Set(request.items.filter((i) => i.status === "PENDING").map((i) => i.id)));
+  };
+
+  const clearItemSelection = () => {
+    setSelectedItemIds(new Set());
+    setBulkPanel(null);
+  };
+
+  const openBulkFulfillPanel = () => {
+    const next: Record<string, { quantity: number; serial: string }> = {};
+    for (const id of selectedItemIds) {
+      const item = request.items.find((i) => i.id === id);
+      if (!item || item.status !== "PENDING") continue;
+      const reqSerial = item.equipmentItem.isWeapon || item.equipmentItem.isSight;
+      let serial = "";
+      if (reqSerial) {
+        if (request.type === RequestType.TRANSFER) {
+          serial = item.serialNumber || "";
+        } else if (!isNewEquipment) {
+          serial =
+            request.requester.assignments?.find((a) => a.equipmentItemId === item.equipmentItem.id)?.serialNumber || "";
+        }
+      }
+      next[id] = { quantity: item.quantity, serial };
+    }
+    setBulkFulfillDrafts(next);
+    setBulkPanel("fulfill");
+  };
+
+  const runBulkDenyOrCancel = async (action: "DENY" | "CANCEL") => {
+    const targets = request.items.filter((i) => selectedItemIds.has(i.id) && i.status === "PENDING");
+    if (targets.length === 0) return;
+    const verb = action === "DENY" ? "לדחות" : "לבטל";
+    if (!confirm(`האם ל${verb} ${targets.length} פריטים?`)) return;
+    setIsProcessing(true);
+    try {
+      const formData = new FormData();
+      formData.append("requestId", request.id);
+      formData.append(
+        "operations",
+        JSON.stringify(targets.map((t) => ({ requestItemId: t.id, action }))),
+      );
+      const result = await handleRequestItemsBatchAction(formData);
+      if (result?.updatedRequest) setRequest(result.updatedRequest as typeof request);
+      else router.refresh();
+      clearItemSelection();
+    } catch (error: unknown) {
+      alert(error instanceof Error ? error.message : "שגיאה בפעולה מרובה");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const submitBulkFulfill = async () => {
+    const entries = Object.entries(bulkFulfillDrafts);
+    if (entries.length === 0) return;
+    for (const [itemId, draft] of entries) {
+      const item = request.items.find((i) => i.id === itemId);
+      if (!item) continue;
+      const needsSerial = item.equipmentItem.isWeapon || item.equipmentItem.isSight;
+      if (needsSerial && !draft.serial.trim()) {
+        alert(`נדרש מספר סידורי עבור ${item.equipmentItem.name}`);
+        return;
+      }
+      if (draft.quantity < 1 || draft.quantity > item.quantity) {
+        alert(`כמות לא תקינה עבור ${item.equipmentItem.name}`);
+        return;
+      }
+    }
+    setIsProcessing(true);
+    try {
+      const formData = new FormData();
+      formData.append("requestId", request.id);
+      formData.append(
+        "operations",
+        JSON.stringify(
+          entries.map(([requestItemId, d]) => ({
+            requestItemId,
+            action: "FULFILL" as const,
+            quantity: d.quantity,
+            serialNumber: d.serial.trim() || undefined,
+          })),
+        ),
+      );
+      const result = await handleRequestItemsBatchAction(formData);
+      if (result?.updatedRequest) setRequest(result.updatedRequest as typeof request);
+      else router.refresh();
+      clearItemSelection();
+    } catch (error: unknown) {
+      alert(error instanceof Error ? error.message : "שגיאה באישור מרובה");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   const handlePriorityChange = async (newPriority: Priority) => {
     setIsProcessing(true);
@@ -273,6 +393,8 @@ export function RequestDetailModal({
   };
 
   const hasPendingItems = request.items.some((item) => item.status === "PENDING");
+  const pendingItems = request.items.filter((item) => item.status === "PENDING");
+  const selectedPendingCount = pendingItems.filter((i) => selectedItemIds.has(i.id)).length;
   
   const hasWeaponsOrSights = request.items.some((item) => 
     (item.equipmentItem.isWeapon || item.equipmentItem.isSight) && item.status === "PENDING"
@@ -408,12 +530,136 @@ export function RequestDetailModal({
 
           {/* Items List with Individual Actions - Mobile Responsive */}
           <div>
-            <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-3">פריטים</div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-3">
+              <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider">פריטים</div>
+              {!isAdminEquipmentTransfer && pendingItems.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="text-zinc-500">
+                    נבחרו {selectedPendingCount}/{pendingItems.length} ממתינים
+                  </span>
+                  <button
+                    type="button"
+                    onClick={selectAllPendingItems}
+                    disabled={isProcessing}
+                    className="px-2 py-1 rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+                  >
+                    בחר הכל הממתינים
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearItemSelection}
+                    disabled={isProcessing || selectedItemIds.size === 0}
+                    className="px-2 py-1 rounded-lg border border-zinc-700 text-zinc-400 hover:bg-zinc-800 disabled:opacity-50"
+                  >
+                    נקה
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openBulkFulfillPanel}
+                    disabled={isProcessing || selectedPendingCount === 0}
+                    className="px-2 py-1 rounded-lg bg-green-900/30 text-green-400 border border-green-900/50 hover:bg-green-900/50 disabled:opacity-50"
+                  >
+                    אשר נבחרים…
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => runBulkDenyOrCancel("DENY")}
+                    disabled={isProcessing || selectedPendingCount === 0}
+                    className="px-2 py-1 rounded-lg bg-red-900/30 text-red-400 border border-red-900/50 hover:bg-red-900/50 disabled:opacity-50"
+                  >
+                    דחה נבחרים
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => runBulkDenyOrCancel("CANCEL")}
+                    disabled={isProcessing || selectedPendingCount === 0}
+                    className="px-2 py-1 rounded-lg bg-zinc-800 text-zinc-400 border border-zinc-600 hover:bg-zinc-700 disabled:opacity-50"
+                  >
+                    בטל נבחרים
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {bulkPanel === "fulfill" && Object.keys(bulkFulfillDrafts).length > 0 && (
+              <div className="mb-4 rounded-xl border border-green-900/40 bg-green-950/20 p-4 space-y-3">
+                <div className="text-xs font-bold text-green-400 uppercase tracking-wider">
+                  אישור מרובה — כוונן כמות ומספר סידורי לפני שליחה
+                </div>
+                <div className="space-y-3 max-h-48 overflow-y-auto">
+                  {Object.entries(bulkFulfillDrafts).map(([itemId, draft]) => {
+                    const item = request.items.find((i) => i.id === itemId);
+                    if (!item) return null;
+                    const needsSerial = item.equipmentItem.isWeapon || item.equipmentItem.isSight;
+                    const serialLabel = item.equipmentItem.isWeapon ? "צ׳ נשק" : "צ׳ צלמ";
+                    return (
+                      <div key={itemId} className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end border-b border-zinc-800/80 pb-3">
+                        <div className="text-sm text-zinc-200 font-medium">{item.equipmentItem.name}</div>
+                        <div>
+                          <label className="block text-[10px] text-zinc-500 mb-1">כמות (עד {item.quantity})</label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={item.quantity}
+                            value={draft.quantity}
+                            onChange={(e) => {
+                              const v = Math.max(1, Math.min(item.quantity, parseInt(e.target.value, 10) || 1));
+                              setBulkFulfillDrafts((prev) => ({ ...prev, [itemId]: { ...prev[itemId], quantity: v } }));
+                            }}
+                            className="w-full h-9 rounded-lg border border-zinc-700 bg-zinc-950 px-2 text-sm text-zinc-100"
+                          />
+                        </div>
+                        {needsSerial ? (
+                          <div>
+                            <label className="block text-[10px] text-zinc-500 mb-1">{serialLabel}</label>
+                            <input
+                              type="text"
+                              value={draft.serial}
+                              onChange={(e) =>
+                                setBulkFulfillDrafts((prev) => ({
+                                  ...prev,
+                                  [itemId]: { ...prev[itemId], serial: e.target.value },
+                                }))
+                              }
+                              className="w-full h-9 rounded-lg border border-zinc-700 bg-zinc-950 px-2 text-sm text-zinc-100 font-mono"
+                            />
+                          </div>
+                        ) : (
+                          <div className="text-xs text-zinc-600 sm:self-center">ללא צ׳</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex flex-wrap gap-2 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setBulkPanel(null)}
+                    disabled={isProcessing}
+                    className="px-3 py-2 rounded-lg border border-zinc-600 text-zinc-300 text-sm"
+                  >
+                    סגור
+                  </button>
+                  <button
+                    type="button"
+                    onClick={submitBulkFulfill}
+                    disabled={isProcessing}
+                    className="px-3 py-2 rounded-lg bg-green-900/40 text-green-300 border border-green-800 text-sm font-bold disabled:opacity-50"
+                  >
+                    {isProcessing ? "מעבד…" : `אשר ${Object.keys(bulkFulfillDrafts).length} פריטים`}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Desktop Table */}
             <div className="hidden sm:block rounded-xl border border-zinc-800 overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="bg-zinc-950 text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                    {!isAdminEquipmentTransfer && pendingItems.length > 0 && (
+                      <th className="px-2 py-3 w-10 text-center">בחירה</th>
+                    )}
                     <th className="px-4 py-3 text-right">שם פריט</th>
                     <th className="px-4 py-3 text-right">קטגוריה</th>
                     <th className="px-4 py-3 text-center">כמות</th>
@@ -425,6 +671,21 @@ export function RequestDetailModal({
                 <tbody>
                   {request.items.map((item) => (
                     <tr key={item.id} className="border-t border-zinc-800">
+                      {!isAdminEquipmentTransfer && pendingItems.length > 0 && (
+                        <td className="px-2 py-3 text-center align-middle">
+                          {item.status === "PENDING" ? (
+                            <input
+                              type="checkbox"
+                              checked={selectedItemIds.has(item.id)}
+                              onChange={() => toggleItemSelect(item.id)}
+                              disabled={isProcessing}
+                              className="h-4 w-4 rounded border-zinc-600 accent-green-600 cursor-pointer"
+                            />
+                          ) : (
+                            <span className="text-zinc-700">—</span>
+                          )}
+                        </td>
+                      )}
                       <td className="px-4 py-3 text-sm font-medium text-zinc-50">
                         {item.equipmentItem.name}
                       </td>
@@ -563,7 +824,16 @@ export function RequestDetailModal({
             <div className="sm:hidden space-y-3">
               {request.items.map((item) => (
                 <div key={item.id} className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 space-y-3">
-                  <div className="flex items-start justify-between">
+                  <div className="flex items-start justify-between gap-2">
+                    {!isAdminEquipmentTransfer && pendingItems.length > 0 && item.status === "PENDING" && (
+                      <input
+                        type="checkbox"
+                        checked={selectedItemIds.has(item.id)}
+                        onChange={() => toggleItemSelect(item.id)}
+                        disabled={isProcessing}
+                        className="mt-1 h-4 w-4 rounded border-zinc-600 accent-green-600 cursor-pointer flex-shrink-0"
+                      />
+                    )}
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-bold text-zinc-50 break-words">{item.equipmentItem.name}</div>
                       <div className="text-xs text-zinc-400 mt-1">{divisionLabel(item.equipmentItem.category.division)}</div>
@@ -857,7 +1127,7 @@ export function RequestDetailModal({
                   </div>
                   {quantityModal.quantity < quantityModal.requestedQuantity && (
                     <div className="mt-3 text-xs text-amber-400">
-                      ⚠️ אישור חלקי: יאושרו ${quantityModal.quantity} מתוך ${quantityModal.requestedQuantity}
+                      ⚠️ אישור חלקי: יאושרו {quantityModal.quantity} מתוך {quantityModal.requestedQuantity}
                     </div>
                   )}
                 </div>

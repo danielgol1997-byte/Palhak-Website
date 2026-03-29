@@ -15,7 +15,7 @@ export default async function RequestsPage({
   const searchParams = await searchParamsPromise;
   const searchTerm = searchParams.search || "";
 
-  const [equipmentRequests, transfers] = await Promise.all([
+  const [equipmentRequestsRaw, transfers] = await Promise.all([
     prisma.request.findMany({
       orderBy: [{ createdAt: "desc" }],
       select: {
@@ -29,22 +29,11 @@ export default async function RequestsPage({
         resolvedAt: true,
         createdAt: true,
         updatedAt: true,
+        requesterId: true,
         requester: {
           select: {
             id: true,
             name: true,
-            assignments: {
-              where: {
-                active: true,
-                // Don't filter by status - we need ALL statuses (ASSIGNED, STOLEN, DAMAGED, etc.)
-                // to show serial numbers for declarations and returns
-              },
-              select: {
-                equipmentItemId: true,
-                serialNumber: true,
-                status: true,
-              },
-            },
           },
         },
         resolvedBy: {
@@ -148,6 +137,49 @@ export default async function RequestsPage({
       },
     }),
   ]);
+
+  const pairKeys = new Set<string>();
+  for (const r of equipmentRequestsRaw) {
+    for (const it of r.items) {
+      pairKeys.add(`${r.requesterId}\t${it.equipmentItem.id}`);
+    }
+  }
+  const pairs = [...pairKeys].map((k) => {
+    const [userId, equipmentItemId] = k.split("\t");
+    return { userId, equipmentItemId };
+  });
+  const assignmentRows =
+    pairs.length === 0
+      ? []
+      : await prisma.assignment.findMany({
+          where: {
+            active: true,
+            OR: pairs.map((p) => ({ userId: p.userId, equipmentItemId: p.equipmentItemId })),
+          },
+          select: {
+            userId: true,
+            equipmentItemId: true,
+            serialNumber: true,
+            status: true,
+          },
+        });
+  const assignmentsByUser = new Map<string, typeof assignmentRows>();
+  for (const a of assignmentRows) {
+    const list = assignmentsByUser.get(a.userId) ?? [];
+    list.push(a);
+    assignmentsByUser.set(a.userId, list);
+  }
+
+  const equipmentRequests = equipmentRequestsRaw.map((row) => {
+    const { requesterId, ...rest } = row;
+    return {
+      ...rest,
+      requester: {
+        ...row.requester,
+        assignments: assignmentsByUser.get(requesterId) ?? [],
+      },
+    };
+  });
 
   // Split requests into new equipment, declarations, returns, admin assignments, in-progress, and closed
   // The key is: if ANY item is still PENDING, the request is "in progress"
