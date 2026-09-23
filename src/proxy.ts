@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { Role } from "@prisma/client";
+import { hasAtLeastRole, VIEW_ONLY_DENIED_MESSAGE } from "@/lib/rbac";
 
 const PUBLIC_PATHS = new Set<string>(["/auth", "/auth/verify", "/auth/error"]);
 
@@ -20,6 +21,14 @@ function isAdminOnlyPath(pathname: string) {
   );
 }
 
+function isSafeMethod(method: string) {
+  return method === "GET" || method === "HEAD" || method === "OPTIONS";
+}
+
+function viewOnlyDenied() {
+  return NextResponse.json({ message: VIEW_ONLY_DENIED_MESSAGE }, { status: 403 });
+}
+
 export async function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
 
@@ -28,7 +37,13 @@ export async function proxy(req: NextRequest) {
   if (/\.[a-zA-Z0-9]+$/.test(pathname)) return NextResponse.next();
 
   // API routes handle auth/authorization per-handler (return JSON 401/403 instead of redirects).
+  // View-only accounts may read them, but cannot call mutating endpoints.
   if (pathname.startsWith("/api/") && !pathname.startsWith("/api/auth")) {
+    if (!isSafeMethod(req.method)) {
+      const apiToken = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+      const apiRole = (apiToken?.role as Role | undefined) ?? Role.USER;
+      if (apiRole === Role.VIEW_ONLY) return viewOnlyDenied();
+    }
     return NextResponse.next();
   }
 
@@ -67,9 +82,10 @@ export async function proxy(req: NextRequest) {
   }
 
   const role = (token.role as Role | undefined) ?? Role.USER;
-  const isAdminRole =
-    role === Role.ADMIN || role === Role.SUPER_ADMIN || role === Role.THEME_MASTER;
-  if (isAdminOnlyPath(pathname) && !isAdminRole) {
+  if (role === Role.VIEW_ONLY && !isSafeMethod(req.method)) {
+    return viewOnlyDenied();
+  }
+  if (isAdminOnlyPath(pathname) && !hasAtLeastRole(role, Role.ADMIN)) {
     const url = req.nextUrl.clone();
     url.pathname = "/";
     return NextResponse.redirect(url);

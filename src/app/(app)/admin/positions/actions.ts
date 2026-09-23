@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { requireWriteRole } from "@/lib/auth";
 import { Role, AuditEntity } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
@@ -14,7 +14,7 @@ const CreateSchema = z.object({
 });
 
 export async function createPositionAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = CreateSchema.safeParse({
     departmentId: formData.get("departmentId"),
     name: formData.get("name"),
@@ -55,7 +55,7 @@ const UpdateSchema = z.object({
 });
 
 export async function updatePositionAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = UpdateSchema.safeParse({
     id: formData.get("id"),
     departmentId: formData.get("departmentId"),

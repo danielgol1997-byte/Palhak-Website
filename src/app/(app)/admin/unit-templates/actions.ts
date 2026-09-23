@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { requireWriteRole } from "@/lib/auth";
 import { AuditEntity, Division, Role } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
@@ -12,7 +12,7 @@ const CreateSchema = z.object({
 });
 
 export async function createUnitTemplateAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = CreateSchema.safeParse({
     name: formData.get("name"),
   });
@@ -47,7 +47,7 @@ const UpdateSchema = z.object({
 });
 
 export async function updateUnitTemplateAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = UpdateSchema.safeParse({
     id: formData.get("id"),
     name: formData.get("name"),
@@ -96,7 +96,7 @@ const SetItemsSchema = z.object({
 });
 
 export async function setUnitTemplateItemsAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = SetItemsSchema.safeParse({
     unitTemplateId: formData.get("unitTemplateId"),
     itemsJson: formData.get("itemsJson"),
@@ -170,7 +170,7 @@ const AddItemSchema = z.object({
 });
 
 export async function addUnitTemplateItemAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = AddItemSchema.safeParse({
     unitTemplateId: formData.get("unitTemplateId"),
     equipmentItemId: formData.get("equipmentItemId"),
@@ -226,7 +226,7 @@ const RemoveItemSchema = z.object({
 });
 
 export async function removeUnitTemplateItemAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = RemoveItemSchema.safeParse({
     unitTemplateId: formData.get("unitTemplateId"),
     equipmentItemId: formData.get("equipmentItemId"),
@@ -266,7 +266,7 @@ const AddMultipleItemsSchema = z.object({
 });
 
 export async function addMultipleUnitTemplateItemsAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   
   const itemsJson = formData.get("items");
   if (!itemsJson || typeof itemsJson !== "string") {
@@ -335,7 +335,7 @@ const DeleteSchema = z.object({
 });
 
 export async function deleteUnitTemplateAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = DeleteSchema.safeParse({
     id: formData.get("id"),
   });

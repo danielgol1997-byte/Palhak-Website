@@ -14,7 +14,7 @@ export function PersonalTabs({ equipmentTab, requestsTab, detailsTab }: Personal
   return (
     <div className="flex flex-col gap-6">
       {/* Tabs Navigation */}
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-2 flex gap-2">
+      <div data-view-ok="true" className="rounded-2xl border border-zinc-800 bg-zinc-900 p-2 flex gap-2">
         <button
           key="details"
           onClick={() => setActiveTab("details")}

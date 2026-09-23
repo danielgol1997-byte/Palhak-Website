@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireSession, requireRole } from "@/lib/auth";
+import { requireMutableSession, requireWriteRole } from "@/lib/auth";
 import {
   AssignmentStatus,
   AuditEntity,
@@ -54,7 +54,7 @@ const CreateRequestSchema = z.object({
 });
 
 export async function createRequestAction(formData: FormData) {
-  const session = await requireSession();
+  const session = await requireMutableSession();
   
   const itemsJson = formData.get("items");
   if (!itemsJson || typeof itemsJson !== "string") {
@@ -254,7 +254,7 @@ const CancelSchema = z.object({
 });
 
 export async function cancelRequestAction(formData: FormData) {
-  const session = await requireSession();
+  const session = await requireMutableSession();
   const parsed = CancelSchema.safeParse({ id: formData.get("id") });
   if (!parsed.success) throw new Error("נתונים לא תקינים.");
 
@@ -328,7 +328,7 @@ const AdminUpdateSchema = z.object({
 });
 
 export async function adminUpdateRequestAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = AdminUpdateSchema.safeParse({
     id: formData.get("id"),
     priority: formData.get("priority"),
@@ -380,7 +380,7 @@ const DenySchema = z.object({
 });
 
 export async function denyRequestAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = DenySchema.safeParse({ id: formData.get("id") });
   if (!parsed.success) throw new Error("נתונים לא תקינים.");
 
@@ -448,7 +448,7 @@ function statusFromRequestType(t: RequestType): AssignmentStatus | null {
 }
 
 export async function fulfillRequestAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = FulfillSchema.safeParse({ id: formData.get("id") });
   if (!parsed.success) throw new Error("נתונים לא תקינים.");
 

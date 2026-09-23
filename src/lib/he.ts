@@ -152,6 +152,8 @@ export function roleLabel(r: Role): string {
       return "מנהל";
     case "USER":
       return "משתמש";
+    case "VIEW_ONLY":
+      return "צפייה בלבד";
     case "THEME_MASTER":
       return "יובל על חלל";
     default:

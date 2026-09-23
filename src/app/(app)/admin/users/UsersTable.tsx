@@ -222,6 +222,7 @@ export function UsersTable({ users }: UsersTableProps) {
                       <option value={Role.SUPER_ADMIN}>{roleLabel(Role.SUPER_ADMIN)}</option>
                       <option value={Role.ADMIN}>{roleLabel(Role.ADMIN)}</option>
                       <option value={Role.USER}>{roleLabel(Role.USER)}</option>
+                      <option value={Role.VIEW_ONLY}>{roleLabel(Role.VIEW_ONLY)}</option>
                       <option value={Role.THEME_MASTER}>{roleLabel(Role.THEME_MASTER)}</option>
                     </select>
                   </div>
@@ -283,6 +284,8 @@ export function UsersTable({ users }: UsersTableProps) {
                         ? "bg-blue-900/20 text-blue-400 border-blue-900/40"
                         : user.role === Role.THEME_MASTER
                         ? "bg-fuchsia-900/20 text-fuchsia-400 border-fuchsia-900/40"
+                        : user.role === Role.VIEW_ONLY
+                        ? "bg-amber-900/20 text-amber-300 border-amber-900/40"
                         : "bg-zinc-900/20 text-zinc-400 border-zinc-700"
                     }`}>
                       {roleLabel(user.role)}

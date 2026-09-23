@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { requireWriteRole } from "@/lib/auth";
 import { Role, AuditEntity, Division } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
@@ -18,7 +18,7 @@ const CreateSchema = z.object({
 });
 
 export async function createItemAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = CreateSchema.safeParse({
     division: formData.get("division"),
     name: formData.get("name"),
@@ -86,7 +86,7 @@ const UpdateSchema = z.object({
 });
 
 export async function updateItemAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = UpdateSchema.safeParse({
     id: formData.get("id"),
     division: formData.get("division"),
@@ -136,7 +136,7 @@ export async function updateItemAction(formData: FormData) {
 }
 
 export async function deleteItemAction(formData: FormData): Promise<{ success: boolean; error?: string }> {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const id = formData.get("id") as string;
   if (!id) return { success: false, error: "מזהה פריט חסר." };
 

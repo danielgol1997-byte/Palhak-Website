@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { requireWriteRole } from "@/lib/auth";
 import { Role } from "@prisma/client";
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await requireRole(Role.ADMIN);
+    const session = await requireWriteRole(Role.ADMIN);
     const userId = session.user.id;
 
     const body = await request.json();

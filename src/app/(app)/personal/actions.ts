@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth";
+import { requireMutableSession } from "@/lib/auth";
 import { ClothingSize, ShoeSize } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
@@ -21,7 +21,7 @@ const UpdatePersonalDetailsSchema = z.object({
 
 export async function updatePersonalDetailsAction(formData: FormData) {
   try {
-    const session = await requireSession();
+    const session = await requireMutableSession();
 
     const data = {
       firstName: formData.get("firstName"),

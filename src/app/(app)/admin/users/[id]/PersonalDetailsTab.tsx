@@ -228,6 +228,7 @@ export function PersonalDetailsTab({ user, departments, positions }: PersonalDet
               className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-sm text-zinc-50 focus:ring-2 focus:ring-zinc-500 outline-none"
             >
               <option value={Role.USER}>{roleLabel(Role.USER)}</option>
+              <option value={Role.VIEW_ONLY}>{roleLabel(Role.VIEW_ONLY)}</option>
               <option value={Role.ADMIN}>{roleLabel(Role.ADMIN)}</option>
               <option value={Role.SUPER_ADMIN}>{roleLabel(Role.SUPER_ADMIN)}</option>
               <option value={Role.THEME_MASTER}>{roleLabel(Role.THEME_MASTER)}</option>

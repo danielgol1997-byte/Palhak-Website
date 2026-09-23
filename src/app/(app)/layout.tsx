@@ -3,6 +3,8 @@ import Link from "next/link";
 import { authOptions } from "@/auth";
 import { SignOutButton } from "@/components/SignOutButton";
 import { Role } from "@prisma/client";
+import { hasAtLeastRole } from "@/lib/rbac";
+import { ViewOnlyGuard } from "@/components/ViewOnlyGuard";
 import { BackButton } from "@/components/BackButton";
 import { AdminNotificationBell } from "./admin/_components/AdminNotificationBell";
 import { ThemeDesigner } from "./_components/ThemeDesigner";
@@ -17,8 +19,8 @@ export default async function AppLayout({
 }) {
   const session = await getServerSession(authOptions);
   const role = session?.user?.role as Role | undefined;
-  const isAdmin =
-    role === Role.ADMIN || role === Role.SUPER_ADMIN || role === Role.THEME_MASTER;
+  const isAdmin = role ? hasAtLeastRole(role, Role.ADMIN) : false;
+  const isViewOnly = role === Role.VIEW_ONLY;
   const isThemeMaster = role === Role.THEME_MASTER;
 
   let themePreset = DEFAULT_THEME.preset;
@@ -141,7 +143,7 @@ export default async function AppLayout({
       </header>
 
       <main className="mx-auto w-full min-w-0 max-w-5xl overflow-x-hidden px-4 py-5 pb-24">
-        {children}
+        {isViewOnly ? <ViewOnlyGuard>{children}</ViewOnlyGuard> : children}
       </main>
     </div>
   );

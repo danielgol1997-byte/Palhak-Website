@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { requireWriteRole } from "@/lib/auth";
 import { AuditEntity, Role } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
@@ -27,7 +27,7 @@ const UpsertInventorySchema = z.object({
 });
 
 export async function upsertStorageInventoryAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = UpsertInventorySchema.safeParse({
     equipmentItemId: formData.get("equipmentItemId"),
     quantity: formData.get("quantity"),
@@ -87,7 +87,7 @@ const DeleteInventorySchema = z.object({
 });
 
 export async function deleteStorageInventoryAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = DeleteInventorySchema.safeParse({
     id: formData.get("id"),
   });
@@ -123,7 +123,7 @@ const RecoverAssignmentSchema = z.object({
 });
 
 export async function recoverAssignmentToStorageAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = RecoverAssignmentSchema.safeParse({
     assignmentId: formData.get("assignmentId"),
     quantity: formData.get("quantity"),

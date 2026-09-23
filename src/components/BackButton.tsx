@@ -28,6 +28,8 @@ export function BackButton() {
 
   return (
     <button
+      type="button"
+      data-view-ok="true"
       onClick={handleBack}
       className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800 text-zinc-400 transition-all hover:bg-zinc-700 hover:text-zinc-50 active:scale-90 cursor-pointer"
       aria-label="חזרה"

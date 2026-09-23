@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { requireWriteRole } from "@/lib/auth";
 import { AuditEntity, Role, TashLogAction } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
@@ -21,7 +21,7 @@ async function ensureTashLocation(tx: Parameters<Parameters<typeof prisma.$trans
 }
 
 export async function deleteTashLocationAction(formData: FormData) {
-  await requireRole(Role.ADMIN);
+  await requireWriteRole(Role.ADMIN);
   const id = formData.get("id") as string;
   if (!id) throw new Error("מזהה חסר.");
   await prisma.tashLocation.delete({ where: { id } }).catch(() => null);
@@ -37,7 +37,7 @@ const ItemSchema = z.object({
 });
 
 export async function createTashItemAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = ItemSchema.safeParse({
     name: formData.get("name"),
     description: (formData.get("description") as string) || undefined,
@@ -68,7 +68,7 @@ export async function createTashItemAction(formData: FormData) {
 }
 
 export async function updateTashItemAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const id = formData.get("id") as string;
   if (!id) throw new Error("מזהה חסר.");
 
@@ -106,7 +106,7 @@ export async function updateTashItemAction(formData: FormData) {
 }
 
 export async function deleteTashItemAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const id = formData.get("id") as string;
   if (!id) throw new Error("מזהה חסר.");
 
@@ -150,7 +150,7 @@ const AddQtySchema = z.object({
 });
 
 export async function addTashQuantityAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = AddQtySchema.safeParse({
     itemId: formData.get("itemId"),
     location: formData.get("location"),
@@ -202,7 +202,7 @@ const DeductQtySchema = z.object({
 });
 
 export async function deductTashQuantityAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = DeductQtySchema.safeParse({
     itemId: formData.get("itemId"),
     location: formData.get("location"),
@@ -269,7 +269,7 @@ const SetInvQtySchema = z.object({
 
 /** Set absolute quantity at one location; logs ADDED/DEDUCTED deltas for audit. */
 export async function setTashInventoryQuantityAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = SetInvQtySchema.safeParse({
     itemId: formData.get("itemId"),
     location: formData.get("location"),
@@ -390,7 +390,7 @@ const MoveSchema = z.object({
 });
 
 export async function moveTashQuantityAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = MoveSchema.safeParse({
     itemId: formData.get("itemId"),
     fromLocation: formData.get("fromLocation"),
@@ -484,7 +484,7 @@ const MarkLossSchema = z.object({
 });
 
 export async function markTashLossAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = MarkLossSchema.safeParse({
     itemId: formData.get("itemId"),
     location: formData.get("location"),
@@ -625,7 +625,7 @@ const UpdateLogNotesSchema = z.object({
 });
 
 export async function updateTashLogNotesAction(formData: FormData) {
-  await requireRole(Role.ADMIN);
+  await requireWriteRole(Role.ADMIN);
   const parsed = UpdateLogNotesSchema.safeParse({
     id: formData.get("id"),
     notes: (formData.get("notes") as string) || "",
@@ -641,7 +641,7 @@ export async function updateTashLogNotesAction(formData: FormData) {
 }
 
 export async function deleteTashLogAction(formData: FormData) {
-  await requireRole(Role.ADMIN);
+  await requireWriteRole(Role.ADMIN);
   const id = formData.get("id") as string;
   if (!id) throw new Error("מזהה חסר.");
 

@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { requireWriteRole } from "@/lib/auth";
 import { Role, AuditEntity, Division } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
@@ -13,7 +13,7 @@ const CreateSchema = z.object({
 });
 
 export async function createDepartmentAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
 
   const parsed = CreateSchema.safeParse({
     name: formData.get("name"),
@@ -75,7 +75,7 @@ const UpdateSchema = z.object({
 });
 
 export async function updateDepartmentAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
 
   const parsed = UpdateSchema.safeParse({
     id: formData.get("id"),
@@ -140,7 +140,7 @@ export async function updateDepartmentAction(formData: FormData) {
 }
 
 export async function deleteDepartmentAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const id = formData.get("id") as string;
   if (!id) throw new Error("מזהה מחלקה חסר.");
 
@@ -179,7 +179,7 @@ export async function deleteDepartmentAction(formData: FormData) {
 }
 
 export async function reorderDepartmentsAction(ids: string[]) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
 
   await prisma.$transaction(async (tx) => {
     for (let i = 0; i < ids.length; i++) {

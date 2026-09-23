@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth";
+import { requireMutableSession } from "@/lib/auth";
 import { AssignmentStatus, AuditEntity, RequestItemStatus } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
@@ -15,7 +15,7 @@ const HandleTransferItemSchema = z.object({
 });
 
 export async function handleTransferItemAction(formData: FormData) {
-  const session = await requireSession();
+  const session = await requireMutableSession();
   
   const parsed = HandleTransferItemSchema.safeParse({
     requestItemId: formData.get("requestItemId"),

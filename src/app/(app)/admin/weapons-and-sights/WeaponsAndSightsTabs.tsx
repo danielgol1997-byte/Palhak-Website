@@ -48,7 +48,7 @@ export function WeaponsAndSightsTabs({
   return (
     <div className="flex flex-col gap-6">
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-zinc-800">
+      <div data-view-ok="true" className="flex gap-2 border-b border-zinc-800">
         {tabs.map((tab) => (
           <button
             key={tab.id}

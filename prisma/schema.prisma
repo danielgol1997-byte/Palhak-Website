@@ -410,6 +410,7 @@ enum Role {
   ADMIN
   USER
   THEME_MASTER
+  VIEW_ONLY
 }
 
 model SiteTheme {

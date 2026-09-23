@@ -154,6 +154,8 @@ export function AdminNotificationBell() {
     <div className="relative" ref={dropdownRef}>
       {/* Bell Icon Button */}
       <button
+        type="button"
+        data-view-ok="true"
         onClick={handleToggleDropdown}
         className="relative flex h-10 w-10 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-400 transition-all hover:border-zinc-700 hover:bg-zinc-800 hover:text-zinc-50"
         aria-label="התראות"
@@ -189,6 +191,8 @@ export function AdminNotificationBell() {
             <h3 className="text-sm font-bold text-zinc-50">התראות</h3>
             {notifications.length > 0 && (
               <button
+                type="button"
+                data-write="true"
                 onClick={clearAll}
                 disabled={isClearing}
                 className="text-xs font-bold text-zinc-400 hover:text-zinc-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"

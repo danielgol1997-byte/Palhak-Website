@@ -82,7 +82,7 @@ export function EquipmentTabs(props: EquipmentTabsProps) {
   return (
     <div className="flex flex-col gap-6">
       {/* Tabs */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div data-view-ok="true" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           return (

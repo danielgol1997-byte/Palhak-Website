@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { requireWriteRole } from "@/lib/auth";
 import { AssignmentStatus, AuditEntity, Role } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 
@@ -15,7 +15,7 @@ const AddSchema = z.object({
 });
 
 export async function adminAddAssignmentAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = AddSchema.safeParse({
     userId: formData.get("userId"),
     equipmentItemId: formData.get("equipmentItemId"),
@@ -67,7 +67,7 @@ const UpdateSchema = z.object({
 });
 
 export async function adminUpdateAssignmentAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = UpdateSchema.safeParse({
     assignmentId: formData.get("assignmentId"),
     quantity: formData.get("quantity"),
@@ -118,7 +118,7 @@ const RemoveSchema = z.object({
 });
 
 export async function adminRemoveAssignmentAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = RemoveSchema.safeParse({
     assignmentId: formData.get("assignmentId"),
   });

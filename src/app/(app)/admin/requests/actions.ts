@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { requireWriteRole } from "@/lib/auth";
 import { AssignmentStatus, Prisma, Priority, Role, RequestItemStatus, RequestType } from "@prisma/client";
 import { AuditEntity } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
@@ -13,7 +13,7 @@ const MarkViewedSchema = z.object({
 });
 
 export async function markRequestViewedAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = MarkViewedSchema.safeParse({ id: formData.get("id") });
   if (!parsed.success) throw new Error("נתונים לא תקינים.");
 
@@ -51,7 +51,7 @@ const UpdatePrioritySchema = z.object({
 });
 
 export async function updateRequestPriorityAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = UpdatePrioritySchema.safeParse({
     id: formData.get("id"),
     priority: formData.get("priority"),
@@ -103,7 +103,7 @@ const UpdateRequestNotesSchema = z.object({
 });
 
 export async function updateRequestNotesAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = UpdateRequestNotesSchema.safeParse({
     id: formData.get("id"),
     notes: formData.get("notes"),
@@ -1199,7 +1199,7 @@ if (data.action === "RESET") {
 }
 
 export async function handleRequestItemAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const quantityStr = formData.get("quantity");
   const parsed = HandleRequestItemSchema.safeParse({
     requestId: formData.get("requestId"),
@@ -1229,7 +1229,7 @@ export async function handleRequestItemAction(formData: FormData) {
 }
 
 export async function handleRequestItemsBatchAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const requestIdRaw = formData.get("requestId");
   const opsRaw = formData.get("operations");
   if (typeof requestIdRaw !== "string" || typeof opsRaw !== "string") {

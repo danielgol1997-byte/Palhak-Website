@@ -191,7 +191,7 @@ export function RequestTabs({
   return (
     <div className="flex flex-col gap-6">
       {/* Tabs - Scrollable on mobile */}
-      <div className="flex gap-2 border-b border-zinc-800 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
+      <div data-view-ok="true" className="flex gap-2 border-b border-zinc-800 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
         {tabs.map((tab) => (
           <button
             key={tab.id}

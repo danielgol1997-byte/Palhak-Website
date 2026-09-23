@@ -3,7 +3,9 @@ import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import type { Adapter, AdapterUser } from "next-auth/adapters";
+import { Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { isViewOnlyAccountEmail } from "@/lib/viewOnlyAccounts";
 
 function defaultUserName(email?: string | null): string {
   const base =
@@ -46,13 +48,17 @@ adapter.createUser = async (data: Omit<AdapterUser, "id">) => {
     return existing as AdapterUser;
   }
 
-  // No pre-existing user: create a brand-new one
+  // No pre-existing user: create a brand-new one.
+  // Specific accounts are created as view-only and skip onboarding, which they cannot submit.
+  const viewOnly = isViewOnlyAccountEmail(email);
   return prisma.user.create({
     data: {
       ...userData,
       email,
       name: data.name ?? defaultUserName(email),
       active: true,
+      role: viewOnly ? Role.VIEW_ONLY : Role.USER,
+      ...(viewOnly ? { onboardedAt: new Date() } : {}),
     },
   }) as Promise<AdapterUser>;
 };
@@ -76,6 +82,24 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async signIn({ user, account }) {
       if (account?.provider === "google") {
+        const email = user.email?.trim().toLowerCase();
+        // If this account was created earlier as a normal user, promote it once.
+        // An admin-assigned role other than USER is left as-is.
+        if (email && isViewOnlyAccountEmail(email)) {
+          await prisma.user.updateMany({
+            where: { email: { equals: email, mode: "insensitive" }, role: Role.USER },
+            data: { role: Role.VIEW_ONLY },
+          });
+          await prisma.user.updateMany({
+            where: {
+              email: { equals: email, mode: "insensitive" },
+              role: Role.VIEW_ONLY,
+              onboardedAt: null,
+            },
+            data: { onboardedAt: new Date() },
+          });
+        }
+
         const dbUser = await prisma.user.findUnique({
           where: { id: user.id },
           select: { active: true },

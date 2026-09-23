@@ -6,7 +6,7 @@ const ADMIN_USER = {
   id: "cmka0meph0000xcen4xre4jqf",
   name: "דניאל גולדברג",
   email: "danielgol1997@gmail.com",
-  role: "SUPER_ADMIN",
+  role: "SUPER_ADMIN" as const,
   active: true,
   onboardedAt: "2026-01-15T09:59:00.963Z",
 };

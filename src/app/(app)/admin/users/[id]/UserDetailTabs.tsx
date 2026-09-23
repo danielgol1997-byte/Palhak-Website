@@ -35,7 +35,7 @@ export function UserDetailTabs({
     <div className="flex flex-col gap-6">
       {/* Tab Navigation */}
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900 overflow-hidden">
-        <div className="flex border-b border-zinc-800">
+        <div data-view-ok="true" className="flex border-b border-zinc-800">
           <button
             onClick={() => setActiveTab("equipment")}
             className={`flex-1 px-6 py-4 text-sm font-bold transition-all ${

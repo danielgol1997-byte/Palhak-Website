@@ -2,8 +2,9 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { requireWriteRole } from "@/lib/auth";
 import { isPrivilegedOperator, PRIVILEGED_OPERATOR_ROLES } from "@/lib/rbac";
+import { isViewOnlyAccountEmail } from "@/lib/viewOnlyAccounts";
 import { AuditEntity, Role } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
@@ -14,7 +15,7 @@ const UpdateActiveSchema = z.object({
 });
 
 export async function adminUpdateUserActiveAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = UpdateActiveSchema.safeParse({
     userId: formData.get("userId"),
     active: formData.get("active"),
@@ -70,7 +71,7 @@ const UpdateRoleSchema = z.object({
 });
 
 export async function superAdminUpdateUserRoleAction(formData: FormData) {
-  const session = await requireRole(Role.SUPER_ADMIN);
+  const session = await requireWriteRole(Role.SUPER_ADMIN);
   const parsed = UpdateRoleSchema.safeParse({
     userId: formData.get("userId"),
     role: formData.get("role"),
@@ -135,7 +136,7 @@ const UpdateDeptPosSchema = z.object({
 });
 
 export async function adminUpdateUserDepartmentsPositionsAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
 
   const parsed = UpdateDeptPosSchema.safeParse({
     userId: formData.get("userId"),
@@ -228,7 +229,7 @@ const CreateUserSchema = z.object({
 export async function adminCreateUserAction(
   formData: FormData,
 ): Promise<{ success: boolean; error?: string; userId?: string }> {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
 
   const parsed = CreateUserSchema.safeParse({
     firstName: formData.get("firstName"),
@@ -261,6 +262,7 @@ export async function adminCreateUserAction(
       }
 
       const fullName = `${parsed.data.firstName} ${parsed.data.lastName}`.trim();
+      const viewOnly = isViewOnlyAccountEmail(parsed.data.email);
 
       const user = await tx.user.create({
         data: {
@@ -271,7 +273,10 @@ export async function adminCreateUserAction(
           firstName: parsed.data.firstName,
           lastName: parsed.data.lastName,
           active: true,
-          // onboardedAt is intentionally null — user will complete onboarding on first login
+          role: viewOnly ? Role.VIEW_ONLY : Role.USER,
+          // View-only accounts skip onboarding because they cannot submit it.
+          // Everyone else completes onboarding on first login.
+          ...(viewOnly ? { onboardedAt: new Date() } : {}),
         },
       });
 

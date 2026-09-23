@@ -1,13 +1,13 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { requireWriteRole } from "@/lib/auth";
 import { AuditEntity, Prisma, Role } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
 
 export async function createEmptyBoxAction(userId: string): Promise<{ success: boolean; error?: string }> {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   if (!session?.user?.id) return { success: false, error: "לא מורשה" };
 
   try {

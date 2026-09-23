@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { requireWriteRole } from "@/lib/auth";
 import {
   AssignmentStatus,
   AuditEntity,
@@ -25,7 +25,7 @@ const AssignEquipmentSchema = z.object({
 });
 
 export async function adminAssignEquipmentAction(formData: FormData): Promise<{ success: boolean; error?: string }> {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   
   const parsed = AssignEquipmentSchema.safeParse({
     userId: formData.get("userId"),
@@ -206,7 +206,7 @@ const AssignEquipmentBulkSchema = z.object({
 });
 
 export async function adminAssignEquipmentBulkAction(formData: FormData): Promise<{ success: boolean; error?: string }> {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   let linesRaw: unknown;
   const linesField = formData.get("lines");
   if (typeof linesField !== "string" || !linesField.trim()) {
@@ -385,7 +385,7 @@ const UnassignEquipmentSchema = z.object({
 });
 
 export async function adminUnassignEquipmentAction(formData: FormData): Promise<{ success: boolean; error?: string }> {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   
   const parsed = UnassignEquipmentSchema.safeParse({
     userId: formData.get("userId"),
@@ -533,7 +533,7 @@ const UnassignEquipmentBulkSchema = z.object({
 });
 
 export async function adminUnassignEquipmentBulkAction(formData: FormData): Promise<{ success: boolean; error?: string }> {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   let linesRaw: unknown;
   const linesField = formData.get("lines");
   if (typeof linesField !== "string" || !linesField.trim()) {
@@ -784,7 +784,7 @@ const MoveToBoxBulkSchema = z.object({
 });
 
 export async function moveToBoxAction(formData: FormData): Promise<{ success: boolean; error?: string }> {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = MoveToBoxSchema.safeParse({
     userId: formData.get("userId"),
     assignmentId: formData.get("assignmentId"),
@@ -808,7 +808,7 @@ export async function moveToBoxAction(formData: FormData): Promise<{ success: bo
 }
 
 export async function moveToBoxBulkAction(formData: FormData): Promise<{ success: boolean; error?: string }> {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   let linesRaw: unknown;
   const linesField = formData.get("lines");
   if (typeof linesField !== "string" || !linesField.trim()) {
@@ -854,7 +854,7 @@ const TransferAssignmentSchema = z.object({
 });
 
 export async function adminTransferAssignmentAction(formData: FormData): Promise<{ success: boolean; error?: string }> {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
 
   const parsed = TransferAssignmentSchema.safeParse({
     fromUserId: formData.get("fromUserId"),
@@ -1053,7 +1053,7 @@ const RestoreFromBoxSchema = z.object({
 });
 
 export async function restoreFromBoxAction(formData: FormData): Promise<{ success: boolean; error?: string }> {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = RestoreFromBoxSchema.safeParse({
     userId: formData.get("userId"),
     boxItemId: formData.get("boxItemId"),
@@ -1115,7 +1115,7 @@ const RemoveFromBoxSchema = z.object({
 });
 
 export async function removeFromBoxAction(formData: FormData): Promise<{ success: boolean; error?: string }> {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
 
   const parsed = RemoveFromBoxSchema.safeParse({
     userId: formData.get("userId"),
@@ -1196,7 +1196,7 @@ const TransferBoxItemSchema = z.object({
 });
 
 export async function transferBoxItemAction(formData: FormData): Promise<{ success: boolean; error?: string }> {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
 
   const parsed = TransferBoxItemSchema.safeParse({
     fromUserId: formData.get("fromUserId"),
@@ -1445,7 +1445,7 @@ const AddToBoxDirectBulkSchema = z.object({
 });
 
 export async function addToBoxDirectAction(formData: FormData): Promise<{ success: boolean; error?: string }> {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
 
   const parsed = AddToBoxDirectSchema.safeParse({
     userId: formData.get("userId"),
@@ -1520,7 +1520,7 @@ export async function addToBoxDirectAction(formData: FormData): Promise<{ succes
 }
 
 export async function addToBoxDirectBulkAction(formData: FormData): Promise<{ success: boolean; error?: string }> {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
 
   let linesRaw: unknown;
   const linesField = formData.get("lines");

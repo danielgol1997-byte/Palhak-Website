@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { requireWriteRole } from "@/lib/auth";
 import { isPrivilegedOperator, PRIVILEGED_OPERATOR_ROLES } from "@/lib/rbac";
 import { AuditEntity, Role, ClothingSize, ShoeSize } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
@@ -24,7 +24,7 @@ const UpdatePersonalDetailsSchema = z.object({
 });
 
 export async function adminUpdateUserPersonalDetailsAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   
   const parsed = UpdatePersonalDetailsSchema.safeParse({
     userId: formData.get("userId"),

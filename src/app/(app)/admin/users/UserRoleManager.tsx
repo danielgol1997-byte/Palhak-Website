@@ -51,6 +51,8 @@ export function UserRoleManager({ userId, currentRole, userName, isCurrentUser }
         return "bg-blue-900/20 text-blue-400 border-blue-900/40";
       case Role.USER:
         return "bg-zinc-900/20 text-zinc-400 border-zinc-700";
+      case Role.VIEW_ONLY:
+        return "bg-amber-900/20 text-amber-300 border-amber-900/40";
       case Role.THEME_MASTER:
         return "bg-fuchsia-900/20 text-fuchsia-400 border-fuchsia-900/40";
       default:
@@ -99,6 +101,7 @@ export function UserRoleManager({ userId, currentRole, userName, isCurrentUser }
             {Object.values(Role).map((role) => (
               <button
                 key={role}
+                data-write="true"
                 onClick={() => handleRoleChange(role)}
                 disabled={isSubmitting || role === currentRole}
                 className={`w-full px-4 py-3 text-right text-sm font-medium transition-colors ${
@@ -140,6 +143,11 @@ export function UserRoleManager({ userId, currentRole, userName, isCurrentUser }
                 {role === Role.USER && (
                   <div className="text-xs text-zinc-500 mt-1">
                     משתמש רגיל
+                  </div>
+                )}
+                {role === Role.VIEW_ONLY && (
+                  <div className="text-xs text-amber-500/80 mt-1">
+                    רואה הכל, בלי אפשרות שינוי
                   </div>
                 )}
                 {role === Role.THEME_MASTER && (

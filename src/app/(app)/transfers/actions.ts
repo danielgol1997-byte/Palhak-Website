@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireRole, requireSession } from "@/lib/auth";
+import { requireWriteRole, requireMutableSession } from "@/lib/auth";
 import {
   AssignmentStatus,
   AuditEntity,
@@ -24,7 +24,7 @@ const CreateTransferSchema = z.object({
 });
 
 export async function createTransferAction(formData: FormData) {
-  const session = await requireSession();
+  const session = await requireMutableSession();
   const parsed = CreateTransferSchema.safeParse({
     toUserId: formData.get("toUserId"),
     itemsJson: formData.get("itemsJson"),
@@ -120,7 +120,7 @@ export async function createTransferAction(formData: FormData) {
 const TransferIdSchema = z.object({ id: z.string().min(1) });
 
 export async function cancelTransferAction(formData: FormData) {
-  const session = await requireSession();
+  const session = await requireMutableSession();
   const parsed = TransferIdSchema.safeParse({ id: formData.get("id") });
   if (!parsed.success) throw new Error("נתונים לא תקינים.");
 
@@ -168,7 +168,7 @@ export async function cancelTransferAction(formData: FormData) {
 }
 
 export async function adminApproveTransferAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = TransferIdSchema.safeParse({ id: formData.get("id") });
   if (!parsed.success) throw new Error("נתונים לא תקינים.");
 
@@ -206,7 +206,7 @@ export async function adminApproveTransferAction(formData: FormData) {
 }
 
 export async function adminRejectTransferAction(formData: FormData) {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = TransferIdSchema.safeParse({ id: formData.get("id") });
   if (!parsed.success) throw new Error("נתונים לא תקינים.");
 
@@ -240,7 +240,7 @@ export async function adminRejectTransferAction(formData: FormData) {
 }
 
 export async function receiverConfirmTransferAction(formData: FormData) {
-  const session = await requireSession();
+  const session = await requireMutableSession();
   const parsed = TransferIdSchema.safeParse({ id: formData.get("id") });
   if (!parsed.success) throw new Error("נתונים לא תקינים.");
 

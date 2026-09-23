@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { requireWriteRole } from "@/lib/auth";
 import { AuditEntity, Role } from "@prisma/client";
 import { writeAuditLog } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
@@ -28,7 +28,7 @@ const AddItemSchema = z.object({
 export async function addBoxTemplateItemAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = AddItemSchema.safeParse({
     equipmentItemId: formData.get("equipmentItemId"),
     quantity: formData.get("quantity"),
@@ -89,7 +89,7 @@ const RemoveItemSchema = z.object({
 export async function removeBoxTemplateItemAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = RemoveItemSchema.safeParse({
     equipmentItemId: formData.get("equipmentItemId"),
   });
@@ -139,7 +139,7 @@ const AddMultipleItemsSchema = z.object({
 export async function addMultipleBoxTemplateItemsAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
 
   const itemsJson = formData.get("items");
   if (!itemsJson || typeof itemsJson !== "string") {
@@ -207,7 +207,7 @@ const UpdateGroupNameSchema = z.object({
 export async function updateGroupNameAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = UpdateGroupNameSchema.safeParse({
     templateItemId: formData.get("templateItemId"),
     groupName: formData.get("groupName") ?? "",
@@ -253,7 +253,7 @@ const AddAltSchema = z.object({
 export async function addAlternativeAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = AddAltSchema.safeParse({
     templateItemId: formData.get("templateItemId"),
     alternativeItemId: formData.get("alternativeItemId"),
@@ -315,7 +315,7 @@ const RemoveAltSchema = z.object({
 export async function removeAlternativeAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
-  const session = await requireRole(Role.ADMIN);
+  const session = await requireWriteRole(Role.ADMIN);
   const parsed = RemoveAltSchema.safeParse({
     altId: formData.get("altId"),
   });

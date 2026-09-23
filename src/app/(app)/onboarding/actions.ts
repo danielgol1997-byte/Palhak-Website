@@ -1,6 +1,6 @@
 "use server";
 
-import { requireSession } from "@/lib/auth";
+import { requireMutableSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -21,7 +21,7 @@ const OnboardingSchema = z.object({
 
 export async function completeOnboardingAction(formData: FormData) {
   try {
-    const session = await requireSession();
+    const session = await requireMutableSession();
 
     // If already onboarded, don't allow re-onboarding
     if (session.user.onboardedAt) {

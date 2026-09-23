@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
 import { Role } from "@prisma/client";
+import { canMutate } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +21,7 @@ export async function POST() {
     return NextResponse.json({ message: "לא מחובר." }, { status: 401 });
   }
 
-  if (session.user.role === Role.USER) {
+  if (session.user.role === Role.USER || !canMutate(session.user.role)) {
     return NextResponse.json({ message: "אין הרשאה." }, { status: 403 });
   }
 

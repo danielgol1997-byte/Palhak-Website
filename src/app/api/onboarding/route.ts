@@ -5,6 +5,7 @@ import { authOptions } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit";
 import { AuditEntity, AssignmentStatus } from "@prisma/client";
+import { canMutate, VIEW_ONLY_DENIED_MESSAGE } from "@/lib/rbac";
 
 const BodySchema = z.object({
   firstName: z.string().trim().min(1),
@@ -30,6 +31,9 @@ export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ message: "לא מחובר." }, { status: 401 });
+  }
+  if (!canMutate(session.user.role)) {
+    return NextResponse.json({ message: VIEW_ONLY_DENIED_MESSAGE }, { status: 403 });
   }
 
   const parsed = BodySchema.safeParse(await req.json().catch(() => null));
