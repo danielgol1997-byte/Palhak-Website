@@ -19,7 +19,7 @@
     "backup:download": "tsx scripts/backup/download-all.ts",
     "backup:restore": "tsx scripts/backup/restore.ts",
     "backup:verify": "tsx scripts/backup/verify-file.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.tooling.json",
     "backup:selftest": "tsx scripts/backup/selftest.ts"
   },
   "prisma": {
