@@ -19,6 +19,9 @@ function defaultUserName(email?: string | null): string {
 
 const adapter = PrismaAdapter(prisma) as Adapter;
 
+/** How long a JWT may reuse its role/active claims before re-reading them from the DB. */
+const ROLE_REFRESH_MS = 60_000;
+
 // When a Google user signs in for the first time, NextAuth calls createUser.
 // If an admin pre-created a User row with the same email we link to it
 // instead of creating a duplicate.
@@ -110,12 +113,17 @@ export const authOptions: NextAuthOptions = {
       }
       return true;
     },
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       if (user?.id) {
         token.sub = user.id;
       }
 
-      if (token.sub) {
+      // Refresh role / active / onboarding from the DB, but not on every request:
+      // once per ROLE_REFRESH_MS is plenty and saves a DB round-trip per page view.
+      const checkedAt = typeof token.roleCheckedAt === "number" ? token.roleCheckedAt : 0;
+      const stale = Date.now() - checkedAt > ROLE_REFRESH_MS;
+      const force = Boolean(user) || trigger === "update" || trigger === "signIn" || !token.role;
+      if (token.sub && (stale || force)) {
         try {
           const dbUser = await prisma.user.findUnique({
             where: { id: token.sub },
@@ -125,6 +133,7 @@ export const authOptions: NextAuthOptions = {
             token.role = dbUser.role;
             token.active = dbUser.active;
             token.onboardedAt = dbUser.onboardedAt?.toISOString() ?? null;
+            token.roleCheckedAt = Date.now();
           }
         } catch {
           // DB unavailable: keep existing token claims

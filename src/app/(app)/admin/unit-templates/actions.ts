@@ -38,6 +38,8 @@ export async function createUnitTemplateAction(formData: FormData) {
   });
 
   revalidatePath("/admin/unit-templates");
+
+  revalidatePath("/admin/inventory/unit-templates");
 }
 
 const UpdateSchema = z.object({
@@ -87,6 +89,8 @@ export async function updateUnitTemplateAction(formData: FormData) {
   });
 
   revalidatePath("/admin/unit-templates");
+
+  revalidatePath("/admin/inventory/unit-templates");
   revalidatePath(`/admin/unit-templates/${parsed.data.id}`);
 }
 
@@ -160,6 +164,8 @@ export async function setUnitTemplateItemsAction(formData: FormData) {
   });
 
   revalidatePath("/admin/unit-templates");
+
+  revalidatePath("/admin/inventory/unit-templates");
   revalidatePath(`/admin/unit-templates/${parsed.data.unitTemplateId}`);
 }
 
@@ -368,6 +374,8 @@ export async function deleteUnitTemplateAction(formData: FormData) {
   });
 
   revalidatePath("/admin/unit-templates");
+
+  revalidatePath("/admin/inventory/unit-templates");
 }
 
 

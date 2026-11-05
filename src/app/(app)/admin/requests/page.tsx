@@ -1,10 +1,83 @@
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
-import { Role, RequestStatus, TransferStatus } from "@prisma/client";
+import { Prisma, Role, RequestStatus, RequestType, RequestItemStatus, TransferStatus } from "@prisma/client";
 import { RequestTabs } from "./RequestTabs";
 import { SearchBar } from "./SearchBar";
 
 export const dynamic = "force-dynamic";
+
+/** Closed / admin-history tabs are capped to this many rows unless a search term is present. */
+const HISTORY_CAP = 300;
+
+const ADMIN_TYPES: RequestType[] = [RequestType.ADMIN_ASSIGNMENT, RequestType.ADMIN_EQUIPMENT_TRANSFER];
+
+const requestSelect = {
+  id: true,
+  type: true,
+  status: true,
+  priority: true,
+  userNotes: true,
+  adminNotes: true,
+  viewedAt: true,
+  resolvedAt: true,
+  createdAt: true,
+  updatedAt: true,
+  requesterId: true,
+  requester: {
+    select: {
+      id: true,
+      name: true,
+    },
+  },
+  resolvedBy: {
+    select: {
+      id: true,
+      name: true,
+    },
+  },
+  recipient: {
+    select: {
+      id: true,
+      name: true,
+      personalNumber: true,
+    },
+  },
+  items: {
+    select: {
+      id: true,
+      quantity: true,
+      status: true,
+      serialNumber: true,
+      clothingSize: true,
+      shoeSize: true,
+      resolvedAt: true,
+      resolvedById: true,
+      recipientNotes: true,
+      recipientAcceptedAt: true,
+      resolvedBy: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      equipmentItem: {
+        select: {
+          id: true,
+          name: true,
+          isWeapon: true,
+          isSight: true,
+          isClothing: true,
+          isShoe: true,
+          category: {
+            select: {
+              division: true,
+            },
+          },
+        },
+      },
+    },
+  },
+} satisfies Prisma.RequestSelect;
 
 export default async function RequestsPage({
   searchParams: searchParamsPromise,
@@ -14,77 +87,43 @@ export default async function RequestsPage({
   await requireRole(Role.ADMIN);
   const searchParams = await searchParamsPromise;
   const searchTerm = searchParams.search || "";
+  // When searching we must see old rows too, so the history queries are uncapped.
+  const historyTake = searchTerm ? undefined : HISTORY_CAP;
 
-  const [equipmentRequestsRaw, transfers] = await Promise.all([
+  const [liveRequestsRaw, closedRequestsRaw, adminRequestsRaw, transfers] = await Promise.all([
+    // 1) "Live" work: everything that can still change — open requests of any regular type,
+    //    requests with at least one PENDING item (in-progress), and all soldier transfers
+    //    (the transfers tab shows every TRANSFER request for documentation).
     prisma.request.findMany({
-      orderBy: [{ createdAt: "desc" }],
-      select: {
-        id: true,
-        type: true,
-        status: true,
-        priority: true,
-        userNotes: true,
-        adminNotes: true,
-        viewedAt: true,
-        resolvedAt: true,
-        createdAt: true,
-        updatedAt: true,
-        requesterId: true,
-        requester: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        resolvedBy: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        recipient: {
-          select: {
-            id: true,
-            name: true,
-            personalNumber: true,
-          },
-        },
-        items: {
-          select: {
-            id: true,
-            quantity: true,
-            status: true,
-            serialNumber: true,
-            clothingSize: true,
-            shoeSize: true,
-            resolvedAt: true,
-            resolvedById: true,
-            recipientNotes: true,
-            recipientAcceptedAt: true,
-            resolvedBy: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
-            equipmentItem: {
-              select: {
-                id: true,
-                name: true,
-                isWeapon: true,
-                isSight: true,
-                isClothing: true,
-                isShoe: true,
-                category: {
-                  select: {
-                    division: true,
-                  },
-                },
-              },
-            },
-          },
-        },
+      where: {
+        type: { notIn: ADMIN_TYPES },
+        OR: [
+          { status: RequestStatus.OPEN },
+          { type: RequestType.TRANSFER },
+          { items: { some: { status: RequestItemStatus.PENDING } } },
+        ],
       },
+      orderBy: [{ createdAt: "desc" }],
+      select: requestSelect,
+    }),
+    // 2) Closed history: not OPEN and no PENDING items (same rule as the JS classification below).
+    //    Capped unless searching.
+    prisma.request.findMany({
+      where: {
+        type: { notIn: [...ADMIN_TYPES, RequestType.TRANSFER] },
+        status: { not: RequestStatus.OPEN },
+        items: { none: { status: RequestItemStatus.PENDING } },
+      },
+      orderBy: [{ createdAt: "desc" }],
+      take: historyTake,
+      select: requestSelect,
+    }),
+    // 3) Admin history (ניהול שרירותי): capped unless searching.
+    prisma.request.findMany({
+      where: { type: { in: ADMIN_TYPES } },
+      orderBy: [{ createdAt: "desc" }],
+      take: historyTake,
+      select: requestSelect,
     }),
     prisma.transfer.findMany({
       where: {
@@ -138,8 +177,18 @@ export default async function RequestsPage({
     }),
   ]);
 
+  const closedCapped = !searchTerm && closedRequestsRaw.length >= HISTORY_CAP;
+  const adminCapped = !searchTerm && adminRequestsRaw.length >= HISTORY_CAP;
+  const cappedNote = `מוצגות ${HISTORY_CAP} הבקשות האחרונות — חפש כדי למצוא ישנות יותר`;
+
+  // Active-assignment lookup (serial numbers for returns/declarations in the detail modal, and
+  // serial search). Only the live tabs need it; closed/admin rows are included only while
+  // searching, so that a search by assignment serial still reaches old requests.
+  const assignmentSourceRows = searchTerm
+    ? [...liveRequestsRaw, ...closedRequestsRaw, ...adminRequestsRaw]
+    : liveRequestsRaw;
   const pairKeys = new Set<string>();
-  for (const r of equipmentRequestsRaw) {
+  for (const r of assignmentSourceRows) {
     for (const it of r.items) {
       pairKeys.add(`${r.requesterId}\t${it.equipmentItem.id}`);
     }
@@ -170,6 +219,7 @@ export default async function RequestsPage({
     assignmentsByUser.set(a.userId, list);
   }
 
+  const equipmentRequestsRaw = [...liveRequestsRaw, ...closedRequestsRaw, ...adminRequestsRaw];
   const equipmentRequests = equipmentRequestsRaw.map((row) => {
     const { requesterId, ...rest } = row;
     return {
@@ -236,7 +286,7 @@ export default async function RequestsPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-sm">
+      <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 shadow-sm sm:p-6">
         <h1 className="text-2xl font-bold text-zinc-50">בקשות</h1>
         <p className="mt-2 text-sm text-zinc-400">ניהול בקשות ציוד והעברות</p>
       </section>
@@ -253,6 +303,8 @@ export default async function RequestsPage({
         closedRequests={closedRequests}
         transfers={transfers}
         searchTerm={searchTerm}
+        closedCappedNote={closedCapped ? cappedNote : undefined}
+        adminCappedNote={adminCapped ? cappedNote : undefined}
       />
     </div>
   );

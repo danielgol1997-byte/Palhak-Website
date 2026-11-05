@@ -18,7 +18,7 @@ export function PersonalTabs({ equipmentTab, requestsTab, detailsTab }: Personal
         <button
           key="details"
           onClick={() => setActiveTab("details")}
-          className={`flex-1 h-12 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+          className={`flex-1 min-h-12 rounded-xl px-1 py-2 text-xs sm:text-sm leading-tight font-bold transition-all cursor-pointer ${
             activeTab === "details"
               ? "bg-zinc-50 text-zinc-950"
               : "text-zinc-400 hover:text-zinc-50 hover:bg-zinc-800"
@@ -29,7 +29,7 @@ export function PersonalTabs({ equipmentTab, requestsTab, detailsTab }: Personal
         <button
           key="equipment"
           onClick={() => setActiveTab("equipment")}
-          className={`flex-1 h-12 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+          className={`flex-1 min-h-12 rounded-xl px-1 py-2 text-xs sm:text-sm leading-tight font-bold transition-all cursor-pointer ${
             activeTab === "equipment"
               ? "bg-zinc-50 text-zinc-950"
               : "text-zinc-400 hover:text-zinc-50 hover:bg-zinc-800"
@@ -40,7 +40,7 @@ export function PersonalTabs({ equipmentTab, requestsTab, detailsTab }: Personal
         <button
           key="requests"
           onClick={() => setActiveTab("requests")}
-          className={`flex-1 h-12 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+          className={`flex-1 min-h-12 rounded-xl px-1 py-2 text-xs sm:text-sm leading-tight font-bold transition-all cursor-pointer ${
             activeTab === "requests"
               ? "bg-zinc-50 text-zinc-950"
               : "text-zinc-400 hover:text-zinc-50 hover:bg-zinc-800"
@@ -51,11 +51,7 @@ export function PersonalTabs({ equipmentTab, requestsTab, detailsTab }: Personal
       </div>
 
       {/* Tab Content */}
-      <div>
-        {activeTab === "equipment" && equipmentTab}
-        {activeTab === "requests" && requestsTab}
-        {activeTab === "details" && detailsTab}
-      </div>
+      <div>{activeTab === "equipment" ? equipmentTab : activeTab === "requests" ? requestsTab : detailsTab}</div>
     </div>
   );
 }

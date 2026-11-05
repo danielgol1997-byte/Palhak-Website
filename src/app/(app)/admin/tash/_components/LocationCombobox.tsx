@@ -104,7 +104,7 @@ export function LocationCombobox({
         placeholder={placeholder}
         required={required}
         autoComplete="off"
-        className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-500"
+        className="w-full min-h-11 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-500"
       />
 
       {/* Saved locations — always visible chips; ✕ or right-click to remove (not ימ״ח) */}
@@ -117,7 +117,7 @@ export function LocationCombobox({
                 key={loc.id}
                 onContextMenu={(e) => handleContextRemove(loc, e)}
                 title={loc.name === YAMAH ? YAMAH : `${loc.name} — לחיצה ימנית להסרה מהרשימה`}
-                className={`inline-flex max-w-full items-center gap-0.5 rounded-lg border pl-2 pr-0.5 py-0.5 text-xs ${
+                className={`inline-flex max-w-full min-h-9 items-center gap-0.5 rounded-lg border pl-2 pr-0.5 py-0.5 text-xs ${
                   loc.name === YAMAH
                     ? "border-teal-800 bg-teal-950/40 text-teal-200"
                     : "border-zinc-700 bg-zinc-800/80 text-zinc-200"
@@ -136,8 +136,9 @@ export function LocationCombobox({
                   <button
                     type="button"
                     onClick={(e) => handleDeleteChip(loc, e)}
-                    className="shrink-0 rounded p-1 text-zinc-500 hover:bg-red-950/50 hover:text-red-400"
+                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded text-zinc-500 hover:bg-red-950/50 hover:text-red-400"
                     title="הסר מהרשימה"
+                    aria-label="הסר מהרשימה"
                   >
                     ✕
                   </button>
@@ -148,12 +149,12 @@ export function LocationCombobox({
       )}
 
       {open && (filtered.length > 0 || showAddNew) && (
-        <div className="absolute z-50 mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl overflow-hidden">
+        <div className="absolute z-50 mt-1 w-full max-h-64 overflow-y-auto overscroll-contain rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl">
           {/* Existing locations */}
           {filtered.map((loc) => (
             <div
               key={loc.id}
-              className="flex items-center justify-between px-3 py-2 hover:bg-zinc-800 cursor-pointer group"
+              className="flex min-h-11 items-center justify-between px-3 py-2 hover:bg-zinc-800 cursor-pointer group"
               onContextMenu={(e) => loc.name !== YAMAH && handleContextRemove(loc, e)}
               onMouseDown={(e) => {
                 e.preventDefault();
@@ -173,8 +174,9 @@ export function LocationCombobox({
                   type="button"
                   onMouseDown={(e) => e.stopPropagation()}
                   onClick={(e) => handleDeleteChip(loc, e)}
-                  className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-red-400 text-xs px-1 transition-opacity shrink-0"
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-zinc-500 hover:bg-red-950/50 hover:text-red-400 text-sm transition-opacity opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
                   title="הסר מהרשימה"
+                  aria-label="הסר מהרשימה"
                 >
                   ✕
                 </button>
@@ -185,7 +187,7 @@ export function LocationCombobox({
           {/* Add new option */}
           {showAddNew && (
             <div
-              className="flex items-center gap-2 px-3 py-2 hover:bg-zinc-800 cursor-pointer border-t border-zinc-800"
+              className="flex min-h-11 items-center gap-2 px-3 py-2 hover:bg-zinc-800 cursor-pointer border-t border-zinc-800"
               onMouseDown={(e) => {
                 e.preventDefault();
                 // The typed value becomes selected; it will be saved to DB when the form submits

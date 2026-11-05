@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { updatePositionAction } from "./actions";
 import { Pagination } from "@/components/table/Pagination";
-import { ModalPortal } from "@/components/ui/ModalPortal";
+import { Sheet, SheetActions } from "@/components/ui/Sheet";
 
 interface Position {
   id: string;
@@ -77,18 +77,19 @@ export default function PositionList({
       </div>
 
       {editingItem && (
-        <ModalPortal>
-        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
-          <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => setEditingItem(null)} />
-          <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl overflow-hidden border border-zinc-800 animate-in fade-in zoom-in duration-200">
-            <div className="flex items-center justify-between mb-8">
-              <h3 className="text-2xl font-bold text-zinc-50">עריכת תפקיד: {editingItem.name}</h3>
-              <button onClick={() => setEditingItem(null)} className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-zinc-50 cursor-pointer">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
-              </button>
-            </div>
-
-            <form action={async (fd) => { await updatePositionAction(fd); setEditingItem(null); }} className="grid gap-6">
+        <Sheet
+          open
+          onClose={() => setEditingItem(null)}
+          title={`עריכת תפקיד: ${editingItem.name}`}
+          size="md"
+          footer={
+            <SheetActions>
+              <button type="submit" form="position-edit-form" className="h-12 w-full sm:w-auto sm:px-8 inline-flex items-center justify-center rounded-2xl bg-zinc-50 text-base font-bold text-zinc-950 hover:bg-zinc-200 transition-all shadow-lg shadow-zinc-100/5 cursor-pointer">שמירה</button>
+              <button type="button" onClick={() => setEditingItem(null)} className="h-12 w-full sm:w-auto sm:px-8 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-base font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer">ביטול</button>
+            </SheetActions>
+          }
+        >
+            <form id="position-edit-form" action={async (fd) => { await updatePositionAction(fd); setEditingItem(null); }} className="grid gap-6">
               <input type="hidden" name="id" value={editingItem.id} />
               
               <div>
@@ -110,15 +111,8 @@ export default function PositionList({
                   <option value="false" className="bg-zinc-900">לא פעיל</option>
                 </select>
               </div>
-
-              <div className="flex gap-3 mt-4">
-                <button type="submit" className="flex-1 h-14 inline-flex items-center justify-center rounded-2xl bg-zinc-50 text-base font-bold text-zinc-950 hover:bg-zinc-200 transition-all shadow-lg shadow-zinc-100/5 cursor-pointer">שמירה</button>
-                <button type="button" onClick={() => setEditingItem(null)} className="flex-1 h-14 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-base font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer">ביטול</button>
-              </div>
             </form>
-          </div>
-        </div>
-        </ModalPortal>
+        </Sheet>
       )}
     </>
   );

@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { RequestType, RequestStatus, Priority, Division } from "@prisma/client";
 import { requestTypeLabel, requestStatusLabel, priorityLabel, divisionLabel, requestItemStatusLabel } from "@/lib/he";
 import { cancelRequestAction } from "../requests/actions";
-import { ModalPortal } from "@/components/ui/ModalPortal";
+import { Sheet, SheetActions } from "@/components/ui/Sheet";
 
 interface RequestItem {
   id: string;
@@ -135,7 +135,7 @@ export function RequestsTab({ requests, currentUserId }: { requests: RequestItem
 
   return (
     <>
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 sm:p-6">
         {/* Search and Filters */}
         <div className="mb-6 flex gap-3 flex-wrap">
           <input
@@ -261,41 +261,39 @@ export function RequestsTab({ requests, currentUserId }: { requests: RequestItem
         )}
       </div>
 
-      {/* Detail Modal - Reusing existing logic */}
+      {/* Detail Modal */}
       {selectedRequest && (
-        <ModalPortal>
-        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
-          <div
-            className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm"
-            onClick={() => setSelectedRequest(null)}
-          />
-          <div className="relative w-full max-w-2xl rounded-3xl bg-zinc-900 p-8 shadow-2xl overflow-hidden border border-zinc-800 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-start justify-between mb-6">
-              <div>
-                <h3 className="text-2xl font-bold text-zinc-50">פרטי בקשה</h3>
-                <div className="mt-1 text-sm text-zinc-400">
-                  {requestTypeLabel(selectedRequest.type, currentUserId, selectedRequest.requesterId, selectedRequest.recipientId || undefined)} · {selectedRequest.items.length} פריטים
-                </div>
-              </div>
-              <button
-                onClick={() => setSelectedRequest(null)}
-                className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-zinc-50 cursor-pointer"
-              >
-                <svg
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+        <Sheet
+          open
+          onClose={() => setSelectedRequest(null)}
+          title="פרטי בקשה"
+          subtitle={`${requestTypeLabel(selectedRequest.type, currentUserId, selectedRequest.requesterId, selectedRequest.recipientId || undefined)} · ${selectedRequest.items.length} פריטים`}
+          size="lg"
+          dismissible={!isCancelling}
+          footer={
+            <SheetActions>
+              {(selectedRequest.status === RequestStatus.OPEN ||
+                selectedRequest.status === RequestStatus.IN_PROGRESS) && (
+                <button
+                  type="button"
+                  onClick={() => handleCancel(selectedRequest.id)}
+                  disabled={isCancelling}
+                  className="h-12 w-full sm:w-auto px-6 rounded-xl bg-red-900/20 text-red-400 font-bold hover:bg-red-900/40 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <path d="M18 6L6 18M6 6l12 12" />
-                </svg>
+                  {isCancelling ? "מבטל..." : "ביטול בקשה"}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setSelectedRequest(null)}
+                disabled={isCancelling}
+                className="h-12 w-full sm:w-auto px-6 rounded-xl bg-zinc-800 text-zinc-300 font-bold hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer disabled:opacity-50"
+              >
+                סגור
               </button>
-            </div>
-
+            </SheetActions>
+          }
+        >
             <div className="grid gap-4">
               {/* Transfer Timeline Documentation */}
               {selectedRequest.type === RequestType.TRANSFER && (
@@ -355,7 +353,7 @@ export function RequestsTab({ requests, currentUserId }: { requests: RequestItem
               {/* Items List */}
               <div>
                 <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-3">פריטים</div>
-                <div className="rounded-xl border border-zinc-800 overflow-hidden">
+                <div className="rounded-xl border border-zinc-800 overflow-x-auto">
                   <table className="w-full">
                     <thead>
                       <tr className="bg-zinc-950 text-xs font-bold text-zinc-500 uppercase tracking-wider">
@@ -531,22 +529,8 @@ export function RequestsTab({ requests, currentUserId }: { requests: RequestItem
                 </div>
               )}
 
-              {(selectedRequest.status === RequestStatus.OPEN ||
-                selectedRequest.status === RequestStatus.IN_PROGRESS) && (
-                <div className="mt-4 pt-4 border-t border-zinc-800">
-                  <button
-                    onClick={() => handleCancel(selectedRequest.id)}
-                    disabled={isCancelling}
-                    className="w-full h-12 inline-flex items-center justify-center rounded-xl bg-red-900/20 text-red-400 font-bold hover:bg-red-900/40 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isCancelling ? "מבטל..." : "ביטול בקשה"}
-                  </button>
-                </div>
-              )}
             </div>
-          </div>
-        </div>
-        </ModalPortal>
+        </Sheet>
       )}
     </>
   );

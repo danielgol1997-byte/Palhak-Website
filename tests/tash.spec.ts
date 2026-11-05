@@ -1,9 +1,25 @@
 import { test, expect, type BrowserContext, type Locator, type Page } from "@playwright/test";
 import { encode } from "next-auth/jwt";
+import { config as loadDotenv } from "dotenv";
+
+// Mirror Next.js precedence: .env.local overrides .env (dotenv never overwrites a key already set).
+loadDotenv({ path: ".env.local" });
+loadDotenv({ path: ".env" });
+// NextAuth switches to the __Secure- cookie when NEXTAUTH_URL is https (e.g. after `vercel env pull`).
+const SECURE_COOKIES = (process.env.NEXTAUTH_URL ?? "").startsWith("https://");
+const SESSION_COOKIE = SECURE_COOKIES ? "__Secure-next-auth.session-token" : "next-auth.session-token";
+
+// SAFETY: this spec CREATES, MOVES and DELETES real rows (box template, box items, ת״ש items).
+// It must only run against a throwaway Neon branch, never the production database.
+// Opt in explicitly: PW_ALLOW_DATA_MUTATION=1 PW_BASE_URL=... npx playwright test tests/tash.spec.ts
+test.skip(
+  process.env.PW_ALLOW_DATA_MUTATION !== "1",
+  "Mutating spec – set PW_ALLOW_DATA_MUTATION=1 and point DATABASE_URL at a Neon branch first"
+);
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
-const NEXTAUTH_SECRET = "gpgaz3rTJVFs3D2eHXozRJFKHrGAEh2H2cNCByWtf5Q=";
+const NEXTAUTH_SECRET = process.env.NEXTAUTH_SECRET ?? "gpgaz3rTJVFs3D2eHXozRJFKHrGAEh2H2cNCByWtf5Q=";
 const ADMIN_USER = {
   id: "cmka0meph0000xcen4xre4jqf",
   name: "דניאל גולדברג",
@@ -28,7 +44,8 @@ async function injectAdminSession(context: BrowserContext) {
     secret: NEXTAUTH_SECRET,
   });
   await context.addCookies([{
-    name: "next-auth.session-token",
+    name: SESSION_COOKIE,
+    secure: SECURE_COOKIES,
     value: token,
     domain: "localhost",
     path: "/",
@@ -174,7 +191,7 @@ test.describe("ציוד ת״ש Feature", () => {
     await page.goto("/admin");
     await wait(page);
 
-    const card = page.locator('a[href="/admin/tash"]');
+    const card = page.locator('a[href="/admin/tash"]:visible');
     await expect(card).toBeVisible({ timeout: 15000 });
     expect(await card.textContent()).toContain("ציוד ת״ש");
     console.log("✓ Admin home card visible");

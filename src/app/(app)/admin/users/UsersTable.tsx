@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Role, Division } from "@prisma/client";
 import { roleLabel, divisionLabel } from "@/lib/he";
 import { adminCreateUserAction } from "./actions";
-import { ModalPortal } from "@/components/ui/ModalPortal";
+import { Sheet, SheetActions } from "@/components/ui/Sheet";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 
 interface User {
@@ -159,17 +159,17 @@ export function UsersTable({ users }: UsersTableProps) {
   return (
     <div className="flex flex-col gap-6">
       {/* Search + Create */}
-      <div className="flex gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row">
         <input
           type="text"
           placeholder="חיפוש לפי שם, אימייל או מספר אישי..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="flex-1 h-12 rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-sm text-zinc-50 outline-none focus:ring-2 focus:ring-zinc-500 transition-all placeholder:text-zinc-700"
+          className="w-full sm:flex-1 h-12 rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-sm text-zinc-50 outline-none focus:ring-2 focus:ring-zinc-500 transition-all placeholder:text-zinc-700"
         />
         <button
           onClick={() => { setShowCreateModal(true); resetCreateForm(); }}
-          className="h-12 inline-flex items-center gap-2 px-5 rounded-xl bg-emerald-700 text-sm font-bold text-white hover:bg-emerald-600 transition-all cursor-pointer whitespace-nowrap"
+          className="h-12 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 rounded-xl bg-emerald-700 text-sm font-bold text-white hover:bg-emerald-600 transition-all cursor-pointer whitespace-nowrap"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
           צור משתמש
@@ -324,16 +324,29 @@ export function UsersTable({ users }: UsersTableProps) {
       )}
       {/* Create User Modal */}
       {showCreateModal && (
-        <ModalPortal>
-          <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
-            <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => !isCreating && setShowCreateModal(false)} />
-            <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-2xl font-bold text-zinc-50">יצירת משתמש חדש</h3>
-                <button onClick={() => !isCreating && setShowCreateModal(false)} className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-zinc-50 cursor-pointer" disabled={isCreating}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                </button>
-              </div>
+        <Sheet
+          open
+          onClose={() => !isCreating && setShowCreateModal(false)}
+          dismissible={!isCreating}
+          title="יצירת משתמש חדש"
+          size="md"
+          footer={
+            <SheetActions>
+              <button
+                onClick={handleCreateUser}
+                disabled={isCreating || !createFirstName.trim() || !createLastName.trim() || !createEmail.trim()}
+                className="h-12 w-full sm:w-auto sm:px-8 inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-sm font-bold text-white hover:bg-emerald-500 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isCreating ? <LoadingSpinner size="sm" /> : "צור משתמש"}
+              </button>
+              <button
+                onClick={() => setShowCreateModal(false)}
+                disabled={isCreating}
+                className="h-12 w-full sm:w-auto sm:px-8 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-sm font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer disabled:opacity-50"
+              >ביטול</button>
+            </SheetActions>
+          }
+        >
               <p className="text-sm text-zinc-400 mb-6">
                 שדות חובה: שם פרטי, שם משפחה ואימייל (של חשבון Google). המערכת יוצרת אוטומטית שם מלא לתצוגה. שאר השדות אופציונליים — המשתמש ישלים אותם בכניסה הראשונה.
               </p>
@@ -377,25 +390,8 @@ export function UsersTable({ users }: UsersTableProps) {
                 {createError && (
                   <div className="rounded-xl border border-red-900/40 bg-red-900/10 p-3 text-sm text-red-400">{createError}</div>
                 )}
-
-                <div className="flex gap-3 mt-2">
-                  <button
-                    onClick={handleCreateUser}
-                    disabled={isCreating || !createFirstName.trim() || !createLastName.trim() || !createEmail.trim()}
-                    className="flex-1 h-12 inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-sm font-bold text-white hover:bg-emerald-500 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isCreating ? <LoadingSpinner size="sm" /> : "צור משתמש"}
-                  </button>
-                  <button
-                    onClick={() => setShowCreateModal(false)}
-                    disabled={isCreating}
-                    className="flex-1 h-12 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-sm font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer disabled:opacity-50"
-                  >ביטול</button>
-                </div>
               </div>
-            </div>
-          </div>
-        </ModalPortal>
+        </Sheet>
       )}
     </div>
   );

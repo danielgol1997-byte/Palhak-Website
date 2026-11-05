@@ -40,21 +40,21 @@ export default function StorageAddForm({ items }: { items: Item[] }) {
         <div className="space-y-5">
           <div>
             <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">חיפוש וסינון פריט</label>
-            <div className="mt-2 flex gap-2">
-              <div className="relative flex-1">
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+              <div className="relative flex-1 min-w-0">
                 <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-600"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
                 </div>
                 <input
                   type="text"
                   placeholder="חיפוש לפי שם..."
-                  className="h-10 w-full rounded-xl border border-zinc-800 bg-zinc-950 pr-9 pl-3 text-sm text-zinc-50 outline-none focus:ring-2 focus:ring-zinc-500 transition-all placeholder:text-zinc-700"
+                  className="h-12 sm:h-10 w-full rounded-xl border border-zinc-800 bg-zinc-950 pr-9 pl-3 text-sm text-zinc-50 outline-none focus:ring-2 focus:ring-zinc-500 transition-all placeholder:text-zinc-700"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
               <select
-                className="h-10 rounded-xl border border-zinc-800 bg-zinc-950 px-2 text-sm text-zinc-50 outline-none focus:ring-2 focus:ring-zinc-500 transition-all cursor-pointer"
+                className="h-12 sm:h-10 w-full sm:w-auto rounded-xl border border-zinc-800 bg-zinc-950 px-2 text-sm text-zinc-50 outline-none focus:ring-2 focus:ring-zinc-500 transition-all cursor-pointer"
                 value={selectedDivision}
                 onChange={(e) => setSelectedDivision(e.target.value as Division | "ALL")}
               >
@@ -87,7 +87,7 @@ export default function StorageAddForm({ items }: { items: Item[] }) {
           </div>
         </div>
 
-        <div className="flex flex-col justify-end">
+        <div className="flex flex-col justify-end min-w-0">
           <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">כמות לעדכון במחסן</label>
           <input
             name="quantity"

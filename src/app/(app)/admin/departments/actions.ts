@@ -62,6 +62,8 @@ export async function createDepartmentAction(formData: FormData) {
   });
 
   revalidatePath("/admin/departments");
+
+  revalidatePath("/admin/org/departments");
 }
 
 const UpdateSchema = z.object({
@@ -137,6 +139,8 @@ export async function updateDepartmentAction(formData: FormData) {
   });
 
   revalidatePath("/admin/departments");
+
+  revalidatePath("/admin/org/departments");
 }
 
 export async function deleteDepartmentAction(formData: FormData) {
@@ -176,6 +180,8 @@ export async function deleteDepartmentAction(formData: FormData) {
   });
 
   revalidatePath("/admin/departments");
+
+  revalidatePath("/admin/org/departments");
 }
 
 export async function reorderDepartmentsAction(ids: string[]) {
@@ -199,6 +205,8 @@ export async function reorderDepartmentsAction(ids: string[]) {
   });
 
   revalidatePath("/admin/departments");
+
+  revalidatePath("/admin/org/departments");
 }
 
 

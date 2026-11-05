@@ -44,6 +44,8 @@ export async function createPositionAction(formData: FormData) {
   });
 
   revalidatePath("/admin/positions");
+
+  revalidatePath("/admin/org/positions");
 }
 
 const UpdateSchema = z.object({
@@ -94,6 +96,8 @@ export async function updatePositionAction(formData: FormData) {
   });
 
   revalidatePath("/admin/positions");
+
+  revalidatePath("/admin/org/positions");
 }
 
 

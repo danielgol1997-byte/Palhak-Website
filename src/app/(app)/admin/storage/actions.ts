@@ -79,6 +79,8 @@ export async function upsertStorageInventoryAction(formData: FormData) {
   });
 
   revalidatePath("/admin/storage");
+
+  revalidatePath("/admin/inventory/storage");
   revalidatePath("/inventory");
 }
 
@@ -114,6 +116,8 @@ export async function deleteStorageInventoryAction(formData: FormData) {
   });
 
   revalidatePath("/admin/storage");
+
+  revalidatePath("/admin/inventory/storage");
   revalidatePath("/inventory");
 }
 
@@ -256,6 +260,8 @@ export async function recoverAssignmentToStorageAction(formData: FormData) {
   });
 
   revalidatePath("/admin/storage");
+
+  revalidatePath("/admin/inventory/storage");
   revalidatePath("/inventory");
   revalidatePath("/admin/weapons-and-sights");
 }

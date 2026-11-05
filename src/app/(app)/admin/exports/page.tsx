@@ -65,16 +65,16 @@ function ExportCard({
   hrefCsv: string;
 }) {
   return (
-    <div className="rounded-3xl border border-zinc-800 bg-zinc-900 p-6 shadow-sm">
-      <div className="flex items-start justify-between gap-6">
-        <div>
+    <div className="rounded-3xl border border-zinc-800 bg-zinc-900 p-4 sm:p-6 shadow-sm">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+        <div className="min-w-0">
           <div className="text-lg font-bold text-zinc-50">{title}</div>
           <div className="mt-1 text-sm text-zinc-400 leading-6">{desc}</div>
         </div>
-        <div className="flex gap-2">
+        <div className="grid grid-cols-3 gap-2 sm:flex sm:shrink-0">
           <a
             href={hrefExcel}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 text-sm font-bold text-zinc-100 transition-all hover:bg-zinc-800 hover:scale-[1.02] active:scale-[0.98]"
+            className="inline-flex h-12 sm:h-11 items-center justify-center gap-1.5 sm:gap-2 rounded-2xl border border-zinc-800 bg-zinc-950 px-2 sm:px-4 text-sm font-bold text-zinc-100 transition-all hover:bg-zinc-800 hover:scale-[1.02] active:scale-[0.98]"
             title="Excel"
           >
             <IconExcel />
@@ -82,7 +82,7 @@ function ExportCard({
           </a>
           <a
             href={hrefSheets}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 text-sm font-bold text-zinc-100 transition-all hover:bg-zinc-800 hover:scale-[1.02] active:scale-[0.98]"
+            className="inline-flex h-12 sm:h-11 items-center justify-center gap-1.5 sm:gap-2 rounded-2xl border border-zinc-800 bg-zinc-950 px-2 sm:px-4 text-sm font-bold text-zinc-100 transition-all hover:bg-zinc-800 hover:scale-[1.02] active:scale-[0.98]"
             title="Google Sheets"
           >
             <IconSheets />
@@ -90,7 +90,7 @@ function ExportCard({
           </a>
           <a
             href={hrefCsv}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 text-sm font-bold text-zinc-100 transition-all hover:bg-zinc-800 hover:scale-[1.02] active:scale-[0.98]"
+            className="inline-flex h-12 sm:h-11 items-center justify-center gap-1.5 sm:gap-2 rounded-2xl border border-zinc-800 bg-zinc-950 px-2 sm:px-4 text-sm font-bold text-zinc-100 transition-all hover:bg-zinc-800 hover:scale-[1.02] active:scale-[0.98]"
             title="CSV"
           >
             <IconCsv />
@@ -107,9 +107,9 @@ export default async function AdminExportsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-sm">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
+      <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 sm:p-6 shadow-sm">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
             <h1 className="text-2xl font-bold text-zinc-50">ייצוא נתונים</h1>
             <p className="mt-2 text-sm text-zinc-400">
               הורדה ל-Excel / Google Sheets / CSV לפי סוג הנתונים. כל הייצוא זמין למנהלים בלבד.
@@ -117,7 +117,7 @@ export default async function AdminExportsPage() {
           </div>
           <Link
             href="/admin"
-            className="inline-flex h-11 items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-950 px-5 text-sm font-bold text-zinc-100 transition-all hover:bg-zinc-800"
+            className="inline-flex h-12 sm:h-11 w-full sm:w-auto items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-950 px-5 text-sm font-bold text-zinc-100 transition-all hover:bg-zinc-800"
           >
             חזרה לניהול
           </Link>

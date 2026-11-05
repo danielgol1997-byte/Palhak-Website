@@ -190,6 +190,7 @@ export async function adminAssignEquipmentAction(formData: FormData): Promise<{ 
   revalidatePath("/admin/users");
   revalidatePath("/admin/requests");
   revalidatePath("/admin/storage");
+  revalidatePath("/admin/inventory/storage");
   return { success: true };
 }
 
@@ -374,6 +375,7 @@ export async function adminAssignEquipmentBulkAction(formData: FormData): Promis
   revalidatePath("/admin/users");
   revalidatePath("/admin/requests");
   revalidatePath("/admin/storage");
+  revalidatePath("/admin/inventory/storage");
   return { success: true };
 }
 
@@ -515,6 +517,7 @@ export async function adminUnassignEquipmentAction(formData: FormData): Promise<
   revalidatePath("/admin/users");
   revalidatePath("/admin/requests");
   revalidatePath("/admin/storage");
+  revalidatePath("/admin/inventory/storage");
   return { success: true };
 }
 
@@ -665,6 +668,7 @@ export async function adminUnassignEquipmentBulkAction(formData: FormData): Prom
   revalidatePath("/admin/users");
   revalidatePath("/admin/requests");
   revalidatePath("/admin/storage");
+  revalidatePath("/admin/inventory/storage");
   return { success: true };
 }
 
@@ -804,6 +808,7 @@ export async function moveToBoxAction(formData: FormData): Promise<{ success: bo
   revalidatePath(`/admin/users/${parsed.data.userId}`);
   revalidatePath("/admin/boxes");
   revalidatePath("/admin/storage");
+  revalidatePath("/admin/inventory/storage");
   return { success: true };
 }
 
@@ -842,6 +847,7 @@ export async function moveToBoxBulkAction(formData: FormData): Promise<{ success
   revalidatePath(`/admin/users/${parsed.data.userId}`);
   revalidatePath("/admin/boxes");
   revalidatePath("/admin/storage");
+  revalidatePath("/admin/inventory/storage");
   return { success: true };
 }
 
@@ -1101,6 +1107,7 @@ export async function restoreFromBoxAction(formData: FormData): Promise<{ succes
   revalidatePath(`/admin/users/${parsed.data.userId}`);
   revalidatePath("/admin/boxes");
   revalidatePath("/admin/storage");
+  revalidatePath("/admin/inventory/storage");
   return { success: true };
 }
 
@@ -1182,6 +1189,7 @@ export async function removeFromBoxAction(formData: FormData): Promise<{ success
   revalidatePath(`/admin/users/${parsed.data.userId}`);
   revalidatePath("/admin/boxes");
   revalidatePath("/admin/storage");
+  revalidatePath("/admin/inventory/storage");
   return { success: true };
 }
 
@@ -1515,6 +1523,7 @@ export async function addToBoxDirectAction(formData: FormData): Promise<{ succes
   revalidatePath(`/admin/users/${parsed.data.userId}`);
   revalidatePath("/admin/boxes");
   revalidatePath("/admin/storage");
+  revalidatePath("/admin/inventory/storage");
   revalidatePath("/admin/requests");
   return { success: true };
 }
@@ -1624,6 +1633,7 @@ export async function addToBoxDirectBulkAction(formData: FormData): Promise<{ su
   revalidatePath(`/admin/users/${parsed.data.userId}`);
   revalidatePath("/admin/boxes");
   revalidatePath("/admin/storage");
+  revalidatePath("/admin/inventory/storage");
   revalidatePath("/admin/requests");
   return { success: true };
 }

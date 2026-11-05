@@ -1,6 +1,17 @@
 import { z } from "zod";
 
 /** Fine-grained controls — stored in SiteTheme.tuning (JSON). Super girly + 3D. */
+export type CustomColors = {
+  bg: string;
+  surface: string;
+  border: string;
+  accent: string;
+  accent2: string;
+  fg: string;
+  fgMuted: string;
+  mode: "dark" | "light";
+};
+
 export type ThemeTuning = {
   tiltDivisor: number;
   tileDepthZ: number;
@@ -20,7 +31,25 @@ export type ThemeTuning = {
   grainOpacity: number;
   cornerBows: number;
   rainbowSpeedSec: number;
+  /** Root font scale (1 = default). */
+  fontScale: number;
+  /** Disable particle effects and card motion for everyone. */
+  reduceMotion: boolean;
+  /** Used when preset id is "custom". */
+  customColors: CustomColors | null;
 };
+
+const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+export const CustomColorsSchema = z.object({
+  bg: z.string().regex(HEX),
+  surface: z.string().regex(HEX),
+  border: z.string().regex(HEX),
+  accent: z.string().regex(HEX),
+  accent2: z.string().regex(HEX),
+  fg: z.string().regex(HEX),
+  fgMuted: z.string().regex(HEX),
+  mode: z.enum(["dark", "light"]),
+});
 
 export const ThemeTuningSchema = z.object({
   tiltDivisor: z.number().min(6).max(48),
@@ -41,6 +70,9 @@ export const ThemeTuningSchema = z.object({
   grainOpacity: z.number().min(0).max(0.14),
   cornerBows: z.number().min(0).max(3),
   rainbowSpeedSec: z.number().min(2).max(10),
+  fontScale: z.number().min(0.85).max(1.2),
+  reduceMotion: z.boolean(),
+  customColors: CustomColorsSchema.nullable(),
 });
 
 const PartialTuningSchema = ThemeTuningSchema.partial();
@@ -64,6 +96,9 @@ export const DEFAULT_TUNING: ThemeTuning = {
   grainOpacity: 0,
   cornerBows: 0,
   rainbowSpeedSec: 4,
+  fontScale: 1,
+  reduceMotion: false,
+  customColors: null,
 };
 
 export const GIRLY_MAX_TUNING: Partial<ThemeTuning> = {
@@ -119,6 +154,7 @@ export function tuningToCssVars(t: ThemeTuning): [string, string][] {
     ["--theme-grain", String(x.grainOpacity)],
     ["--theme-corner-bows", String(x.cornerBows)],
     ["--theme-rainbow-speed", `${x.rainbowSpeedSec}s`],
+    ["--theme-font-scale", String(x.fontScale)],
   ];
 }
 
@@ -131,6 +167,10 @@ export function applyTuningToDocumentElement(el: HTMLElement, tuning: ThemeTunin
   else el.removeAttribute("data-theme-card-float");
   if (x.cardWiggle) el.setAttribute("data-theme-card-wiggle", "1");
   else el.removeAttribute("data-theme-card-wiggle");
+  if (x.globalSaturate !== 100) el.setAttribute("data-theme-saturate", "1");
+  else el.removeAttribute("data-theme-saturate");
+  if (x.reduceMotion) el.setAttribute("data-theme-reduce-motion", "1");
+  else el.removeAttribute("data-theme-reduce-motion");
 }
 
 /** Assumes `d=document.documentElement` and `s=d.style` already exist. */
@@ -144,5 +184,9 @@ export function tuningScriptBody(tuning: ThemeTuning): string {
   else parts.push("d.removeAttribute('data-theme-card-float');");
   if (x.cardWiggle) parts.push("d.setAttribute('data-theme-card-wiggle','1');");
   else parts.push("d.removeAttribute('data-theme-card-wiggle');");
+  if (x.globalSaturate !== 100) parts.push("d.setAttribute('data-theme-saturate','1');");
+  else parts.push("d.removeAttribute('data-theme-saturate');");
+  if (x.reduceMotion) parts.push("d.setAttribute('data-theme-reduce-motion','1');");
+  else parts.push("d.removeAttribute('data-theme-reduce-motion');");
   return parts.join("");
 }

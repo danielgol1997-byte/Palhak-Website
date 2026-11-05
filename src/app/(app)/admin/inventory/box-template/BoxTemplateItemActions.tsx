@@ -150,9 +150,9 @@ export function BoxTemplateItemActions({
         </div>
 
         <div className="flex flex-wrap items-center gap-4">
-          <form action={handleUpdate} className="flex items-center gap-3 flex-1 min-w-[200px]">
+          <form action={handleUpdate} className="flex min-w-0 flex-1 basis-52 items-center gap-3">
             <input type="hidden" name="equipmentItemId" value={equipmentItemId} />
-            <div className="flex-1">
+            <div className="min-w-0 flex-1">
               <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">כמות</label>
               <input
                 name="quantity"
@@ -187,14 +187,14 @@ export function BoxTemplateItemActions({
           <label className="text-xs font-bold text-zinc-500 uppercase mb-1 block">
             שם קבוצה (לתצוגה בסינון)
           </label>
-          <div className="flex gap-2">
+          <div className="flex min-w-0 gap-2">
             <input
               type="text"
               value={groupNameValue}
               onChange={(e) => setGroupNameValue(e.target.value)}
               placeholder={itemName}
               maxLength={80}
-              className="h-10 flex-1 rounded-xl border border-zinc-800 bg-zinc-900 px-4 text-sm text-zinc-50 placeholder:text-zinc-600 focus:ring-2 focus:ring-zinc-500 outline-none"
+              className="h-10 min-w-0 flex-1 rounded-xl border border-zinc-800 bg-zinc-900 px-4 text-sm text-zinc-50 placeholder:text-zinc-600 focus:ring-2 focus:ring-zinc-500 outline-none"
             />
             <button
               type="submit"

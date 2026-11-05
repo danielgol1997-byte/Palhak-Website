@@ -5,7 +5,6 @@ import { RequestType, RequestStatus, Priority, Division, TransferStatus } from "
 import { EquipmentRequestsTable } from "./EquipmentRequestsTable";
 import { ReturnsTable } from "./ReturnsTable";
 import { InProgressRequestsTable } from "./InProgressRequestsTable";
-import { TransfersTable } from "./TransfersTable";
 import { UnifiedTransfersTable } from "./UnifiedTransfersTable";
 import { ClosedRequestsTable } from "./ClosedRequestsTable";
 import { requestTypeLabel, priorityLabel, divisionLabel } from "@/lib/he";
@@ -89,6 +88,59 @@ interface Transfer {
   }[];
 }
 
+// Filter function for requests
+function filterRequests(requests: Request[], searchTerm: string): Request[] {
+  if (!searchTerm) return requests;
+  
+  const search = searchTerm.toLowerCase();
+  return requests.filter((req) => {
+    const matchesRequester = req.requester.name.toLowerCase().includes(search);
+    const matchesRecipient = req.recipient?.name.toLowerCase().includes(search) ?? false;
+    const matchesItem = req.items.some((item) =>
+      item.equipmentItem.name.toLowerCase().includes(search)
+    );
+    const matchesDivision = req.items.some((item) =>
+      divisionLabel(item.equipmentItem.category.division).toLowerCase().includes(search)
+    );
+    const matchesType = requestTypeLabel(req.type).toLowerCase().includes(search);
+    const matchesPriority = priorityLabel(req.priority).toLowerCase().includes(search);
+    const matchesNotes = req.adminNotes?.toLowerCase().includes(search);
+    const matchesSerial = req.items.some((item) =>
+      item.serialNumber?.toLowerCase().includes(search)
+    );
+    const matchesAssignmentSerial = req.requester.assignments?.some((a) =>
+      a.serialNumber?.toLowerCase().includes(search)
+    );
+    const matchesClothingSize = req.items.some((item) =>
+      item.clothingSize?.toLowerCase().includes(search)
+    );
+    const matchesShoeSize = req.items.some((item) =>
+      item.shoeSize?.toLowerCase().includes(search)
+    );
+    
+    return matchesRequester || matchesRecipient || matchesItem || matchesDivision || matchesType || matchesPriority || matchesNotes || matchesSerial || matchesAssignmentSerial || matchesClothingSize || matchesShoeSize;
+  });
+}
+
+// Filter function for transfers
+function filterTransfers(transfersList: Transfer[], searchTerm: string): Transfer[] {
+  if (!searchTerm) return transfersList;
+  
+  const search = searchTerm.toLowerCase();
+  return transfersList.filter((transfer) => {
+    const matchesFromUser = transfer.fromUser.name.toLowerCase().includes(search);
+    const matchesToUser = transfer.toUser.name.toLowerCase().includes(search);
+    const matchesItem = transfer.items.some((item) =>
+      item.equipmentItem.name.toLowerCase().includes(search)
+    );
+    const matchesDivision = transfer.items.some((item) =>
+      divisionLabel(item.equipmentItem.category.division).toLowerCase().includes(search)
+    );
+    
+    return matchesFromUser || matchesToUser || matchesItem || matchesDivision;
+  });
+}
+
 type TabType = "equipment" | "declarations" | "returns" | "adminAssignments" | "transfers" | "inProgress" | "closed";
 
 export function RequestTabs({
@@ -101,6 +153,8 @@ export function RequestTabs({
   closedRequests,
   transfers,
   searchTerm = "",
+  closedCappedNote,
+  adminCappedNote,
 }: {
   openRequests: Request[];
   declarationRequests: Request[];
@@ -111,117 +165,74 @@ export function RequestTabs({
   closedRequests: Request[];
   transfers: Transfer[];
   searchTerm?: string;
+  /** Shown under the closed tab when the server capped the list (no search term). */
+  closedCappedNote?: string;
+  /** Same for the admin-history tab (ניהול שרירותי). */
+  adminCappedNote?: string;
 }) {
   const [activeTab, setActiveTab] = useState<TabType>("equipment");
 
-  // Filter function for requests
-  const filterRequests = (requests: Request[]) => {
-    if (!searchTerm) return requests;
-    
-    const search = searchTerm.toLowerCase();
-    return requests.filter((req) => {
-      const matchesRequester = req.requester.name.toLowerCase().includes(search);
-      const matchesRecipient = req.recipient?.name.toLowerCase().includes(search) ?? false;
-      const matchesItem = req.items.some((item) =>
-        item.equipmentItem.name.toLowerCase().includes(search)
-      );
-      const matchesDivision = req.items.some((item) =>
-        divisionLabel(item.equipmentItem.category.division).toLowerCase().includes(search)
-      );
-      const matchesType = requestTypeLabel(req.type).toLowerCase().includes(search);
-      const matchesPriority = priorityLabel(req.priority).toLowerCase().includes(search);
-      const matchesNotes = req.adminNotes?.toLowerCase().includes(search);
-      const matchesSerial = req.items.some((item) =>
-        item.serialNumber?.toLowerCase().includes(search)
-      );
-      const matchesAssignmentSerial = req.requester.assignments?.some((a) =>
-        a.serialNumber?.toLowerCase().includes(search)
-      );
-      const matchesClothingSize = req.items.some((item) =>
-        item.clothingSize?.toLowerCase().includes(search)
-      );
-      const matchesShoeSize = req.items.some((item) =>
-        item.shoeSize?.toLowerCase().includes(search)
-      );
-      
-      return matchesRequester || matchesRecipient || matchesItem || matchesDivision || matchesType || matchesPriority || matchesNotes || matchesSerial || matchesAssignmentSerial || matchesClothingSize || matchesShoeSize;
-    });
-  };
-
-  // Filter function for transfers
-  const filterTransfers = (transfersList: Transfer[]) => {
-    if (!searchTerm) return transfersList;
-    
-    const search = searchTerm.toLowerCase();
-    return transfersList.filter((transfer) => {
-      const matchesFromUser = transfer.fromUser.name.toLowerCase().includes(search);
-      const matchesToUser = transfer.toUser.name.toLowerCase().includes(search);
-      const matchesItem = transfer.items.some((item) =>
-        item.equipmentItem.name.toLowerCase().includes(search)
-      );
-      const matchesDivision = transfer.items.some((item) =>
-        divisionLabel(item.equipmentItem.category.division).toLowerCase().includes(search)
-      );
-      
-      return matchesFromUser || matchesToUser || matchesItem || matchesDivision;
-    });
-  };
-
   // Compute filtered counts
   const filteredCounts = useMemo(() => ({
-    equipment: filterRequests(openRequests).length,
-    declarations: filterRequests(declarationRequests).length,
-    returns: filterRequests(returnRequests).length,
-    adminAssignments: filterRequests(adminAssignmentRequests).length,
-    transfers: filterRequests(transferRequests).length + filterTransfers(transfers).length,
-    inProgress: filterRequests(inProgressRequests).length,
-    closed: filterRequests(closedRequests).length,
+    equipment: filterRequests(openRequests, searchTerm).length,
+    declarations: filterRequests(declarationRequests, searchTerm).length,
+    returns: filterRequests(returnRequests, searchTerm).length,
+    adminAssignments: filterRequests(adminAssignmentRequests, searchTerm).length,
+    transfers: filterRequests(transferRequests, searchTerm).length + filterTransfers(transfers, searchTerm).length,
+    inProgress: filterRequests(inProgressRequests, searchTerm).length,
+    closed: filterRequests(closedRequests, searchTerm).length,
   }), [openRequests, declarationRequests, returnRequests, transferRequests, adminAssignmentRequests, transfers, inProgressRequests, closedRequests, searchTerm]);
 
-  const tabs = [
-    { id: "equipment" as TabType, label: "בקשות ציוד", count: filteredCounts.equipment },
-    { id: "declarations" as TabType, label: "הצהרות", count: filteredCounts.declarations },
-    { id: "returns" as TabType, label: "החזרת ציוד", count: filteredCounts.returns },
-    { id: "adminAssignments" as TabType, label: "ניהול שרירותי", count: filteredCounts.adminAssignments },
-    { id: "transfers" as TabType, label: "העברות ציוד", count: filteredCounts.transfers },
-    { id: "inProgress" as TabType, label: "בטיפול", count: filteredCounts.inProgress },
-    { id: "closed" as TabType, label: "בקשות סגורות", count: filteredCounts.closed },
+  // `label` is the full desktop label; `shortLabel` is what phones show (explicit, so no two
+  // tabs collapse to the same word).
+  const tabs: { id: TabType; label: string; shortLabel: string; count: number }[] = [
+    { id: "equipment", label: "בקשות ציוד", shortLabel: "ציוד חדש", count: filteredCounts.equipment },
+    { id: "declarations", label: "הצהרות", shortLabel: "הצהרות", count: filteredCounts.declarations },
+    { id: "returns", label: "החזרת ציוד", shortLabel: "החזרות", count: filteredCounts.returns },
+    { id: "adminAssignments", label: "ניהול שרירותי", shortLabel: "ניהול", count: filteredCounts.adminAssignments },
+    { id: "transfers", label: "העברות ציוד", shortLabel: "העברות", count: filteredCounts.transfers },
+    { id: "inProgress", label: "בטיפול", shortLabel: "בטיפול", count: filteredCounts.inProgress },
+    { id: "closed", label: "בקשות סגורות", shortLabel: "סגורות", count: filteredCounts.closed },
   ];
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Tabs - Scrollable on mobile */}
-      <div data-view-ok="true" className="flex gap-2 border-b border-zinc-800 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-4 sm:px-6 py-3 text-xs sm:text-sm font-bold transition-all cursor-pointer relative whitespace-nowrap flex-shrink-0 ${
-              activeTab === tab.id
-                ? "text-zinc-50"
-                : "text-zinc-500 hover:text-zinc-300"
-            }`}
-          >
-            <span className="flex items-center gap-2">
-              <span className="hidden sm:inline">{tab.label}</span>
-              <span className="sm:hidden">{tab.label.split(' ')[0]}</span>
-              {tab.count > 0 && (
-                <span
-                  className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold ${
-                    activeTab === tab.id
-                      ? "bg-zinc-50 text-zinc-950"
-                      : "bg-zinc-800 text-zinc-400"
-                  }`}
-                >
-                  {tab.count}
-                </span>
-              )}
-            </span>
-            {activeTab === tab.id && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-zinc-50" />
-            )}
-          </button>
-        ))}
+      {/* Tabs - horizontal strip (scrolls on phones, hidden scrollbar, snap) */}
+      <div
+        data-view-ok="true"
+        role="tablist"
+        className="ui-hscroll border-b border-zinc-800 -mx-4 px-4 sm:mx-0 sm:px-0"
+      >
+        {tabs.map((tab) => {
+          const active = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setActiveTab(tab.id)}
+              className={`relative min-h-11 px-3 py-2 sm:px-6 sm:py-3 text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${
+                active ? "text-zinc-50" : "text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <span className="hidden sm:inline">{tab.label}</span>
+                <span className="sm:hidden">{tab.shortLabel}</span>
+                {tab.count > 0 && (
+                  <span
+                    className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-bold tabular-nums ${
+                      active ? "bg-zinc-50 text-zinc-950" : "bg-zinc-800 text-zinc-400"
+                    }`}
+                  >
+                    {tab.count}
+                  </span>
+                )}
+              </span>
+              {active && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-zinc-50" />}
+            </button>
+          );
+        })}
       </div>
 
       {/* Tab Content */}
@@ -229,10 +240,10 @@ export function RequestTabs({
         {activeTab === "equipment" && <EquipmentRequestsTable requests={openRequests} searchTerm={searchTerm} />}
         {activeTab === "declarations" && <EquipmentRequestsTable requests={declarationRequests} searchTerm={searchTerm} />}
         {activeTab === "returns" && <ReturnsTable requests={returnRequests} searchTerm={searchTerm} />}
-        {activeTab === "adminAssignments" && <ClosedRequestsTable requests={adminAssignmentRequests} searchTerm={searchTerm} />}
+        {activeTab === "adminAssignments" && <ClosedRequestsTable requests={adminAssignmentRequests} searchTerm={searchTerm} cappedNote={adminCappedNote} />}
         {activeTab === "transfers" && <UnifiedTransfersTable transferRequests={transferRequests} oldTransfers={transfers} searchTerm={searchTerm} />}
         {activeTab === "inProgress" && <InProgressRequestsTable requests={inProgressRequests} searchTerm={searchTerm} />}
-        {activeTab === "closed" && <ClosedRequestsTable requests={closedRequests} searchTerm={searchTerm} />}
+        {activeTab === "closed" && <ClosedRequestsTable requests={closedRequests} searchTerm={searchTerm} cappedNote={closedCappedNote} />}
       </div>
     </div>
   );

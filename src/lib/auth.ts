@@ -1,11 +1,15 @@
+import { cache } from "react";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import type { Role } from "@prisma/client";
 import { authOptions } from "@/auth";
 import { canMutate, hasAtLeastRole, VIEW_ONLY_DENIED_MESSAGE } from "@/lib/rbac";
 
+/** Request-scoped session lookup: layouts and pages share one JWT decode + role refresh. */
+export const getSession = cache(() => getServerSession(authOptions));
+
 export async function requireSession() {
-  const session = await getServerSession(authOptions);
+  const session = await getSession();
   if (!session?.user?.id) redirect("/auth");
   return session;
 }

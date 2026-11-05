@@ -50,7 +50,7 @@ Open `http://localhost:3000`.
    - Create a Postgres database in Neon
    - Use Neon **pooled** URL for `DATABASE_URL` (runtime connection)
    - Use Neon **direct** URL for `DIRECT_URL` (for Prisma migrations)
-   - Neon backups: rely on Neon managed backups (configure/verify in Neon console)
+   - Backups: a daily application-level backup runs via Vercel Cron and super admins manage them at `/admin/backups`. See **BACKUPS.md** for setup, retention and the restore procedure.
 
 2. **Google OAuth Setup**
    - Create a Google OAuth application in [Google Cloud Console](https://console.cloud.google.com/)

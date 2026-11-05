@@ -6,7 +6,7 @@ import { divisionLabel } from "@/lib/he";
 import { Pagination } from "@/components/table/Pagination";
 import { Division } from "@prisma/client";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ModalPortal } from "@/components/ui/ModalPortal";
+import { Sheet, SheetActions } from "@/components/ui/Sheet";
 
 interface Item {
   id: string;
@@ -144,7 +144,7 @@ export default function ItemList({
                     )}
                   </td>
                   <td className="px-4 py-4">
-                    <div className="flex gap-2 justify-center">
+                    <div className="flex flex-wrap gap-2 justify-center">
                       {!item.discontinued && (
                         <button
                           onClick={() => setEditingItem(item)}
@@ -173,20 +173,23 @@ export default function ItemList({
       </div>
 
       {editingItem && (
-        <ModalPortal>
-        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
-          <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => !isDeleting && setEditingItem(null)} />
-          <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl overflow-hidden border border-zinc-800 animate-in fade-in zoom-in duration-200">
-            <div className="flex items-center justify-between mb-8">
-              <h3 className="text-2xl font-bold text-zinc-50">עריכת פריט: {editingItem.name}</h3>
-              <button onClick={() => setEditingItem(null)} className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-zinc-50 cursor-pointer">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
-              </button>
-            </div>
-
-            <form action={async (fd) => { await updateItemAction(fd); setEditingItem(null); }} className="grid gap-6">
+        <Sheet
+          open
+          onClose={() => setEditingItem(null)}
+          dismissible={!isDeleting}
+          title={`עריכת פריט: ${editingItem.name}`}
+          size="md"
+          footer={
+            <SheetActions>
+              <button type="submit" form="item-edit-form" className="h-12 w-full sm:w-auto sm:min-w-[160px] inline-flex items-center justify-center rounded-2xl bg-zinc-50 px-6 text-base font-bold text-zinc-950 hover:bg-zinc-200 transition-all shadow-lg shadow-zinc-100/5 cursor-pointer">שמירת שינויים</button>
+              <button type="button" onClick={() => setIsDeleting(true)} className="h-12 w-full sm:w-auto inline-flex items-center justify-center rounded-2xl border border-red-900/50 bg-red-950/20 px-6 text-sm font-bold text-red-500 hover:bg-red-950/40 transition-all cursor-pointer">מחיקה</button>
+              <button type="button" onClick={() => setEditingItem(null)} className="h-12 w-full sm:w-auto inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 px-6 text-sm font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer">ביטול</button>
+            </SheetActions>
+          }
+        >
+            <form id="item-edit-form" action={async (fd) => { await updateItemAction(fd); setEditingItem(null); }} className="grid gap-6">
               <input type="hidden" name="id" value={editingItem.id} />
-              
+
               <div>
                 <label className="text-sm font-bold text-zinc-400 mb-2 block">שם הפריט</label>
                 <input name="name" defaultValue={editingItem.name} className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-sm text-zinc-50 focus:ring-2 focus:ring-zinc-500 outline-none transition-all" required />
@@ -211,7 +214,7 @@ export default function ItemList({
 
               <div>
                 <label className="text-sm font-bold text-zinc-400 mb-3 block">סמן אם רלוונטי לפריט</label>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid grid-cols-2 gap-3">
                   <label className="flex items-center gap-3 p-3 rounded-xl border border-zinc-800 bg-zinc-950 cursor-pointer hover:border-zinc-700 transition-colors">
                     <input
                       type="checkbox"
@@ -254,94 +257,92 @@ export default function ItemList({
                   </label>
                 </div>
               </div>
-
-              <div className="flex flex-col gap-3 mt-4">
-                <button type="submit" className="h-14 w-full inline-flex items-center justify-center rounded-2xl bg-zinc-50 text-base font-bold text-zinc-950 hover:bg-zinc-200 transition-all shadow-lg shadow-zinc-100/5 cursor-pointer">שמירת שינויים</button>
-                <div className="flex gap-3">
-                  <button type="button" onClick={() => setIsDeleting(true)} className="flex-1 h-12 inline-flex items-center justify-center rounded-2xl border border-red-900/50 bg-red-950/20 text-sm font-bold text-red-500 hover:bg-red-950/40 transition-all cursor-pointer">מחיקה</button>
-                  <button type="button" onClick={() => setEditingItem(null)} className="flex-1 h-12 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-sm font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer">ביטול</button>
-                </div>
-              </div>
             </form>
-
-            {isDeleting && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center p-8 bg-zinc-900/95 backdrop-blur-md animate-in fade-in zoom-in duration-200">
-                <div className="text-center w-full max-w-sm">
-                  <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-red-950/50 text-red-500 mb-6 border border-red-900/50">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6" /></svg>
-                  </div>
-                  <h4 className="text-2xl font-bold text-zinc-50 mb-3">האם אתה בטוח?</h4>
-                  <p className="text-zinc-400 mb-10 leading-relaxed px-4">פעולה זו תמחק את הפריט מהמערכת. לא ניתן למחוק פריטים עם היסטוריה.</p>
-                  <div className="flex flex-col gap-3">
-                    <form action={async (fd) => { const res = await deleteItemAction(fd); if (!res.success) { alert(res.error); } setIsDeleting(false); setEditingItem(null); router.refresh(); }}>
-                      <input type="hidden" name="id" value={editingItem.id} />
-                      <button type="submit" className="h-14 w-full inline-flex items-center justify-center rounded-2xl bg-red-600 text-base font-bold text-white hover:bg-red-700 transition-all shadow-lg shadow-red-950/20 cursor-pointer">כן, מחק פריט</button>
-                    </form>
-                    <button onClick={() => setIsDeleting(false)} className="h-12 w-full inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-sm font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer">ביטול</button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-        </ModalPortal>
+        </Sheet>
       )}
+
+      {/* Delete confirmation opened from inside the edit sheet */}
+      {editingItem && isDeleting && (
+        <Sheet
+          open
+          onClose={() => setIsDeleting(false)}
+          zIndex={210}
+          size="sm"
+          footer={
+            <SheetActions>
+              <button type="submit" form="item-edit-delete-form" className="h-12 w-full sm:w-auto sm:min-w-[160px] inline-flex items-center justify-center rounded-2xl bg-red-600 px-6 text-base font-bold text-white hover:bg-red-700 transition-all shadow-lg shadow-red-950/20 cursor-pointer">כן, מחק פריט</button>
+              <button type="button" onClick={() => setIsDeleting(false)} className="h-12 w-full sm:w-auto inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 px-6 text-sm font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer">ביטול</button>
+            </SheetActions>
+          }
+        >
+          <div className="text-center w-full">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-red-950/50 text-red-500 mb-6 border border-red-900/50">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6" /></svg>
+            </div>
+            <h4 className="text-2xl font-bold text-zinc-50 mb-3">האם אתה בטוח?</h4>
+            <p className="text-zinc-400 mb-4 leading-relaxed px-4">פעולה זו תמחק את הפריט מהמערכת. לא ניתן למחוק פריטים עם היסטוריה.</p>
+            <form id="item-edit-delete-form" action={async (fd) => { const res = await deleteItemAction(fd); if (!res.success) { alert(res.error); } setIsDeleting(false); setEditingItem(null); router.refresh(); }}>
+              <input type="hidden" name="id" value={editingItem.id} />
+            </form>
+          </div>
+        </Sheet>
+      )}
+
       {/* Standalone delete/discontinue confirmation modal */}
       {deletingItem && (
-        <ModalPortal>
-        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
-          <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => !isDeleting && setDeletingItem(null)} />
-          <div className="relative w-full max-w-md rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200">
+        <Sheet
+          open
+          onClose={() => { setDeletingItem(null); setDeleteError(null); }}
+          dismissible={!isDeleting}
+          size="sm"
+          title={deletingItem.discontinued ? "הסרה לצמיתות מהמערכת?" : `מחיקת פריט: ${deletingItem.name}`}
+          footer={
+            <SheetActions>
+              <button
+                disabled={isDeleting}
+                onClick={async () => {
+                  setIsDeleting(true);
+                  setDeleteError(null);
+                  const fd = new FormData();
+                  fd.append("id", deletingItem.id);
+                  const res = await deleteItemAction(fd);
+                  setIsDeleting(false);
+                  if (!res.success) {
+                    setDeleteError(res.error || "אירעה שגיאה");
+                  } else {
+                    setDeletingItem(null);
+                    router.refresh();
+                  }
+                }}
+                className="h-12 w-full sm:w-auto sm:min-w-[160px] inline-flex items-center justify-center rounded-2xl bg-red-600 px-6 text-sm font-bold text-white hover:bg-red-700 transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isDeleting ? "מוחק..." : (deletingItem.discontinued ? "הסר לצמיתות" : "אשר מחיקה")}
+              </button>
+              <button
+                onClick={() => { setDeletingItem(null); setDeleteError(null); }}
+                disabled={isDeleting}
+                className="h-12 w-full sm:w-auto inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 px-6 text-sm font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer disabled:opacity-50"
+              >ביטול</button>
+            </SheetActions>
+          }
+        >
             <div className="flex flex-col items-center text-center">
               <div className="flex h-20 w-20 items-center justify-center rounded-full bg-red-950/50 text-red-500 mb-5 border border-red-900/50">
                 <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6" /></svg>
               </div>
-              <h4 className="text-xl font-bold text-zinc-50 mb-2">
-                {deletingItem.discontinued ? "הסרה לצמיתות מהמערכת?" : `מחיקת פריט: ${deletingItem.name}`}
-              </h4>
               <p className="text-sm text-zinc-400 mb-1 leading-relaxed">
                 {deletingItem.discontinued
                   ? `פריט "${deletingItem.name}" מסומן כהופסק. אישור ימחק את הרשומה מהמערכת לצמיתות, כולל שורות בקשות ושינועים שקשורות לפריט זה בלבד, ובקשות/שינועים שיישארו ריקים יימחקו.`
                   : "אם לפריט יש היסטוריית בקשות או שינועים, הוא יסומן כ\"הופסק\" (הקצאות פעילות חוסמות מחיקה). אם אין לו היסטוריה, הוא יימחק לצמיתות."
                 }
               </p>
-              <p className="text-xs text-zinc-500 mb-6">פעולה זו בלתי הפיכה.</p>
+              <p className="text-xs text-zinc-500 mb-2">פעולה זו בלתי הפיכה.</p>
 
               {deleteError && (
-                <div className="w-full rounded-xl border border-red-900/40 bg-red-900/10 p-3 text-sm text-red-400 mb-4">{deleteError}</div>
+                <div className="w-full rounded-xl border border-red-900/40 bg-red-900/10 p-3 text-sm text-red-400 mt-2">{deleteError}</div>
               )}
-
-              <div className="w-full flex gap-3">
-                <button
-                  disabled={isDeleting}
-                  onClick={async () => {
-                    setIsDeleting(true);
-                    setDeleteError(null);
-                    const fd = new FormData();
-                    fd.append("id", deletingItem.id);
-                    const res = await deleteItemAction(fd);
-                    setIsDeleting(false);
-                    if (!res.success) {
-                      setDeleteError(res.error || "אירעה שגיאה");
-                    } else {
-                      setDeletingItem(null);
-                      router.refresh();
-                    }
-                  }}
-                  className="flex-1 h-12 inline-flex items-center justify-center rounded-2xl bg-red-600 text-sm font-bold text-white hover:bg-red-700 transition-all cursor-pointer disabled:opacity-50"
-                >
-                  {isDeleting ? "מוחק..." : (deletingItem.discontinued ? "הסר לצמיתות" : "אשר מחיקה")}
-                </button>
-                <button
-                  onClick={() => { setDeletingItem(null); setDeleteError(null); }}
-                  disabled={isDeleting}
-                  className="flex-1 h-12 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-sm font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer disabled:opacity-50"
-                >ביטול</button>
-              </div>
             </div>
-          </div>
-        </div>
-        </ModalPortal>
+        </Sheet>
       )}
     </>
   );

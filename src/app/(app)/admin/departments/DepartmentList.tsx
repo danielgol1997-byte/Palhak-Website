@@ -21,7 +21,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { reorderDepartmentsAction, updateDepartmentAction, deleteDepartmentAction } from "./actions";
 import { Division } from "@prisma/client";
-import { ModalPortal } from "@/components/ui/ModalPortal";
+import { Sheet, SheetActions } from "@/components/ui/Sheet";
 
 interface Department {
   id: string;
@@ -183,21 +183,41 @@ export default function DepartmentList({ initialRows }: { initialRows: Departmen
       </DndContext>
 
       {editingDept && (
-        <ModalPortal>
-        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
-          <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => !isDeleting && setEditingDept(null)} />
-          <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl overflow-hidden border border-zinc-800 animate-in fade-in zoom-in duration-200">
-            <div className="flex items-center justify-between mb-8">
-              <h3 className="text-2xl font-bold text-zinc-50">עריכת מחלקה: {editingDept.name}</h3>
-              <button 
-                onClick={() => setEditingDept(null)}
-                className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-zinc-50 cursor-pointer"
+        <Sheet
+          open
+          onClose={() => !isDeleting && setEditingDept(null)}
+          dismissible={!isDeleting}
+          title={`עריכת מחלקה: ${editingDept.name}`}
+          size="md"
+          footer={
+            <div className="flex flex-col gap-3">
+              <button
+                type="submit"
+                form="department-edit-form"
+                className="h-12 w-full inline-flex items-center justify-center rounded-2xl bg-zinc-50 text-base font-bold text-zinc-950 hover:bg-zinc-200 transition-all shadow-lg shadow-zinc-100/5 cursor-pointer"
               >
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                שמירת שינויים
               </button>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsDeleting(true)}
+                  className="flex-1 h-12 inline-flex items-center justify-center rounded-2xl border border-red-900/50 bg-red-950/20 text-sm font-bold text-red-500 hover:bg-red-950/40 transition-all cursor-pointer"
+                >
+                  מחיקה
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingDept(null)}
+                  className="flex-1 h-12 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-sm font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer"
+                >
+                  ביטול
+                </button>
+              </div>
             </div>
-
-            <form action={async (fd) => { await updateDepartmentAction(fd); setEditingDept(null); }} className="grid gap-6">
+          }
+        >
+            <form id="department-edit-form" action={async (fd) => { await updateDepartmentAction(fd); setEditingDept(null); }} className="grid gap-6">
               <input type="hidden" name="id" value={editingDept.id} />
               
               <div>
@@ -242,75 +262,59 @@ export default function DepartmentList({ initialRows }: { initialRows: Departmen
                   ))}
                 </div>
               </div>
+            </form>
+        </Sheet>
+      )}
 
-              <div className="flex flex-col gap-3 mt-4">
+      {editingDept && isDeleting && (
+        <Sheet
+          open
+          onClose={() => setIsDeleting(false)}
+          size="sm"
+          zIndex={210}
+          footer={
+            <SheetActions>
+              <form
+                className="w-full sm:w-auto"
+                action={async (fd) => {
+                  try {
+                    await deleteDepartmentAction(fd);
+                    setIsDeleting(false);
+                    setEditingDept(null);
+                  } catch (e: any) {
+                    alert(e.message);
+                    setIsDeleting(false);
+                  }
+                }}
+              >
+                <input type="hidden" name="id" value={editingDept.id} />
                 <button
                   type="submit"
-                  className="h-14 w-full inline-flex items-center justify-center rounded-2xl bg-zinc-50 text-base font-bold text-zinc-950 hover:bg-zinc-200 transition-all shadow-lg shadow-zinc-100/5 cursor-pointer"
+                  className="h-12 w-full sm:w-auto sm:px-6 inline-flex items-center justify-center rounded-2xl bg-red-600 text-base font-bold text-white hover:bg-red-700 transition-all shadow-lg shadow-red-950/20 cursor-pointer"
                 >
-                  שמירת שינויים
+                  כן, מחק מחלקה
                 </button>
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setIsDeleting(true)}
-                    className="flex-1 h-12 inline-flex items-center justify-center rounded-2xl border border-red-900/50 bg-red-950/20 text-sm font-bold text-red-500 hover:bg-red-950/40 transition-all cursor-pointer"
-                  >
-                    מחיקה
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditingDept(null)}
-                    className="flex-1 h-12 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-sm font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer"
-                  >
-                    ביטול
-                  </button>
-                </div>
-              </div>
-            </form>
-
-            {isDeleting && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center p-8 bg-zinc-900/95 backdrop-blur-md animate-in fade-in zoom-in duration-200">
-                <div className="text-center w-full max-w-sm">
-                  <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-red-950/50 text-red-500 mb-6 border border-red-900/50">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6"/></svg>
-                  </div>
-                  <h4 className="text-2xl font-bold text-zinc-50 mb-3">האם אתה בטוח?</h4>
-                  <p className="text-zinc-400 mb-10 leading-relaxed px-4">
-                    מחיקת מחלקה תסיר אותה מהמערכת לצמיתות. לא ניתן למחוק מחלקות עם חיילים או תפקידים פעילים.
-                  </p>
-                  <div className="flex flex-col gap-3">
-                    <form action={async (fd) => {
-                      try {
-                        await deleteDepartmentAction(fd);
-                        setIsDeleting(false);
-                        setEditingDept(null);
-                      } catch (e: any) {
-                        alert(e.message);
-                        setIsDeleting(false);
-                      }
-                    }}>
-                      <input type="hidden" name="id" value={editingDept.id} />
-                      <button
-                        type="submit"
-                        className="h-14 w-full inline-flex items-center justify-center rounded-2xl bg-red-600 text-base font-bold text-white hover:bg-red-700 transition-all shadow-lg shadow-red-950/20 cursor-pointer"
-                      >
-                        כן, מחק מחלקה
-                      </button>
-                    </form>
-                    <button
-                      onClick={() => setIsDeleting(false)}
-                      className="h-12 w-full inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-sm font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer"
-                    >
-                      ביטול
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
+              </form>
+              <button
+                type="button"
+                onClick={() => setIsDeleting(false)}
+                className="h-12 w-full sm:w-auto sm:px-6 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-sm font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer"
+              >
+                ביטול
+              </button>
+            </SheetActions>
+          }
+        >
+          <div className="text-center w-full max-w-sm mx-auto py-2">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-red-950/50 text-red-500 mb-6 border border-red-900/50">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6"/></svg>
+            </div>
+            <h4 className="text-2xl font-bold text-zinc-50 mb-3">האם אתה בטוח?</h4>
+            <p className="text-zinc-400 leading-relaxed px-4">
+              מחיקת מחלקה תסיר אותה מהמערכת לצמיתות. לא ניתן למחוק מחלקות עם חיילים או תפקידים פעילים.
+            </p>
           </div>
-        </div>
-        </ModalPortal>
+        </Sheet>
       )}
     </>
   );

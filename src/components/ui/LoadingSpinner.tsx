@@ -88,7 +88,11 @@ export function LoadingDots({ text }: { text?: string }) {
   );
 }
 
-export function LoadingButton({ children, isLoading, ...props }: any) {
+export function LoadingButton({
+  children,
+  isLoading,
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { isLoading?: boolean }) {
   return (
     <button {...props} disabled={isLoading || props.disabled}>
       {isLoading ? (

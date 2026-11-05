@@ -6,7 +6,7 @@ import { upsertStorageInventoryAction, recoverAssignmentToStorageAction } from "
 import { divisionLabel } from "@/lib/he";
 import { Division } from "@prisma/client";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
-import { ModalPortal } from "@/components/ui/ModalPortal";
+import { Sheet, SheetActions } from "@/components/ui/Sheet";
 
 interface Assignment {
   id: string;
@@ -85,7 +85,7 @@ export default function StorageList({ initialRows }: { initialRows: StorageInven
   };
 
   const filteredAndSortedItems = useMemo(() => {
-    let filtered = items.filter((item) => {
+    const filtered = items.filter((item) => {
       const matchesSearch = !searchQuery || 
         item.equipmentItem.name.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesDivision = selectedDivision === "ALL" || 
@@ -213,8 +213,8 @@ export default function StorageList({ initialRows }: { initialRows: StorageInven
                     סה״כ <SortIcon field="total" />
                   </div>
                 </th>
-                <th className="px-4 py-3 text-center min-w-[300px]">
-                  <div className="flex items-center justify-center gap-3 text-[10px] font-semibold">
+                <th data-mobile-label="פירוט" className="px-4 py-3 text-center md:min-w-[300px]">
+                  <div className="flex flex-wrap items-center justify-center gap-1 md:gap-3 text-[10px] font-semibold">
                     <button
                       onClick={() => handleSort("inStorage")}
                       className="flex items-center gap-1 px-2 py-1 rounded hover:bg-emerald-900/20 transition-colors cursor-pointer"
@@ -300,8 +300,8 @@ export default function StorageList({ initialRows }: { initialRows: StorageInven
                         {row.total}
                       </div>
                     </td>
-                    <td className="px-4 py-4">
-                      <div className="h-10 w-full rounded-lg overflow-hidden flex border border-zinc-800 bg-zinc-900">
+                    <td className="px-4 py-4 min-w-0">
+                      <div className="h-10 w-full min-w-0 rounded-lg overflow-hidden flex border border-zinc-800 bg-zinc-900">
                         {/* In Storage - Green */}
                         {row.inStorage > 0 && (
                           <button
@@ -394,7 +394,7 @@ export default function StorageList({ initialRows }: { initialRows: StorageInven
                       </div>
                     </td>
                     <td className="px-4 py-4">
-                      <div className="flex gap-2 justify-center">
+                      <div className="flex flex-wrap gap-2 justify-center">
                         <button
                           onClick={() => setEditingItem(row)}
                           className="px-3 py-1.5 rounded-lg text-xs font-bold bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer"
@@ -412,106 +412,87 @@ export default function StorageList({ initialRows }: { initialRows: StorageInven
       )}
 
       {editingItem && (
-        <ModalPortal>
-        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
-          <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => setEditingItem(null)} />
-          <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl overflow-hidden border border-zinc-800 animate-in fade-in zoom-in duration-200">
-            <div className="flex items-center justify-between mb-8">
-              <h3 className="text-2xl font-bold text-zinc-50">עריכת מלאי</h3>
-              <button onClick={() => setEditingItem(null)} className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-zinc-50 cursor-pointer">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
-              </button>
-            </div>
-
-            <div className="mb-6 p-4 rounded-xl border border-zinc-800 bg-zinc-950">
-              <div className="text-lg font-bold text-zinc-50 mb-1">{editingItem.equipmentItem.name}</div>
-              <div className="text-sm text-zinc-400">{divisionLabel(editingItem.equipmentItem.category.division)}</div>
-            </div>
-
-            <form action={async (fd) => { await upsertStorageInventoryAction(fd); setEditingItem(null); }} className="grid gap-6">
-              <input type="hidden" name="equipmentItemId" value={editingItem.equipmentItem.id} />
-              
-              <div>
-                <label className="text-sm font-bold text-blue-400 mb-2 block">נופק (לחיילים)</label>
-                <div className="h-12 w-full rounded-xl border border-blue-900/40 bg-blue-900/10 px-4 text-xl font-bold text-blue-300 flex items-center">
-                  {editingItem.assignedHealthy}
-                </div>
-                <div className="mt-1 text-xs text-zinc-500">לא ניתן לעריכה · מחושב אוטומטית</div>
-              </div>
-
-              <div>
-                <label className="text-sm font-bold text-green-400 mb-2 block">במלאי</label>
-                <input 
-                  name="quantity" 
-                  type="number" 
-                  min="0"
-                  defaultValue={editingItem.inStorage} 
-                  className="h-12 w-full rounded-xl border border-green-900/40 bg-green-900/10 px-4 text-xl font-bold text-green-300 focus:ring-2 focus:ring-green-500 outline-none transition-all" 
-                  required 
-                  autoFocus
-                />
-              </div>
-
-              <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-950">
-                <div className="text-xs text-zinc-500 mb-2">סה״כ מלאי (לאחר שמירה)</div>
-                <div className="text-sm text-zinc-400 space-y-1">
-                  <div><span className="text-emerald-400">במלאי</span> + <span className="text-amber-400">{editingItem.inBoxes} בקרטונים</span> + <span className="text-blue-400">{editingItem.assignedHealthy} מוקצה</span> + <span className="text-orange-400">{editingItem.damaged} בלאי</span> + <span className="text-yellow-400">{editingItem.used} שומש</span> + <span className="text-red-400">{editingItem.stolenOrLost} אבד/נגנב</span></div>
-                  <div className="text-xl font-bold text-zinc-50">= {editingItem.total} סה״כ</div>
-                </div>
-              </div>
-
-              <div className="flex gap-3 mt-4">
-                <button type="submit" className="flex-1 h-14 inline-flex items-center justify-center rounded-2xl bg-zinc-50 text-base font-bold text-zinc-950 hover:bg-zinc-200 transition-all shadow-lg shadow-zinc-100/5 cursor-pointer">שמירה</button>
-                <button type="button" onClick={() => setEditingItem(null)} className="flex-1 h-14 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-base font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer">ביטול</button>
-              </div>
-            </form>
+        <Sheet
+          open
+          onClose={() => setEditingItem(null)}
+          title="עריכת מלאי"
+          size="sm"
+          footer={
+            <SheetActions>
+              <button type="submit" form="storage-edit-form" className="h-12 w-full sm:w-auto sm:min-w-[140px] inline-flex items-center justify-center rounded-2xl bg-zinc-50 px-6 text-base font-bold text-zinc-950 hover:bg-zinc-200 transition-all shadow-lg shadow-zinc-100/5 cursor-pointer">שמירה</button>
+              <button type="button" onClick={() => setEditingItem(null)} className="h-12 w-full sm:w-auto inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 px-6 text-base font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer">ביטול</button>
+            </SheetActions>
+          }
+        >
+          <div className="mb-6 p-4 rounded-xl border border-zinc-800 bg-zinc-950">
+            <div className="text-lg font-bold text-zinc-50 mb-1">{editingItem.equipmentItem.name}</div>
+            <div className="text-sm text-zinc-400">{divisionLabel(editingItem.equipmentItem.category.division)}</div>
           </div>
-        </div>
-        </ModalPortal>
+
+          <form id="storage-edit-form" action={async (fd) => { await upsertStorageInventoryAction(fd); setEditingItem(null); }} className="grid gap-6">
+            <input type="hidden" name="equipmentItemId" value={editingItem.equipmentItem.id} />
+
+            <div>
+              <label className="text-sm font-bold text-blue-400 mb-2 block">נופק (לחיילים)</label>
+              <div className="h-12 w-full rounded-xl border border-blue-900/40 bg-blue-900/10 px-4 text-xl font-bold text-blue-300 flex items-center">
+                {editingItem.assignedHealthy}
+              </div>
+              <div className="mt-1 text-xs text-zinc-500">לא ניתן לעריכה · מחושב אוטומטית</div>
+            </div>
+
+            <div>
+              <label className="text-sm font-bold text-green-400 mb-2 block">במלאי</label>
+              <input
+                name="quantity"
+                type="number"
+                min="0"
+                defaultValue={editingItem.inStorage}
+                className="h-12 w-full rounded-xl border border-green-900/40 bg-green-900/10 px-4 text-xl font-bold text-green-300 focus:ring-2 focus:ring-green-500 outline-none transition-all"
+                required
+                autoFocus
+              />
+            </div>
+
+            <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-950">
+              <div className="text-xs text-zinc-500 mb-2">סה״כ מלאי (לאחר שמירה)</div>
+              <div className="text-sm text-zinc-400 space-y-1">
+                <div><span className="text-emerald-400">במלאי</span> + <span className="text-amber-400">{editingItem.inBoxes} בקרטונים</span> + <span className="text-blue-400">{editingItem.assignedHealthy} מוקצה</span> + <span className="text-orange-400">{editingItem.damaged} בלאי</span> + <span className="text-yellow-400">{editingItem.used} שומש</span> + <span className="text-red-400">{editingItem.stolenOrLost} אבד/נגנב</span></div>
+                <div className="text-xl font-bold text-zinc-50">= {editingItem.total} סה״כ</div>
+              </div>
+            </div>
+          </form>
+        </Sheet>
       )}
 
       {/* Status Detail Modal */}
       {statusModal && (
-        <ModalPortal>
-        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
-          <div
-            className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm"
-            onClick={() => setStatusModal(null)}
-          />
-          <div className="relative w-full max-w-2xl rounded-3xl bg-zinc-900 p-6 sm:p-8 shadow-2xl overflow-hidden border border-zinc-800 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-start justify-between mb-6">
-              <div>
-                <h3 className="text-xl sm:text-2xl font-bold text-zinc-50">
-                  {statusModal.item.equipmentItem.name}
-                </h3>
-                <div className="mt-1 text-sm text-zinc-400">
-                  {statusModal.statusType === "inStorage" && "פריטים במלאי"}
-                  {statusModal.statusType === "inBoxes" && "פריטים בקרטונים"}
-                  {statusModal.statusType === "assigned" && "פריטים מוקצים לחיילים"}
-                  {statusModal.statusType === "damaged" && "פריטים בבלאי"}
-                  {statusModal.statusType === "used" && "פריטים שומשים"}
-                  {statusModal.statusType === "stolenOrLost" && "פריטים אבודים/גנובים"}
-                </div>
-              </div>
+        <Sheet
+          open
+          onClose={() => setStatusModal(null)}
+          title={statusModal.item.equipmentItem.name}
+          subtitle={
+            <>
+              {statusModal.statusType === "inStorage" && "פריטים במלאי"}
+              {statusModal.statusType === "inBoxes" && "פריטים בקרטונים"}
+              {statusModal.statusType === "assigned" && "פריטים מוקצים לחיילים"}
+              {statusModal.statusType === "damaged" && "פריטים בבלאי"}
+              {statusModal.statusType === "used" && "פריטים שומשים"}
+              {statusModal.statusType === "stolenOrLost" && "פריטים אבודים/גנובים"}
+            </>
+          }
+          size="lg"
+          footer={
+            <SheetActions>
               <button
+                type="button"
                 onClick={() => setStatusModal(null)}
-                className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-zinc-50 cursor-pointer"
+                className="h-12 w-full sm:w-auto inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 px-6 text-base font-bold text-zinc-300 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer"
               >
-                <svg
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M18 6L6 18M6 6l12 12" />
-                </svg>
+                סגור
               </button>
-            </div>
-
+            </SheetActions>
+          }
+        >
             {statusModal.statusType === "inStorage" ? (
               <div className="rounded-xl border border-emerald-900/40 bg-emerald-900/10 p-6">
                 <div className="text-center">
@@ -540,7 +521,7 @@ export default function StorageList({ initialRows }: { initialRows: StorageInven
                     אין נתונים
                   </div>
                 ) : (
-                  <div className="rounded-xl border border-zinc-800 overflow-hidden">
+                  <div className="rounded-xl border border-zinc-800 overflow-x-auto md:overflow-hidden">
                     <table className="w-full">
                       <thead>
                         <tr className="bg-zinc-950 text-xs font-bold text-zinc-500 uppercase tracking-wider">
@@ -597,7 +578,7 @@ export default function StorageList({ initialRows }: { initialRows: StorageInven
                   const canRecover = statusModal.statusType === "damaged" || statusModal.statusType === "used" || statusModal.statusType === "stolenOrLost";
 
                   return (
-                    <div className="rounded-xl border border-zinc-800 overflow-hidden">
+                    <div className="rounded-xl border border-zinc-800 overflow-x-auto md:overflow-hidden">
                       <table className="w-full">
                         <thead>
                           <tr className="bg-zinc-950 text-xs font-bold text-zinc-500 uppercase tracking-wider">
@@ -677,34 +658,38 @@ export default function StorageList({ initialRows }: { initialRows: StorageInven
                 })()}
               </div>
             )}
-          </div>
-        </div>
-        </ModalPortal>
+        </Sheet>
       )}
 
       {/* Recovery Modal */}
       {recoveryModal && (
-        <ModalPortal>
-        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
-          <div
-            className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm"
-            onClick={() => setRecoveryModal(null)}
-          />
-          <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl overflow-hidden border border-zinc-800 animate-in fade-in zoom-in duration-200">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-2xl font-bold text-zinc-50">
-                {recoveryModal.assignment.status === "DAMAGED" ? "החלפת פריט" : recoveryModal.assignment.status === "USED" ? "החלפה בציוד חדש" : "שחזור פריט"}
-              </h3>
+        <Sheet
+          open
+          onClose={() => setRecoveryModal(null)}
+          dismissible={!isRecovering}
+          zIndex={210}
+          title={recoveryModal.assignment.status === "DAMAGED" ? "החלפת פריט" : recoveryModal.assignment.status === "USED" ? "החלפה בציוד חדש" : "שחזור פריט"}
+          size="sm"
+          footer={
+            <SheetActions>
               <button
-                onClick={() => setRecoveryModal(null)}
-                className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-zinc-50 cursor-pointer"
+                type="submit"
+                form="storage-recover-form"
+                disabled={isRecovering}
+                className="h-12 w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-6 text-base font-bold text-white hover:bg-emerald-500 transition-all shadow-lg cursor-pointer disabled:opacity-50"
               >
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M18 6L6 18M6 6l12 12" />
-                </svg>
+                {isRecovering ? <LoadingSpinner size="sm" /> : (recoveryModal.assignment.status === "DAMAGED" ? "החלף והחזר למלאי" : recoveryModal.assignment.status === "USED" ? "החלף בציוד חדש" : "שחזר והחזר למלאי")}
               </button>
-            </div>
-
+              <button
+                type="button"
+                onClick={() => setRecoveryModal(null)}
+                className="h-12 w-full sm:w-auto inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 px-6 text-base font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer"
+              >
+                ביטול
+              </button>
+            </SheetActions>
+          }
+        >
             <div className="mb-6 p-4 rounded-xl border border-zinc-800 bg-zinc-950 space-y-2">
               <div className="text-lg font-bold text-zinc-50">{recoveryModal.itemName}</div>
               <div className="text-sm text-zinc-400">
@@ -728,6 +713,7 @@ export default function StorageList({ initialRows }: { initialRows: StorageInven
             </div>
 
             <form
+              id="storage-recover-form"
               action={async (fd) => {
                 setIsRecovering(true);
                 try {
@@ -741,7 +727,7 @@ export default function StorageList({ initialRows }: { initialRows: StorageInven
               className="space-y-6"
             >
               <input type="hidden" name="assignmentId" value={recoveryModal.assignment.id} />
-              
+
               <div>
                 <label className="text-sm font-bold text-emerald-400 mb-2 block">
                   כמות {recoveryModal.assignment.status === "DAMAGED" ? "להחלפה" : recoveryModal.assignment.status === "USED" ? "להחלפה" : "לשחזור"}
@@ -757,33 +743,14 @@ export default function StorageList({ initialRows }: { initialRows: StorageInven
                   autoFocus
                 />
                 <div className="mt-2 text-xs text-zinc-500">
-                  {recoveryModal.assignment.status === "USED" 
+                  {recoveryModal.assignment.status === "USED"
                     ? "הכמות תופחת מ'שומש' ותתווסף למלאי. החייל יישאר עם היתרה (אם קיימת)"
                     : "הפריט יוחזר למלאי והחייל יישאר עם היתרה (אם קיימת)"
                   }
                 </div>
               </div>
-
-              <div className="flex gap-3 mt-4">
-                <button
-                  type="submit"
-                  disabled={isRecovering}
-                  className="flex-1 h-14 inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-base font-bold text-white hover:bg-emerald-500 transition-all shadow-lg cursor-pointer disabled:opacity-50"
-                >
-                  {isRecovering ? <LoadingSpinner size="sm" /> : (recoveryModal.assignment.status === "DAMAGED" ? "החלף והחזר למלאי" : recoveryModal.assignment.status === "USED" ? "החלף בציוד חדש" : "שחזר והחזר למלאי")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRecoveryModal(null)}
-                  className="flex-1 h-14 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-base font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer"
-                >
-                  ביטול
-                </button>
-              </div>
             </form>
-          </div>
-        </div>
-        </ModalPortal>
+        </Sheet>
       )}
     </>
   );

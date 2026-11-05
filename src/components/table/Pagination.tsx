@@ -14,10 +14,10 @@ export function Pagination({
   basePath?: string;
   searchParams: Record<string, string | string[] | undefined>;
 }) {
-  if (totalPages <= 1) return null;
-
   const pathname = usePathname();
   const resolvedBasePath = basePath ?? pathname;
+
+  if (totalPages <= 1) return null;
 
   const toFirst = () => {
     const usp = new URLSearchParams();

@@ -11,7 +11,7 @@ export function applyFiltersToWhere<T extends Prisma.TransferWhereInput | Prisma
   base: T,
   filters: TableFilter[],
 ): T {
-  const and: any[] = [];
+  const and: Record<string, unknown>[] = [];
 
   for (const f of filters) {
     const { id, op, value } = f;
@@ -76,7 +76,9 @@ export function applyFiltersToWhere<T extends Prisma.TransferWhereInput | Prisma
   }
 
   if (!and.length) return base;
-  return { ...(base as any), AND: [...(((base as any).AND as any[]) ?? []), ...and] };
+  const existing = (base as { AND?: unknown }).AND;
+  const prior = Array.isArray(existing) ? existing : existing ? [existing] : [];
+  return { ...base, AND: [...prior, ...and] } as T;
 }
 
 

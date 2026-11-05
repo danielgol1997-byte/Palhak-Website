@@ -1,36 +1,69 @@
 "use client";
 
+import { useState } from "react";
 import type { ThemeTuning } from "@/lib/theme";
 import { DEFAULT_TUNING, GIRLY_MAX_TUNING } from "@/lib/theme-tuning";
 
-const SLIDERS: {
-  key: keyof ThemeTuning;
-  label: string;
-  min: number;
-  max: number;
-  step: number;
-}[] = [
-  { key: "tiltDivisor", label: "טיה 3D (נמוך = דרמטי יותר)", min: 8, max: 44, step: 1 },
-  { key: "tileDepthZ", label: "עומק תלת־ממד (Z)", min: 28, max: 110, step: 2 },
-  { key: "perspectivePx", label: "פרספקטיבה", min: 560, max: 1500, step: 20 },
-  { key: "glimmerStrength", label: "זוהר עכבר על הכרטיס", min: 0, max: 0.42, step: 0.02 },
-  { key: "borderAccentMix", label: "מסגרת צבעונית (אקסנט)", min: 0, max: 100, step: 2 },
-  { key: "rainbowBorder", label: "מסגרת קשת בענן", min: 0, max: 1, step: 0.05 },
-  { key: "hoverPop", label: "קפיצה במעבר עכבר", min: 1.02, max: 1.18, step: 0.01 },
-  { key: "cardRadiusPx", label: "עיגול פינות כרטיס", min: 14, max: 40, step: 1 },
-  { key: "iconGlowBlur", label: "הילה סביב האייקון", min: 0, max: 36, step: 2 },
-  { key: "shadowBoost", label: "צל עמוק ודרמטי", min: 0, max: 1, step: 0.05 },
-  { key: "cardSaturate", label: "נגיעת אקסנט בכרטיסים", min: 88, max: 160, step: 2 },
-  { key: "cardGlassBlur", label: "זכוכית מטושטשת על כרטיס", min: 0, max: 22, step: 1 },
-  { key: "globalSaturate", label: "רוויה כללית באפליקציה", min: 82, max: 128, step: 2 },
-  { key: "grainOpacity", label: "גרעיניות קולנוע (פילם)", min: 0, max: 0.12, step: 0.005 },
-  { key: "cornerBows", label: "פפיונים וקישוטים בפינות", min: 0, max: 3, step: 1 },
-  { key: "rainbowSpeedSec", label: "מהירות מסגרת קשת (שניות)", min: 2, max: 10, step: 0.5 },
+type SliderDef = { key: keyof ThemeTuning; label: string; min: number; max: number; step: number; hint?: string };
+
+const GROUPS: { id: string; title: string; emoji: string; sliders: SliderDef[]; toggles?: { key: keyof ThemeTuning; label: string }[] }[] = [
+  {
+    id: "3d",
+    title: "תלת־ממד ותנועה",
+    emoji: "🧊",
+    sliders: [
+      { key: "tiltDivisor", label: "הטיה בעכבר", min: 8, max: 44, step: 1, hint: "נמוך = דרמטי יותר" },
+      { key: "tileDepthZ", label: "עומק (Z)", min: 28, max: 110, step: 2 },
+      { key: "perspectivePx", label: "פרספקטיבה", min: 560, max: 1500, step: 20 },
+      { key: "hoverPop", label: "קפיצה במעבר עכבר", min: 1.02, max: 1.18, step: 0.01 },
+    ],
+    toggles: [
+      { key: "cardFloat", label: "כרטיסים מרחפים" },
+      { key: "cardWiggle", label: "רעדון חמוד" },
+    ],
+  },
+  {
+    id: "surface",
+    title: "צבע, מסגרת וזכוכית",
+    emoji: "🎨",
+    sliders: [
+      { key: "borderAccentMix", label: "מסגרת צבעונית", min: 0, max: 100, step: 2 },
+      { key: "rainbowBorder", label: "מסגרת קשת", min: 0, max: 1, step: 0.05 },
+      { key: "rainbowSpeedSec", label: "מהירות קשת (שנ׳)", min: 2, max: 10, step: 0.5 },
+      { key: "cardSaturate", label: "נגיעת אקסנט בכרטיס", min: 88, max: 160, step: 2 },
+      { key: "cardGlassBlur", label: "זכוכית מטושטשת", min: 0, max: 22, step: 1 },
+      { key: "cardRadiusPx", label: "עיגול פינות", min: 14, max: 40, step: 1 },
+    ],
+  },
+  {
+    id: "light",
+    title: "אור וצל",
+    emoji: "💡",
+    sliders: [
+      { key: "glimmerStrength", label: "זוהר עכבר", min: 0, max: 0.42, step: 0.02 },
+      { key: "iconGlowBlur", label: "הילה סביב אייקון", min: 0, max: 36, step: 2 },
+      { key: "shadowBoost", label: "צל דרמטי", min: 0, max: 1, step: 0.05 },
+    ],
+  },
+  {
+    id: "atmo",
+    title: "אווירה כללית",
+    emoji: "🌫️",
+    sliders: [
+      { key: "globalSaturate", label: "רוויה כללית", min: 82, max: 128, step: 2 },
+      { key: "grainOpacity", label: "גרעיניות פילם", min: 0, max: 0.12, step: 0.005 },
+      { key: "cornerBows", label: "קישוטי פינות", min: 0, max: 3, step: 1 },
+    ],
+  },
 ];
 
-function mergePartial(base: ThemeTuning, patch: Partial<ThemeTuning>): ThemeTuning {
-  return { ...base, ...patch };
-}
+const PRESET_BUTTONS: { label: string; patch: Partial<ThemeTuning>; emphasis?: boolean }[] = [
+  { label: "עדין", patch: {} },
+  { label: "נקי", patch: { tiltDivisor: 36, glimmerStrength: 0.04, borderAccentMix: 6, shadowBoost: 0.2, hoverPop: 1.03, cardRadiusPx: 18, iconGlowBlur: 6 } },
+  { label: "מודרני", patch: { tiltDivisor: 22, glimmerStrength: 0.14, borderAccentMix: 28, shadowBoost: 0.5, cardGlassBlur: 6, cardRadiusPx: 22, iconGlowBlur: 16 } },
+  { label: "מסיבה 💃", patch: { tiltDivisor: 16, glimmerStrength: 0.22, borderAccentMix: 40, rainbowBorder: 0.35, cardFloat: true, hoverPop: 1.1, shadowBoost: 0.55, cardSaturate: 120, cornerBows: 1 } },
+  { label: "👑 מקסימום נסיכות", patch: GIRLY_MAX_TUNING, emphasis: true },
+];
 
 export function ThemeTuningPanel({
   value,
@@ -43,96 +76,115 @@ export function ThemeTuningPanel({
   labelColor: string;
   mutedColor: string;
 }) {
-  const set = (patch: Partial<ThemeTuning>) => onChange(mergePartial(value, patch));
+  const [openGroup, setOpenGroup] = useState<string | null>("3d");
+  const set = (patch: Partial<ThemeTuning>) => onChange({ ...value, ...patch });
+  const groupIsDefault = (g: (typeof GROUPS)[number]) =>
+    g.sliders.every((s) => value[s.key] === DEFAULT_TUNING[s.key]) &&
+    (g.toggles ?? []).every((t) => value[t.key] === DEFAULT_TUNING[t.key]);
 
   return (
-    <div className="space-y-4 rounded-xl border border-dashed p-3" style={{ borderColor: `${labelColor}40` }}>
+    <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => onChange({ ...DEFAULT_TUNING })}
-          className="rounded-lg px-2.5 py-1.5 text-[10px] font-bold border transition-transform hover:scale-105 active:scale-95"
-          style={{ borderColor: mutedColor, color: mutedColor }}
-        >
-          עדין
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            onChange(
-              mergePartial(DEFAULT_TUNING, {
-                tiltDivisor: 16,
-                glimmerStrength: 0.22,
-                borderAccentMix: 40,
-                rainbowBorder: 0.35,
-                cardFloat: true,
-                hoverPop: 1.1,
-                shadowBoost: 0.55,
-                cardSaturate: 120,
-                cornerBows: 1,
-              })
-            )
-          }
-          className="rounded-lg px-2.5 py-1.5 text-[10px] font-bold border transition-transform hover:scale-105 active:scale-95"
-          style={{ borderColor: labelColor, color: labelColor }}
-        >
-          מסיבה 💃
-        </button>
-        <button
-          type="button"
-          onClick={() => onChange({ ...DEFAULT_TUNING, ...GIRLY_MAX_TUNING })}
-          className="rounded-lg px-2.5 py-1.5 text-[10px] font-black border-2 transition-transform hover:scale-105 active:scale-95"
-          style={{
-            borderColor: labelColor,
-            background: `linear-gradient(135deg, ${labelColor}22, transparent)`,
-            color: labelColor,
-          }}
-        >
-          👑 מקסימום נסיכות
-        </button>
-      </div>
-
-      <div className="flex flex-wrap gap-4">
-        <label className="flex items-center gap-2 text-[11px] font-bold cursor-pointer">
-          <input
-            type="checkbox"
-            checked={value.cardFloat}
-            onChange={(e) => set({ cardFloat: e.target.checked })}
-            className="rounded border-zinc-600"
-          />
-          <span style={{ color: labelColor }}>כרטיסים מרחפים</span>
-        </label>
-        <label className="flex items-center gap-2 text-[11px] font-bold cursor-pointer">
-          <input
-            type="checkbox"
-            checked={value.cardWiggle}
-            onChange={(e) => set({ cardWiggle: e.target.checked })}
-            className="rounded border-zinc-600"
-          />
-          <span style={{ color: labelColor }}>רעדון חמוד</span>
-        </label>
-      </div>
-
-      <div className="grid max-h-[min(42vh,320px)] gap-3 overflow-y-auto pr-1">
-        {SLIDERS.map((s) => (
-          <div key={s.key}>
-            <div className="flex justify-between text-[10px] font-bold mb-1" style={{ color: mutedColor }}>
-              <span style={{ color: labelColor }}>{s.label}</span>
-              <span>{Number(value[s.key]).toFixed(s.step < 1 ? 2 : 0)}</span>
-            </div>
-            <input
-              type="range"
-              min={s.min}
-              max={s.max}
-              step={s.step}
-              value={Number(value[s.key])}
-              onChange={(e) => set({ [s.key]: parseFloat(e.target.value) } as Partial<ThemeTuning>)}
-              className="w-full h-2 rounded-full appearance-none cursor-pointer accent-pink-500"
-              style={{ accentColor: labelColor }}
-            />
-          </div>
+        {PRESET_BUTTONS.map((b) => (
+          <button
+            key={b.label}
+            type="button"
+            onClick={() => onChange({ ...DEFAULT_TUNING, ...b.patch, customColors: value.customColors, fontScale: value.fontScale, reduceMotion: value.reduceMotion })}
+            className={`min-h-9 rounded-lg border px-3 py-1.5 text-xs font-bold transition hover:scale-105 active:scale-95 ${b.emphasis ? "border-2" : ""}`}
+            style={{
+              borderColor: b.emphasis ? labelColor : `${labelColor}55`,
+              color: labelColor,
+              background: b.emphasis ? `linear-gradient(135deg, ${labelColor}22, transparent)` : "transparent",
+            }}
+          >
+            {b.label}
+          </button>
         ))}
       </div>
+
+      {GROUPS.map((g) => {
+        const open = openGroup === g.id;
+        return (
+          <div key={g.id} className="rounded-xl border" style={{ borderColor: `${labelColor}30` }}>
+            <button
+              type="button"
+              onClick={() => setOpenGroup(open ? null : g.id)}
+              className="flex min-h-11 w-full items-center gap-2 px-3 py-2 text-start"
+              aria-expanded={open}
+            >
+              <span className="text-base leading-none">{g.emoji}</span>
+              <span className="flex-1 text-sm font-bold" style={{ color: labelColor }}>
+                {g.title}
+              </span>
+              {!groupIsDefault(g) && (
+                <span className="rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: `${labelColor}22`, color: labelColor }}>
+                  שונה
+                </span>
+              )}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: mutedColor, transform: open ? "rotate(180deg)" : "none", transition: "transform .2s" }}>
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
+            {open && (
+              <div className="space-y-3 border-t px-3 pb-3 pt-3" style={{ borderColor: `${labelColor}22` }}>
+                {g.toggles && (
+                  <div className="flex flex-wrap gap-4">
+                    {g.toggles.map((t) => (
+                      <label key={t.key} className="flex min-h-9 cursor-pointer items-center gap-2 text-xs font-bold">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(value[t.key])}
+                          onChange={(e) => set({ [t.key]: e.target.checked } as Partial<ThemeTuning>)}
+                          className="h-5 w-5 rounded"
+                          style={{ accentColor: labelColor }}
+                        />
+                        <span style={{ color: labelColor }}>{t.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                {g.sliders.map((s) => (
+                  <div key={s.key}>
+                    <div className="mb-1 flex items-baseline justify-between text-[11px] font-bold">
+                      <span style={{ color: labelColor }}>
+                        {s.label}
+                        {s.hint && <span className="ms-1 font-normal" style={{ color: mutedColor }}>· {s.hint}</span>}
+                      </span>
+                      <span style={{ color: mutedColor }}>{Number(value[s.key]).toFixed(s.step < 1 ? 2 : 0)}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={s.min}
+                      max={s.max}
+                      step={s.step}
+                      value={Number(value[s.key])}
+                      onChange={(e) => set({ [s.key]: parseFloat(e.target.value) } as Partial<ThemeTuning>)}
+                      className="h-6 w-full cursor-pointer appearance-none bg-transparent"
+                      style={{ accentColor: labelColor }}
+                      aria-label={s.label}
+                    />
+                  </div>
+                ))}
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const patch: Partial<ThemeTuning> = {};
+                      for (const s of g.sliders) (patch as Record<string, unknown>)[s.key] = DEFAULT_TUNING[s.key];
+                      for (const t of g.toggles ?? []) (patch as Record<string, unknown>)[t.key] = DEFAULT_TUNING[t.key];
+                      set(patch);
+                    }}
+                    className="text-[11px] font-bold underline-offset-2 hover:underline"
+                    style={{ color: mutedColor }}
+                  >
+                    אפס קבוצה
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

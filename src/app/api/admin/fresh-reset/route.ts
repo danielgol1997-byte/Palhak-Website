@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/auth";
-import { Role } from "@prisma/client";
-import { canMutate } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
+import { guardDestructiveReset } from "@/lib/destructiveGuard";
 
 export const dynamic = "force-dynamic";
 
@@ -16,16 +15,17 @@ export const dynamic = "force-dynamic";
  * - Deletes related audit logs
  * - Preserves all users, roles, items, and units
  */
-export async function POST() {
+export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
-  
+
   if (!session?.user?.id) {
     return NextResponse.json({ message: "לא מחובר." }, { status: 401 });
   }
 
-  if (session.user.role === Role.USER || !canMutate(session.user.role)) {
-    return NextResponse.json({ message: "אין הרשאה." }, { status: 403 });
-  }
+  // Destructive: super-admin only, must be explicitly enabled by env, needs a
+  // typed confirmation, and a PRE_RESET backup is taken first.
+  const guard = await guardDestructiveReset(req, session.user.id, session.user.role, "fresh-reset");
+  if (!guard.ok) return guard.response;
 
   try {
     console.log("🚀 Starting fresh database reset...");

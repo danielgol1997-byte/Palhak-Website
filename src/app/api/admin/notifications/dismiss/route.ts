@@ -7,36 +7,15 @@ export async function POST(request: NextRequest) {
   try {
     const session = await requireWriteRole(Role.ADMIN);
     const userId = session.user.id;
-
-    const body = await request.json();
-    const { notificationId } = body;
-
-    if (!notificationId) {
+    const body = (await request.json()) as { notificationId?: string };
+    if (!body.notificationId) {
       return NextResponse.json({ error: "Missing notificationId" }, { status: 400 });
     }
-
-    // Add this admin to the dismissedBy array
-    const notification = await prisma.adminNotification.findUnique({
-      where: { id: notificationId },
+    const res = await prisma.adminNotification.updateMany({
+      where: { id: body.notificationId, NOT: { dismissedBy: { has: userId } } },
+      data: { dismissedBy: { push: userId } },
     });
-
-    if (!notification) {
-      return NextResponse.json({ error: "Notification not found" }, { status: 404 });
-    }
-
-    // If not already dismissed by this user, add them
-    if (!notification.dismissedBy.includes(userId)) {
-      await prisma.adminNotification.update({
-        where: { id: notificationId },
-        data: {
-          dismissedBy: {
-            push: userId,
-          },
-        },
-      });
-    }
-
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, updated: res.count });
   } catch (error) {
     console.error("Failed to dismiss notification:", error);
     return NextResponse.json({ error: "Failed to dismiss notification" }, { status: 500 });

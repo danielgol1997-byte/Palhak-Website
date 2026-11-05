@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
-import { ModalPortal } from "@/components/ui/ModalPortal";
+import { Sheet, SheetActions } from "@/components/ui/Sheet";
 import {
   addToBoxDirectBulkAction,
   removeFromBoxAction,
@@ -47,12 +47,6 @@ interface BoxEditModalProps {
   addableItems: AddableItem[];
   onClose: () => void;
 }
-
-const CloseIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M18 6L6 18M6 6l12 12" />
-  </svg>
-);
 
 type ActionMode = "restore" | "remove" | "transfer";
 
@@ -218,18 +212,12 @@ export function BoxEditModal({ box, allUsers, addableItems, onClose }: BoxEditMo
     }
   }, [selectedCount, addSelection, addNotes, box.userId, router, onClose]);
 
-  // Close on Escape
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !isSubmitting) {
-        if (pendingAction) closeAction();
-        else onClose();
-      }
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSubmitting, pendingAction, onClose]);
+  // Escape / backdrop / X: while an action is pending, step back to the list; otherwise close.
+  const handleSheetClose = () => {
+    if (isSubmitting) return;
+    if (pendingAction) closeAction();
+    else onClose();
+  };
 
   const actionTitle =
     pendingAction?.mode === "restore"
@@ -268,45 +256,97 @@ export function BoxEditModal({ box, allUsers, addableItems, onClose }: BoxEditMo
 
   const totalInBox = box.items.reduce((s, i) => s + i.quantity, 0);
 
+  const footer = pendingAction ? (
+    <SheetActions>
+      <button
+        onClick={handleSubmit}
+        disabled={isSubmitting || (pendingAction.mode === "transfer" && !transferToUserId)}
+        className={`h-12 w-full sm:w-auto sm:min-w-[160px] inline-flex items-center justify-center gap-2 rounded-2xl px-6 ${confirmBtnClass} text-sm font-bold text-white transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed`}
+      >
+        {isSubmitting ? <LoadingSpinner size="sm" /> : confirmLabel}
+      </button>
+      <button
+        type="button"
+        onClick={closeAction}
+        disabled={isSubmitting}
+        className="h-12 w-full sm:w-auto inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 px-6 text-sm font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer disabled:opacity-50"
+      >
+        ביטול
+      </button>
+    </SheetActions>
+  ) : showAddPanel ? (
+    <SheetActions>
+      <button
+        onClick={handleAddDirect}
+        disabled={isSubmitting || selectedCount === 0 || !addNotes.trim()}
+        className="h-12 w-full sm:w-auto sm:min-w-[160px] inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-700 px-6 text-sm font-bold text-white hover:bg-emerald-600 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {isSubmitting ? (
+          <LoadingSpinner size="sm" />
+        ) : selectedCount === 1 ? (
+          "הוסף פריט לקרטון"
+        ) : (
+          `הוסף ${selectedCount} פריטים לקרטון`
+        )}
+      </button>
+      <button
+        type="button"
+        onClick={() => { setShowAddPanel(false); setError(null); }}
+        disabled={isSubmitting}
+        className="h-12 w-full sm:w-auto inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 px-6 text-sm font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer disabled:opacity-50"
+      >
+        סגור
+      </button>
+    </SheetActions>
+  ) : (
+    <SheetActions>
+      <button
+        type="button"
+        onClick={() => !isSubmitting && onClose()}
+        disabled={isSubmitting}
+        className="h-12 w-full sm:w-auto inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 px-6 text-sm font-bold text-zinc-300 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer disabled:opacity-50"
+      >
+        סגור
+      </button>
+    </SheetActions>
+  );
+
   return (
-    <ModalPortal>
-    <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4" dir="rtl">
-      <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => !isSubmitting && !pendingAction && onClose()} />
-      <div className="relative w-full max-w-2xl rounded-3xl bg-zinc-900 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200 max-h-[90vh] flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="flex items-start justify-between p-6 border-b border-zinc-800 flex-shrink-0">
-          <div>
-            <h2 className="text-xl font-bold text-zinc-50">{box.userName}</h2>
-            {box.personalNumber && <div className="text-xs text-zinc-500 mt-0.5">מ״א: {box.personalNumber}</div>}
-            <div className="text-sm text-amber-400 mt-1">{totalInBox} פריטים בקרטון</div>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {addableItems.length > 0 && (
-              <button
-                onClick={() => { setShowAddPanel((v) => !v); setPendingAction(null); setError(null); }}
-                disabled={isSubmitting}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-900/20 text-emerald-400 border border-emerald-900/40 hover:bg-emerald-900/40 transition-all cursor-pointer disabled:opacity-50"
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-                {showAddPanel ? "סגור" : "הוסף פריט"}
-              </button>
-            )}
+    <Sheet
+      open
+      onClose={handleSheetClose}
+      dismissible={!isSubmitting}
+      size="lg"
+      title={box.userName}
+      subtitle={
+        <>
+          {box.personalNumber && <span className="block text-xs text-zinc-500">מ״א: {box.personalNumber}</span>}
+          <span className="block text-sm text-amber-400">{totalInBox} פריטים בקרטון</span>
+        </>
+      }
+      headerExtra={
+        addableItems.length > 0 ? (
+          <div className="mt-2">
             <button
-              onClick={() => !isSubmitting && onClose()}
+              onClick={() => { setShowAddPanel((v) => !v); setPendingAction(null); setError(null); }}
               disabled={isSubmitting}
-              className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-zinc-50 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-900/20 text-emerald-400 border border-emerald-900/40 hover:bg-emerald-900/40 transition-all cursor-pointer disabled:opacity-50"
             >
-              <CloseIcon />
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+              {showAddPanel ? "סגור" : "הוסף פריט"}
             </button>
           </div>
-        </div>
-
+        ) : undefined
+      }
+      footer={footer}
+      bodyClassName="space-y-4"
+    >
         {/* Add to box panel */}
         {showAddPanel && (
-          <div className="flex-shrink-0 px-6 pt-5 pb-4 border-b border-zinc-800 bg-emerald-950/10">
+          <div className="rounded-2xl border border-emerald-900/30 bg-emerald-950/10 px-4 pt-4 pb-4 sm:px-5">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <h3 className="text-sm font-bold text-emerald-400">הוספה ישירה לקרטון מימ״ח</h3>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={selectAllAddable}
@@ -346,7 +386,7 @@ export function BoxEditModal({ box, allUsers, addableItems, onClose }: BoxEditMo
                         type="button"
                         onClick={() => toggleAddItem(item)}
                         disabled={isSubmitting}
-                        className="flex-1 text-right cursor-pointer disabled:cursor-not-allowed"
+                        className="flex-1 min-w-0 text-right cursor-pointer disabled:cursor-not-allowed"
                       >
                         <div className="text-sm font-bold text-zinc-100">{item.name}</div>
                         <div className="text-xs text-zinc-500">מלאי ימ״ח: {item.stock} | נותר בקרטון: {item.capacity}</div>
@@ -364,7 +404,7 @@ export function BoxEditModal({ box, allUsers, addableItems, onClose }: BoxEditMo
                     const maxQ = Math.min(item.stock, item.capacity);
                     return (
                       <div key={item.id} className="flex flex-wrap gap-2 items-end border-b border-zinc-800/80 pb-2 last:border-0 last:pb-0">
-                        <div className="flex-1 min-w-[120px] text-xs font-bold text-zinc-200">{item.name}</div>
+                        <div className="w-full sm:w-auto sm:flex-1 sm:min-w-[120px] text-xs font-bold text-zinc-200">{item.name}</div>
                         <div className="flex-shrink-0">
                           <label className="text-[10px] text-zinc-500 block mb-0.5">כמות</label>
                           <input
@@ -376,7 +416,7 @@ export function BoxEditModal({ box, allUsers, addableItems, onClose }: BoxEditMo
                             onChange={(e) =>
                               setAddLineQty(item.id, parseInt(e.target.value, 10) || 1, item.capacity, item.stock)
                             }
-                            className="h-8 w-16 rounded-lg border border-zinc-700 bg-zinc-950 px-2 text-sm font-bold text-zinc-50 outline-none disabled:opacity-50"
+                            className="h-10 sm:h-8 w-20 sm:w-16 rounded-lg border border-zinc-700 bg-zinc-950 px-2 text-sm font-bold text-zinc-50 outline-none disabled:opacity-50"
                           />
                         </div>
                         <div className="flex-1 min-w-[140px]">
@@ -386,7 +426,7 @@ export function BoxEditModal({ box, allUsers, addableItems, onClose }: BoxEditMo
                             value={draft.serial}
                             onChange={(e) => setAddLineSerial(item.id, e.target.value)}
                             placeholder="אופציונלי"
-                            className="h-8 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-50 placeholder:text-zinc-600 font-mono outline-none"
+                            className="h-10 sm:h-8 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-50 placeholder:text-zinc-600 font-mono outline-none"
                           />
                         </div>
                       </div>
@@ -401,32 +441,18 @@ export function BoxEditModal({ box, allUsers, addableItems, onClose }: BoxEditMo
                   type="text" value={addNotes}
                   onChange={(e) => setAddNotes(e.target.value)}
                   placeholder="סיבת ההוספה (חובה)..."
-                  className="h-9 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-50 placeholder:text-zinc-600 outline-none focus:ring-1 focus:ring-zinc-500"
+                  className="h-11 sm:h-9 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-50 placeholder:text-zinc-600 outline-none focus:ring-1 focus:ring-zinc-500"
                 />
               </div>
 
               {error && <div className="text-xs text-red-400 bg-red-900/10 border border-red-900/30 rounded-lg px-3 py-2">{error}</div>}
-
-              <button
-                onClick={handleAddDirect}
-                disabled={isSubmitting || selectedCount === 0 || !addNotes.trim()}
-                className="w-full h-10 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 text-sm font-bold text-white hover:bg-emerald-600 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSubmitting ? (
-                  <LoadingSpinner size="sm" />
-                ) : selectedCount === 1 ? (
-                  "הוסף פריט לקרטון"
-                ) : (
-                  `הוסף ${selectedCount} פריטים לקרטון`
-                )}
-              </button>
             </div>
           </div>
         )}
 
         {/* Action confirmation panel */}
         {pendingAction && (
-          <div className="flex-shrink-0 px-6 pt-5 pb-4 border-b border-zinc-800 bg-zinc-950/50">
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/50 px-4 pt-4 pb-4 sm:px-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className={`text-lg font-bold ${actionColor}`}>{actionTitle}</h3>
               <button onClick={closeAction} disabled={isSubmitting} className="text-xs text-zinc-500 hover:text-zinc-300 cursor-pointer">ביטול</button>
@@ -457,7 +483,7 @@ export function BoxEditModal({ box, allUsers, addableItems, onClose }: BoxEditMo
                       p ? { ...p, quantity: Math.min(Math.max(1, parseInt(e.target.value) || 1), p.item.quantity) } : p,
                     )
                   }
-                  className="h-10 w-32 rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm font-bold text-zinc-50 focus:ring-2 focus:ring-zinc-500 outline-none"
+                  className="h-12 sm:h-10 w-full sm:w-32 rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm font-bold text-zinc-50 focus:ring-2 focus:ring-zinc-500 outline-none"
                 />
               </div>
             )}
@@ -475,7 +501,7 @@ export function BoxEditModal({ box, allUsers, addableItems, onClose }: BoxEditMo
                       p ? { ...p, quantity: Math.min(Math.max(1, parseInt(e.target.value) || 1), p.item.quantity) } : p,
                     )
                   }
-                  className="h-10 w-32 rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm font-bold text-zinc-50 focus:ring-2 focus:ring-zinc-500 outline-none"
+                  className="h-12 sm:h-10 w-full sm:w-32 rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm font-bold text-zinc-50 focus:ring-2 focus:ring-zinc-500 outline-none"
                 />
               </div>
             )}
@@ -489,7 +515,7 @@ export function BoxEditModal({ box, allUsers, addableItems, onClose }: BoxEditMo
                   value={transferSearch}
                   onChange={(e) => { setTransferSearch(e.target.value); setTransferToUserId(null); }}
                   placeholder="חיפוש לפי שם או מ״א..."
-                  className="h-10 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-50 placeholder:text-zinc-600 outline-none focus:ring-2 focus:ring-zinc-500 mb-1"
+                  className="h-12 sm:h-10 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-50 placeholder:text-zinc-600 outline-none focus:ring-2 focus:ring-zinc-500 mb-1"
                 />
                 <div className="max-h-36 overflow-y-auto rounded-xl border border-zinc-800 divide-y divide-zinc-800">
                   {filteredTransferTargets.length === 0 ? (
@@ -519,24 +545,17 @@ export function BoxEditModal({ box, allUsers, addableItems, onClose }: BoxEditMo
               </div>
             )}
 
-            {error && <div className="rounded-xl border border-red-900/40 bg-red-900/10 p-3 text-xs text-red-400 mb-3">{error}</div>}
-            <button
-              onClick={handleSubmit}
-              disabled={isSubmitting || (pendingAction.mode === "transfer" && !transferToUserId)}
-              className={`h-12 w-full inline-flex items-center justify-center gap-2 rounded-2xl ${confirmBtnClass} text-sm font-bold text-white transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed`}
-            >
-              {isSubmitting ? <LoadingSpinner size="sm" /> : confirmLabel}
-            </button>
+            {error && <div className="rounded-xl border border-red-900/40 bg-red-900/10 p-3 text-xs text-red-400">{error}</div>}
           </div>
         )}
 
         {/* Box items list */}
-        <div className="overflow-y-auto flex-1">
-          {box.items.length === 0 ? (
-            <div className="py-12 text-center text-sm text-zinc-500">הקרטון ריק.</div>
-          ) : (
+        {box.items.length === 0 ? (
+          <div className="py-12 text-center text-sm text-zinc-500">הקרטון ריק.</div>
+        ) : (
+          <div className="rounded-xl border border-zinc-800 overflow-x-auto md:overflow-hidden">
             <table className="w-full">
-              <thead className="sticky top-0 z-10">
+              <thead className="md:sticky md:top-0 z-10">
                 <tr className="bg-zinc-950 text-xs font-bold text-zinc-500 uppercase tracking-wider border-b border-zinc-800">
                   <th className="px-4 py-3 text-right">פריט</th>
                   <th className="px-4 py-3 text-center">כמות</th>
@@ -592,10 +611,8 @@ export function BoxEditModal({ box, allUsers, addableItems, onClose }: BoxEditMo
                 ))}
               </tbody>
             </table>
-          )}
-        </div>
-      </div>
-    </div>
-    </ModalPortal>
+          </div>
+        )}
+    </Sheet>
   );
 }

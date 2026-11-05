@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { RequestType, RequestStatus, Priority, Division } from "@prisma/client";
-import { requestTypeLabel, priorityLabel, divisionLabel } from "@/lib/he";
+import { priorityLabel, divisionLabel } from "@/lib/he";
 import { RequestDetailModal } from "./RequestDetailModal";
 
 interface Request {
@@ -92,7 +92,7 @@ export function ReturnsTable({
   };
 
   const filteredRequests = useMemo(() => {
-    let filtered = requests.filter((req) => {
+    const filtered = requests.filter((req) => {
       // Apply search filter
       if (searchTerm) {
         const search = searchTerm.toLowerCase();
@@ -190,7 +190,7 @@ export function ReturnsTable({
 
   return (
     <>
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 sm:p-6">
         {/* Filters */}
         <div className="mb-6 flex flex-wrap gap-2">
           <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider w-full mb-2">
@@ -251,7 +251,7 @@ export function ReturnsTable({
                   onClick={() => handleSort("quantity")}
                 >
                   <div className="flex items-center justify-center gap-1">
-                    כמות כוללת
+                    כמות
                     {sortField === "quantity" && (
                       <span className="text-zinc-400">{sortDirection === "asc" ? "↑" : "↓"}</span>
                     )}
@@ -273,7 +273,7 @@ export function ReturnsTable({
                   onClick={() => handleSort("createdAt")}
                 >
                   <div className="flex items-center justify-end gap-1">
-                    תאריך יצירה
+                    תאריך
                     {sortField === "createdAt" && (
                       <span className="text-zinc-400">{sortDirection === "asc" ? "↑" : "↓"}</span>
                     )}
@@ -284,7 +284,7 @@ export function ReturnsTable({
                   onClick={() => handleSort("resolvedBy")}
                 >
                   <div className="flex items-center justify-end gap-1">
-                    טופל על ידי
+                    טופל ע״י
                     {sortField === "resolvedBy" && (
                       <span className="text-zinc-400">{sortDirection === "asc" ? "↑" : "↓"}</span>
                     )}

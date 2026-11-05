@@ -127,7 +127,7 @@ export default async function UnitTemplateDetailPage({
                 </div>
                 
                 <div className="flex flex-wrap items-center gap-4">
-                  <form action={addUnitTemplateItemAction} className="flex items-center gap-3 flex-1 min-w-[200px]">
+                  <form action={addUnitTemplateItemAction} className="flex min-w-0 flex-1 basis-52 items-center gap-3">
                     <input type="hidden" name="unitTemplateId" value={tpl.id} />
                     <input type="hidden" name="equipmentItemId" value={i.equipmentItemId} />
                     <div className="flex-1">

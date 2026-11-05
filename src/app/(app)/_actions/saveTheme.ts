@@ -7,6 +7,7 @@ import { Role } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import { mergeTuning } from "@/lib/theme-tuning";
+import { CUSTOM_PRESET_ID, THEME_EFFECTS, THEME_PRESETS } from "@/lib/theme";
 
 export async function saveThemeAction(
   formData: FormData
@@ -16,8 +17,11 @@ export async function saveThemeAction(
     return { success: false, error: "אין הרשאה" };
   }
 
-  const preset = (formData.get("preset") as string) ?? "default";
-  const effect = (formData.get("effect") as string) ?? "none";
+  const presetRaw = (formData.get("preset") as string) ?? "default";
+  const effectRaw = (formData.get("effect") as string) ?? "none";
+  const preset =
+    presetRaw === CUSTOM_PRESET_ID || THEME_PRESETS.some((p) => p.id === presetRaw) ? presetRaw : "default";
+  const effect = THEME_EFFECTS.some((e) => e.id === effectRaw) ? effectRaw : "none";
   const tuningRaw = formData.get("tuning");
   let tuning = mergeTuning(undefined);
   if (typeof tuningRaw === "string" && tuningRaw.trim()) {

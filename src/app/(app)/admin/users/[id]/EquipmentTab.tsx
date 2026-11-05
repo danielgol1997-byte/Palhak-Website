@@ -18,7 +18,7 @@ import {
 } from "./equipment-actions";
 import { EquipmentSelector } from "@/components/equipment/EquipmentSelector";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
-import { ModalPortal } from "@/components/ui/ModalPortal";
+import { Sheet, SheetActions } from "@/components/ui/Sheet";
 
 interface Assignment {
   id: string;
@@ -124,11 +124,14 @@ interface BulkProgress {
   finished: boolean;
 }
 
-const CloseIcon = () => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M18 6L6 18M6 6l12 12" />
-  </svg>
-);
+// Sheet footer buttons: full-width on phones, auto on desktop.
+const SHEET_BTN =
+  "h-12 w-full sm:w-auto sm:min-w-[9rem] px-6 inline-flex items-center justify-center gap-2 rounded-2xl text-base font-bold transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed";
+const SHEET_BTN_SECONDARY = `${SHEET_BTN} border border-zinc-800 bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50`;
+
+// Forms whose submit button lives in the Sheet footer (outside the <form>).
+const UNASSIGN_FORM_ID = "equipment-tab-unassign-form";
+const ASSIGN_FORM_ID = "equipment-tab-assign-form";
 
 export function EquipmentTab({
   user,
@@ -714,6 +717,7 @@ export function EquipmentTab({
                     type="checkbox"
                     checked={allSelected}
                     onChange={toggleSelectAll}
+                    aria-label="בחר הכל"
                     className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-zinc-50 cursor-pointer accent-zinc-50"
                   />
                 </th>
@@ -739,6 +743,7 @@ export function EquipmentTab({
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => toggleSelect(assignment.id)}
+                        aria-label={`בחר ${assignment.equipmentItem.name}`}
                         className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 cursor-pointer accent-zinc-50"
                       />
                     </td>
@@ -800,7 +805,7 @@ export function EquipmentTab({
       {/* Box Section */}
       {boxTemplate && boxTemplate.items.length > 0 && (
         <div className="rounded-2xl border border-amber-900/40 bg-amber-950/10 p-6">
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex flex-wrap items-center gap-3 mb-4">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-400">
               <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
               <path d="m3.3 7 8.7 5 8.7-5M12 22V12" />
@@ -815,7 +820,7 @@ export function EquipmentTab({
             </h3>
             <button
               onClick={() => { setAddToBoxModal(true); setAddToBoxSelection({}); setAddToBoxNotes(""); setError(null); }}
-              className="mr-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-900/20 text-emerald-400 border border-emerald-900/40 hover:bg-emerald-900/40 transition-all cursor-pointer"
+              className="mr-auto inline-flex items-center gap-1.5 h-10 px-4 rounded-lg text-xs font-bold bg-emerald-900/20 text-emerald-400 border border-emerald-900/40 hover:bg-emerald-900/40 transition-all cursor-pointer"
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
               הוסף לקרטון
@@ -889,353 +894,230 @@ export function EquipmentTab({
       )}
 
       {/* ===== BULK UNASSIGN MODAL ===== */}
-      {bulkUnassignModal && (
-        <ModalPortal>
-        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
-          <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => !isSubmitting && !bulkProgress?.finished ? setBulkUnassignModal(false) : undefined} />
-          <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-2xl font-bold text-red-400">ביטול הקצאה ({selectedAssignments.length})</h3>
-              {!isSubmitting && (
-                <button onClick={() => { setBulkUnassignModal(false); setBulkProgress(null); }} className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-zinc-50 cursor-pointer">
-                  <CloseIcon />
-                </button>
-              )}
-            </div>
-
-            {/* Item list */}
-            <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-950 overflow-hidden max-h-48 overflow-y-auto">
-              {selectedAssignments.map((a) => (
-                <div key={a.id} className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-800 last:border-0">
-                  <div>
-                    <div className="text-sm font-bold text-zinc-50">{a.equipmentItem.name}</div>
-                    {a.serialNumber && <div className="text-xs text-zinc-500 font-mono">צ: {a.serialNumber}</div>}
-                  </div>
-                  <div className="text-sm font-bold text-red-400">×{a.quantity}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Progress */}
-            {bulkProgress && bulkProgress.mode === "unassign" && (
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-zinc-400">{bulkProgress.done}/{bulkProgress.total} פריטים</span>
-                  {bulkProgress.finished && bulkProgress.errors.length === 0 && (
-                    <span className="text-sm font-bold text-emerald-400">הושלם בהצלחה ✓</span>
-                  )}
-                </div>
-                <div className="h-2 rounded-full bg-zinc-800 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-red-500 transition-all"
-                    style={{ width: `${(bulkProgress.done / bulkProgress.total) * 100}%` }}
-                  />
-                </div>
-                {bulkProgress.errors.length > 0 && (
-                  <div className="mt-3 rounded-xl border border-red-900/40 bg-red-900/10 p-3 space-y-1">
-                    {bulkProgress.errors.map((e, i) => (
-                      <div key={i} className="text-xs text-red-400">{e}</div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {!bulkProgress && (
-              <>
-                <div className="mb-6">
-                  <label className="text-sm font-bold text-red-400 mb-2 block">הערות <span className="text-red-500">*</span></label>
-                  <textarea
-                    value={bulkUnassignNotes}
-                    onChange={(e) => setBulkUnassignNotes(e.target.value)}
-                    rows={3}
-                    placeholder="הסבר מדוע הציוד מוחזר למלאי (חובה)..."
-                    className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-50 placeholder:text-zinc-600 outline-none focus:ring-2 focus:ring-zinc-500 transition-all resize-none"
-                  />
-                  <p className="mt-1.5 text-xs text-zinc-500">הערות אלו יחולו על כל הפריטים הנבחרים</p>
-                </div>
-                <div className="flex gap-3">
-                  <button
-                    onClick={handleBulkUnassign}
-                    disabled={!bulkUnassignNotes.trim() || isSubmitting}
-                    className="flex-1 h-14 inline-flex items-center justify-center gap-2 rounded-2xl bg-red-600 text-base font-bold text-white hover:bg-red-500 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    ביטול הקצאת {selectedAssignments.length} פריטים
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBulkUnassignModal(false)}
-                    className="flex-1 h-14 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-base font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer"
-                  >
-                    ביטול
-                  </button>
-                </div>
-              </>
-            )}
-
-            {bulkProgress?.finished && (
+      <Sheet
+        open={bulkUnassignModal}
+        onClose={() => { setBulkUnassignModal(false); setBulkProgress(null); }}
+        dismissible={!isSubmitting}
+        size="md"
+        title={<span className="text-red-400">ביטול הקצאה ({selectedAssignments.length})</span>}
+        footer={
+          !bulkProgress ? (
+            <SheetActions>
+              <button
+                onClick={handleBulkUnassign}
+                disabled={!bulkUnassignNotes.trim() || isSubmitting}
+                className={`${SHEET_BTN} bg-red-600 text-white hover:bg-red-500`}
+              >
+                ביטול הקצאת {selectedAssignments.length} פריטים
+              </button>
+              <button
+                type="button"
+                onClick={() => setBulkUnassignModal(false)}
+                className={SHEET_BTN_SECONDARY}
+              >
+                ביטול
+              </button>
+            </SheetActions>
+          ) : bulkProgress.finished ? (
+            <SheetActions>
               <button
                 onClick={() => { setBulkUnassignModal(false); setBulkProgress(null); if (bulkProgress.errors.length === 0) clearSelection(); }}
-                className="w-full h-14 inline-flex items-center justify-center rounded-2xl bg-zinc-700 text-base font-bold text-zinc-50 hover:bg-zinc-600 transition-all cursor-pointer"
+                className={`${SHEET_BTN} w-full sm:w-full bg-zinc-700 text-zinc-50 hover:bg-zinc-600`}
               >
                 סגור
               </button>
+            </SheetActions>
+          ) : undefined
+        }
+      >
+        {/* Item list */}
+        <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-950 overflow-hidden max-h-48 overflow-y-auto">
+          {selectedAssignments.map((a) => (
+            <div key={a.id} className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-zinc-800 last:border-0">
+              <div className="min-w-0">
+                <div className="text-sm font-bold text-zinc-50">{a.equipmentItem.name}</div>
+                {a.serialNumber && <div className="text-xs text-zinc-500 font-mono">צ: {a.serialNumber}</div>}
+              </div>
+              <div className="text-sm font-bold text-red-400 shrink-0">×{a.quantity}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Progress */}
+        {bulkProgress && bulkProgress.mode === "unassign" && (
+          <div className="mb-2">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-zinc-400">{bulkProgress.done}/{bulkProgress.total} פריטים</span>
+              {bulkProgress.finished && bulkProgress.errors.length === 0 && (
+                <span className="text-sm font-bold text-emerald-400">הושלם בהצלחה ✓</span>
+              )}
+            </div>
+            <div className="h-2 rounded-full bg-zinc-800 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-red-500 transition-all"
+                style={{ width: `${(bulkProgress.done / bulkProgress.total) * 100}%` }}
+              />
+            </div>
+            {bulkProgress.errors.length > 0 && (
+              <div className="mt-3 rounded-xl border border-red-900/40 bg-red-900/10 p-3 space-y-1">
+                {bulkProgress.errors.map((e, i) => (
+                  <div key={i} className="text-xs text-red-400">{e}</div>
+                ))}
+              </div>
             )}
           </div>
-        </div>
-        </ModalPortal>
-      )}
+        )}
+
+        {!bulkProgress && (
+          <div>
+            <label className="text-sm font-bold text-red-400 mb-2 block">הערות <span className="text-red-500">*</span></label>
+            <textarea
+              value={bulkUnassignNotes}
+              onChange={(e) => setBulkUnassignNotes(e.target.value)}
+              rows={3}
+              placeholder="הסבר מדוע הציוד מוחזר למלאי (חובה)..."
+              className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-50 placeholder:text-zinc-600 outline-none focus:ring-2 focus:ring-zinc-500 transition-all resize-none"
+            />
+            <p className="mt-1.5 text-xs text-zinc-500">הערות אלו יחולו על כל הפריטים הנבחרים</p>
+          </div>
+        )}
+      </Sheet>
 
       {/* ===== BULK MOVE TO BOX MODAL ===== */}
-      {bulkMoveToBoxModal && (
-        <ModalPortal>
-        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
-          <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => !isSubmitting && !bulkProgress?.finished ? setBulkMoveToBoxModal(false) : undefined} />
-          <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-2xl font-bold text-amber-400">העברה לקרטון</h3>
-              {!isSubmitting && (
-                <button onClick={() => { setBulkMoveToBoxModal(false); setBulkProgress(null); }} className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-zinc-50 cursor-pointer">
-                  <CloseIcon />
-                </button>
-              )}
-            </div>
-
-            {/* Eligible items */}
-            <div className="mb-4">
-              <div className="text-sm font-bold text-zinc-400 mb-2">פריטים שיועברו לקרטון ({boxEligibleAssignments.length})</div>
-              <div className="rounded-xl border border-amber-900/30 bg-amber-950/10 overflow-hidden max-h-40 overflow-y-auto">
-                {boxEligibleAssignments.map((a) => {
-                  const cap = getBoxRemainingCapacity(a.equipmentItem.id);
-                  const moveQty = Math.min(a.quantity, cap);
-                  return (
-                    <div key={a.id} className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-800 last:border-0">
-                      <div>
-                        <div className="text-sm font-bold text-zinc-50">{a.equipmentItem.name}</div>
-                        {a.serialNumber && <div className="text-xs text-zinc-500 font-mono">צ: {a.serialNumber}</div>}
-                      </div>
-                      <div className="text-sm font-bold text-amber-400">×{moveQty}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Ineligible items */}
-            {boxIneligibleAssignments.length > 0 && (
-              <div className="mb-4">
-                <div className="text-sm font-bold text-zinc-500 mb-2">פריטים שלא יועברו ({boxIneligibleAssignments.length})</div>
-                <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 overflow-hidden max-h-32 overflow-y-auto">
-                  {boxIneligibleAssignments.map((a) => {
-                    const inTemplate = boxTemplateAllItemIds.has(a.equipmentItem.id);
-                    const reason = !inTemplate ? "לא בתבנית הקרטון" : "הקרטון מלא לפריט זה";
-                    return (
-                      <div key={a.id} className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-800 last:border-0">
-                        <div className="text-sm text-zinc-400">{a.equipmentItem.name}</div>
-                        <div className="text-xs text-zinc-600">{reason}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Progress */}
-            {bulkProgress && bulkProgress.mode === "moveToBox" && (
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-zinc-400">{bulkProgress.done}/{bulkProgress.total} פריטים</span>
-                  {bulkProgress.finished && bulkProgress.errors.length === 0 && (
-                    <span className="text-sm font-bold text-emerald-400">הושלם בהצלחה ✓</span>
-                  )}
-                </div>
-                <div className="h-2 rounded-full bg-zinc-800 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-amber-500 transition-all"
-                    style={{ width: `${(bulkProgress.done / bulkProgress.total) * 100}%` }}
-                  />
-                </div>
-                {bulkProgress.errors.length > 0 && (
-                  <div className="mt-3 rounded-xl border border-red-900/40 bg-red-900/10 p-3 space-y-1">
-                    {bulkProgress.errors.map((e, i) => (
-                      <div key={i} className="text-xs text-red-400">{e}</div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {!bulkProgress && (
-              <div className="flex gap-3 mt-6">
-                <button
-                  onClick={handleBulkMoveToBox}
-                  disabled={isSubmitting || boxEligibleAssignments.length === 0}
-                  className="flex-1 h-14 inline-flex items-center justify-center gap-2 rounded-2xl bg-amber-600 text-base font-bold text-white hover:bg-amber-500 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  העבר {boxEligibleAssignments.length} פריטים לקרטון
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBulkMoveToBoxModal(false)}
-                  className="flex-1 h-14 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-base font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer"
-                >
-                  ביטול
-                </button>
-              </div>
-            )}
-
-            {bulkProgress?.finished && (
+      <Sheet
+        open={bulkMoveToBoxModal}
+        onClose={() => { setBulkMoveToBoxModal(false); setBulkProgress(null); }}
+        dismissible={!isSubmitting}
+        size="md"
+        title={<span className="text-amber-400">העברה לקרטון</span>}
+        footer={
+          !bulkProgress ? (
+            <SheetActions>
+              <button
+                onClick={handleBulkMoveToBox}
+                disabled={isSubmitting || boxEligibleAssignments.length === 0}
+                className={`${SHEET_BTN} bg-amber-600 text-white hover:bg-amber-500`}
+              >
+                העבר {boxEligibleAssignments.length} פריטים לקרטון
+              </button>
+              <button
+                type="button"
+                onClick={() => setBulkMoveToBoxModal(false)}
+                className={SHEET_BTN_SECONDARY}
+              >
+                ביטול
+              </button>
+            </SheetActions>
+          ) : bulkProgress.finished ? (
+            <SheetActions>
               <button
                 onClick={() => { setBulkMoveToBoxModal(false); setBulkProgress(null); if (bulkProgress.errors.length === 0) clearSelection(); }}
-                className="w-full h-14 inline-flex items-center justify-center rounded-2xl bg-zinc-700 text-base font-bold text-zinc-50 hover:bg-zinc-600 transition-all cursor-pointer"
+                className={`${SHEET_BTN} w-full sm:w-full bg-zinc-700 text-zinc-50 hover:bg-zinc-600`}
               >
                 סגור
               </button>
-            )}
-          </div>
-        </div>
-        </ModalPortal>
-      )}
-
-      {/* ===== BULK TRANSFER TO USER MODAL ===== */}
-      {bulkTransferModal && (
-        <ModalPortal>
-        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
-          <div
-            className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm"
-            onClick={() => !isSubmitting && !bulkProgress?.finished ? setBulkTransferModal(false) : undefined}
-          />
-          <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-2xl font-bold text-sky-400">העברה למשתמש אחר</h3>
-              {!isSubmitting && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setBulkTransferModal(false);
-                    setBulkProgress(null);
-                  }}
-                  className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-zinc-50 cursor-pointer"
-                >
-                  <CloseIcon />
-                </button>
-              )}
-            </div>
-
-            <div className="mb-4 rounded-xl border border-zinc-800 bg-zinc-950 overflow-hidden max-h-36 overflow-y-auto">
-              {selectedAssignments.map((a) => (
-                <div key={a.id} className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-800 last:border-0">
-                  <div>
+            </SheetActions>
+          ) : undefined
+        }
+      >
+        {/* Eligible items */}
+        <div className="mb-4">
+          <div className="text-sm font-bold text-zinc-400 mb-2">פריטים שיועברו לקרטון ({boxEligibleAssignments.length})</div>
+          <div className="rounded-xl border border-amber-900/30 bg-amber-950/10 overflow-hidden max-h-40 overflow-y-auto">
+            {boxEligibleAssignments.map((a) => {
+              const cap = getBoxRemainingCapacity(a.equipmentItem.id);
+              const moveQty = Math.min(a.quantity, cap);
+              return (
+                <div key={a.id} className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-zinc-800 last:border-0">
+                  <div className="min-w-0">
                     <div className="text-sm font-bold text-zinc-50">{a.equipmentItem.name}</div>
                     {a.serialNumber && <div className="text-xs text-zinc-500 font-mono">צ: {a.serialNumber}</div>}
                   </div>
-                  <div className="text-sm font-bold text-sky-400">×{a.quantity}</div>
+                  <div className="text-sm font-bold text-amber-400 shrink-0">×{moveQty}</div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
+          </div>
+        </div>
 
-            {bulkProgress && bulkProgress.mode === "transfer" && (
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-zinc-400">
-                    {bulkProgress.done}/{bulkProgress.total} פריטים
-                  </span>
-                  {bulkProgress.finished && bulkProgress.errors.length === 0 && (
-                    <span className="text-sm font-bold text-emerald-400">הושלם בהצלחה ✓</span>
-                  )}
-                </div>
-                <div className="h-2 rounded-full bg-zinc-800 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-sky-500 transition-all"
-                    style={{ width: `${(bulkProgress.done / Math.max(bulkProgress.total, 1)) * 100}%` }}
-                  />
-                </div>
-                {bulkProgress.errors.length > 0 && (
-                  <div className="mt-3 rounded-xl border border-red-900/40 bg-red-900/10 p-3 space-y-1">
-                    {bulkProgress.errors.map((e, i) => (
-                      <div key={i} className="text-xs text-red-400">
-                        {e}
-                      </div>
-                    ))}
+        {/* Ineligible items */}
+        {boxIneligibleAssignments.length > 0 && (
+          <div className="mb-4">
+            <div className="text-sm font-bold text-zinc-500 mb-2">פריטים שלא יועברו ({boxIneligibleAssignments.length})</div>
+            <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 overflow-hidden max-h-32 overflow-y-auto">
+              {boxIneligibleAssignments.map((a) => {
+                const inTemplate = boxTemplateAllItemIds.has(a.equipmentItem.id);
+                const reason = !inTemplate ? "לא בתבנית הקרטון" : "הקרטון מלא לפריט זה";
+                return (
+                  <div key={a.id} className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-zinc-800 last:border-0">
+                    <div className="text-sm text-zinc-400 min-w-0">{a.equipmentItem.name}</div>
+                    <div className="text-xs text-zinc-600 shrink-0">{reason}</div>
                   </div>
-                )}
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Progress */}
+        {bulkProgress && bulkProgress.mode === "moveToBox" && (
+          <div className="mb-2">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-zinc-400">{bulkProgress.done}/{bulkProgress.total} פריטים</span>
+              {bulkProgress.finished && bulkProgress.errors.length === 0 && (
+                <span className="text-sm font-bold text-emerald-400">הושלם בהצלחה ✓</span>
+              )}
+            </div>
+            <div className="h-2 rounded-full bg-zinc-800 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-amber-500 transition-all"
+                style={{ width: `${(bulkProgress.done / bulkProgress.total) * 100}%` }}
+              />
+            </div>
+            {bulkProgress.errors.length > 0 && (
+              <div className="mt-3 rounded-xl border border-red-900/40 bg-red-900/10 p-3 space-y-1">
+                {bulkProgress.errors.map((e, i) => (
+                  <div key={i} className="text-xs text-red-400">{e}</div>
+                ))}
               </div>
             )}
+          </div>
+        )}
+      </Sheet>
 
-            {!bulkProgress && (
-              <>
-                <div className="mb-4 space-y-2">
-                  <label className="text-sm font-bold text-sky-400 block">חיפוש נמען</label>
-                  <input
-                    type="search"
-                    value={transferRecipientSearch}
-                    onChange={(e) => setTransferRecipientSearch(e.target.value)}
-                    placeholder="שם או מספר אישי…"
-                    className="h-11 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-sm text-zinc-50 placeholder:text-zinc-600 outline-none focus:ring-2 focus:ring-sky-600/50"
-                  />
-                  <div className="rounded-xl border border-zinc-800 max-h-40 overflow-y-auto bg-zinc-950">
-                    {filteredTransferTargets.length === 0 ? (
-                      <div className="p-4 text-sm text-zinc-500 text-center">לא נמצאו תוצאות</div>
-                    ) : (
-                      filteredTransferTargets.map((t) => (
-                        <button
-                          key={t.id}
-                          type="button"
-                          onClick={() => setTransferToUserId(t.id)}
-                          className={`w-full text-right px-4 py-2.5 border-b border-zinc-800 last:border-0 text-sm transition-colors cursor-pointer ${
-                            transferToUserId === t.id
-                              ? "bg-sky-950/50 text-sky-300 font-bold"
-                              : "text-zinc-300 hover:bg-zinc-800/80"
-                          }`}
-                        >
-                          <div>{t.name}</div>
-                          {t.personalNumber && <div className="text-xs text-zinc-500">מ״א {t.personalNumber}</div>}
-                        </button>
-                      ))
-                    )}
-                  </div>
-                  {selectedTransferRecipientName && (
-                    <p className="text-sm text-emerald-400 font-medium">נבחר: {selectedTransferRecipientName}</p>
-                  )}
-                </div>
-                <div className="mb-6">
-                  <label className="text-sm font-bold text-sky-400 mb-2 block">
-                    הערות <span className="text-red-500">*</span>
-                  </label>
-                  <textarea
-                    value={bulkTransferAdminNotes}
-                    onChange={(e) => setBulkTransferAdminNotes(e.target.value)}
-                    rows={3}
-                    placeholder="סיבת ההעברה (תועד עבור כל הפריטים הנבחרים)…"
-                    className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-50 placeholder:text-zinc-600 outline-none focus:ring-2 focus:ring-sky-600/40 resize-none"
-                  />
-                </div>
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={handleBulkTransfer}
-                    disabled={
-                      isSubmitting ||
-                      !transferToUserId ||
-                      !bulkTransferAdminNotes.trim() ||
-                      selectedAssignments.length === 0
-                    }
-                    className="flex-1 h-14 inline-flex items-center justify-center gap-2 rounded-2xl bg-sky-600 text-base font-bold text-white hover:bg-sky-500 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    העבר {selectedAssignments.length} פריטים
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBulkTransferModal(false)}
-                    className="flex-1 h-14 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-base font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer"
-                  >
-                    ביטול
-                  </button>
-                </div>
-              </>
-            )}
-
-            {bulkProgress?.finished && (
+      {/* ===== BULK TRANSFER TO USER MODAL ===== */}
+      <Sheet
+        open={bulkTransferModal}
+        onClose={() => { setBulkTransferModal(false); setBulkProgress(null); }}
+        dismissible={!isSubmitting}
+        size="md"
+        title={<span className="text-sky-400">העברה למשתמש אחר</span>}
+        footer={
+          !bulkProgress ? (
+            <SheetActions>
+              <button
+                type="button"
+                onClick={handleBulkTransfer}
+                disabled={
+                  isSubmitting ||
+                  !transferToUserId ||
+                  !bulkTransferAdminNotes.trim() ||
+                  selectedAssignments.length === 0
+                }
+                className={`${SHEET_BTN} bg-sky-600 text-white hover:bg-sky-500`}
+              >
+                העבר {selectedAssignments.length} פריטים
+              </button>
+              <button
+                type="button"
+                onClick={() => setBulkTransferModal(false)}
+                className={SHEET_BTN_SECONDARY}
+              >
+                ביטול
+              </button>
+            </SheetActions>
+          ) : bulkProgress.finished ? (
+            <SheetActions>
               <button
                 type="button"
                 onClick={() => {
@@ -1243,158 +1125,58 @@ export function EquipmentTab({
                   setBulkProgress(null);
                   if (bulkProgress.errors.length === 0) clearSelection();
                 }}
-                className="w-full h-14 inline-flex items-center justify-center rounded-2xl bg-zinc-700 text-base font-bold text-zinc-50 hover:bg-zinc-600 transition-all cursor-pointer"
+                className={`${SHEET_BTN} w-full sm:w-full bg-zinc-700 text-zinc-50 hover:bg-zinc-600`}
               >
                 סגור
               </button>
+            </SheetActions>
+          ) : undefined
+        }
+      >
+        <div className="mb-4 rounded-xl border border-zinc-800 bg-zinc-950 overflow-hidden max-h-36 overflow-y-auto">
+          {selectedAssignments.map((a) => (
+            <div key={a.id} className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-zinc-800 last:border-0">
+              <div className="min-w-0">
+                <div className="text-sm font-bold text-zinc-50">{a.equipmentItem.name}</div>
+                {a.serialNumber && <div className="text-xs text-zinc-500 font-mono">צ: {a.serialNumber}</div>}
+              </div>
+              <div className="text-sm font-bold text-sky-400 shrink-0">×{a.quantity}</div>
+            </div>
+          ))}
+        </div>
+
+        {bulkProgress && bulkProgress.mode === "transfer" && (
+          <div className="mb-2">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-zinc-400">
+                {bulkProgress.done}/{bulkProgress.total} פריטים
+              </span>
+              {bulkProgress.finished && bulkProgress.errors.length === 0 && (
+                <span className="text-sm font-bold text-emerald-400">הושלם בהצלחה ✓</span>
+              )}
+            </div>
+            <div className="h-2 rounded-full bg-zinc-800 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-sky-500 transition-all"
+                style={{ width: `${(bulkProgress.done / Math.max(bulkProgress.total, 1)) * 100}%` }}
+              />
+            </div>
+            {bulkProgress.errors.length > 0 && (
+              <div className="mt-3 rounded-xl border border-red-900/40 bg-red-900/10 p-3 space-y-1">
+                {bulkProgress.errors.map((e, i) => (
+                  <div key={i} className="text-xs text-red-400">
+                    {e}
+                  </div>
+                ))}
+              </div>
             )}
           </div>
-        </div>
-        </ModalPortal>
-      )}
+        )}
 
-      {/* ===== SINGLE UNASSIGN MODAL ===== */}
-      {unassignModal && (
-        <ModalPortal>
-        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
-          <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => !isSubmitting && setUnassignModal(null)} />
-          <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-2xl font-bold text-zinc-50">ביטול הקצאת ציוד</h3>
-              <button onClick={() => !isSubmitting && setUnassignModal(null)} className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-zinc-50 cursor-pointer" disabled={isSubmitting}>
-                <CloseIcon />
-              </button>
-            </div>
-            <div className="mb-6 p-4 rounded-xl border border-zinc-800 bg-zinc-950">
-              <div className="text-lg font-bold text-zinc-50">{unassignModal.assignment.equipmentItem.name}</div>
-              <div className="text-sm text-zinc-400 mt-1">כמות זמינה: {unassignModal.assignment.quantity}</div>
-              {unassignModal.assignment.serialNumber && (
-                <div className="text-sm text-zinc-400 mt-1">מספר סידורי: <span className="font-mono text-zinc-300">{unassignModal.assignment.serialNumber}</span></div>
-              )}
-            </div>
-            <form action={handleUnassign} className="space-y-6">
-              <input type="hidden" name="userId" value={user.id} />
-              <input type="hidden" name="assignmentId" value={unassignModal.assignment.id} />
-              <div>
-                <label className="text-sm font-bold text-zinc-400 mb-2 block">כמות לביטול</label>
-                <input name="quantity" type="number" min="1" max={unassignModal.assignment.quantity} defaultValue={unassignModal.assignment.quantity}
-                  onChange={(e) => setUnassignModal({ ...unassignModal, quantity: Math.min(Math.max(1, parseInt(e.target.value) || 1), unassignModal.assignment.quantity) })}
-                  className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-lg font-bold text-zinc-50 focus:ring-2 focus:ring-zinc-500 outline-none transition-all" required />
-              </div>
-              <div>
-                <label className="text-sm font-bold text-red-400 mb-2 block">הערות <span className="text-red-500">*</span></label>
-                <textarea name="adminNotes" rows={4} placeholder="הסבר מדוע הציוד מוחזר למלאי (חובה)..."
-                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-50 placeholder:text-zinc-600 outline-none focus:ring-2 focus:ring-zinc-500 transition-all resize-none" required />
-                <p className="mt-2 text-xs text-zinc-500">הערות אלו יתועדו בהיסטוריית הניהול השרירותי</p>
-              </div>
-              {error && <div className="rounded-xl border border-red-900/40 bg-red-900/10 p-3 text-sm text-red-400">{error}</div>}
-              <div className="flex gap-3">
-                <button type="submit" disabled={isSubmitting} className="flex-1 h-14 inline-flex items-center justify-center gap-2 rounded-2xl bg-red-600 text-base font-bold text-white hover:bg-red-500 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
-                  {isSubmitting ? <LoadingSpinner size="sm" /> : "ביטול הקצאה"}
-                </button>
-                <button type="button" onClick={() => setUnassignModal(null)} disabled={isSubmitting} className="flex-1 h-14 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-base font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer disabled:opacity-50">ביטול</button>
-              </div>
-            </form>
-          </div>
-        </div>
-        </ModalPortal>
-      )}
-
-      {/* ===== SINGLE MOVE TO BOX MODAL ===== */}
-      {moveToBoxModal && (
-        <ModalPortal>
-        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
-          <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => !isSubmitting && setMoveToBoxModal(null)} />
-          <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-2xl font-bold text-amber-400">העברה לקרטון</h3>
-              <button onClick={() => !isSubmitting && setMoveToBoxModal(null)} className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-zinc-50 cursor-pointer" disabled={isSubmitting}>
-                <CloseIcon />
-              </button>
-            </div>
-            <div className="mb-6 p-4 rounded-xl border border-amber-900/40 bg-amber-950/10">
-              <div className="text-lg font-bold text-zinc-50">{moveToBoxModal.assignment.equipmentItem.name}</div>
-              <div className="text-sm text-zinc-400 mt-1">כמות אצל החייל: {moveToBoxModal.assignment.quantity}</div>
-              <div className="text-sm text-amber-400 mt-1">מקום פנוי בקרטון: {moveToBoxModal.maxQuantity}</div>
-              {moveToBoxModal.assignment.serialNumber && (
-                <div className="text-sm text-zinc-400 mt-1">מספר סידורי: <span className="font-mono text-zinc-300">{moveToBoxModal.assignment.serialNumber}</span></div>
-              )}
-            </div>
-            <div className="space-y-6">
-              <div>
-                <label className="text-sm font-bold text-zinc-400 mb-2 block">כמות להעברה</label>
-                <input type="number" min="1" max={moveToBoxModal.maxQuantity} value={moveToBoxModal.quantity}
-                  onChange={(e) => setMoveToBoxModal({ ...moveToBoxModal, quantity: Math.min(Math.max(1, parseInt(e.target.value) || 1), moveToBoxModal.maxQuantity) })}
-                  className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-lg font-bold text-zinc-50 focus:ring-2 focus:ring-zinc-500 outline-none transition-all" />
-              </div>
-              {error && <div className="rounded-xl border border-red-900/40 bg-red-900/10 p-3 text-sm text-red-400">{error}</div>}
-              <div className="flex gap-3">
-                <button onClick={handleMoveToBox} disabled={isSubmitting} className="flex-1 h-14 inline-flex items-center justify-center gap-2 rounded-2xl bg-amber-600 text-base font-bold text-white hover:bg-amber-500 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
-                  {isSubmitting ? <LoadingSpinner size="sm" /> : "העבר לקרטון"}
-                </button>
-                <button onClick={() => setMoveToBoxModal(null)} disabled={isSubmitting} className="flex-1 h-14 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-base font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer disabled:opacity-50">ביטול</button>
-              </div>
-            </div>
-          </div>
-        </div>
-        </ModalPortal>
-      )}
-
-      {/* ===== SINGLE TRANSFER TO USER MODAL ===== */}
-      {transferModal && (
-        <ModalPortal>
-        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
-          <div
-            className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm"
-            onClick={() => !isSubmitting && setTransferModal(null)}
-          />
-          <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-2xl font-bold text-sky-400">העברה למשתמש אחר</h3>
-              <button
-                type="button"
-                onClick={() => !isSubmitting && setTransferModal(null)}
-                className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-zinc-50 cursor-pointer"
-                disabled={isSubmitting}
-              >
-                <CloseIcon />
-              </button>
-            </div>
-            <div className="mb-4 p-4 rounded-xl border border-sky-900/40 bg-sky-950/10">
-              <div className="text-lg font-bold text-zinc-50">{transferModal.assignment.equipmentItem.name}</div>
-              <div className="text-sm text-zinc-400 mt-1">כמות אצל {user.name}: {transferModal.assignment.quantity}</div>
-              {transferModal.assignment.serialNumber && (
-                <div className="text-sm text-zinc-400 mt-1">
-                  מספר סידורי:{" "}
-                  <span className="font-mono text-zinc-300">{transferModal.assignment.serialNumber}</span>
-                </div>
-              )}
-            </div>
-
-            {!transferModal.assignment.serialNumber && (
-              <div className="mb-4">
-                <label className="text-sm font-bold text-zinc-400 mb-2 block">כמות להעברה</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={transferModal.assignment.quantity}
-                  value={transferModal.quantity}
-                  onChange={(e) =>
-                    setTransferModal({
-                      ...transferModal,
-                      quantity: Math.min(
-                        Math.max(1, parseInt(e.target.value, 10) || 1),
-                        transferModal.assignment.quantity,
-                      ),
-                    })
-                  }
-                  className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-lg font-bold text-zinc-50 focus:ring-2 focus:ring-sky-600/50 outline-none transition-all"
-                />
-              </div>
-            )}
-
+        {!bulkProgress && (
+          <>
             <div className="mb-4 space-y-2">
-              <label className="text-sm font-bold text-sky-400 block">בחירת נמען</label>
+              <label className="text-sm font-bold text-sky-400 block">חיפוש נמען</label>
               <input
                 type="search"
                 value={transferRecipientSearch}
@@ -1427,30 +1209,140 @@ export function EquipmentTab({
                 <p className="text-sm text-emerald-400 font-medium">נבחר: {selectedTransferRecipientName}</p>
               )}
             </div>
-
-            <div className="mb-6">
+            <div>
               <label className="text-sm font-bold text-sky-400 mb-2 block">
                 הערות <span className="text-red-500">*</span>
               </label>
               <textarea
-                value={transferAdminNotes}
-                onChange={(e) => setTransferAdminNotes(e.target.value)}
+                value={bulkTransferAdminNotes}
+                onChange={(e) => setBulkTransferAdminNotes(e.target.value)}
                 rows={3}
-                placeholder="סיבת ההעברה…"
+                placeholder="סיבת ההעברה (תועד עבור כל הפריטים הנבחרים)…"
                 className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-50 placeholder:text-zinc-600 outline-none focus:ring-2 focus:ring-sky-600/40 resize-none"
               />
             </div>
+          </>
+        )}
+      </Sheet>
 
-            {error && (
-              <div className="mb-4 rounded-xl border border-red-900/40 bg-red-900/10 p-3 text-sm text-red-400">{error}</div>
+      {/* ===== SINGLE UNASSIGN MODAL ===== */}
+      {unassignModal && (
+        <Sheet
+          open
+          onClose={() => setUnassignModal(null)}
+          dismissible={!isSubmitting}
+          size="md"
+          title="ביטול הקצאת ציוד"
+          footer={
+            <SheetActions>
+              <button
+                type="submit"
+                form={UNASSIGN_FORM_ID}
+                disabled={isSubmitting}
+                className={`${SHEET_BTN} bg-red-600 text-white hover:bg-red-500`}
+              >
+                {isSubmitting ? <LoadingSpinner size="sm" /> : "ביטול הקצאה"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setUnassignModal(null)}
+                disabled={isSubmitting}
+                className={SHEET_BTN_SECONDARY}
+              >
+                ביטול
+              </button>
+            </SheetActions>
+          }
+        >
+          <div className="mb-6 p-4 rounded-xl border border-zinc-800 bg-zinc-950">
+            <div className="text-lg font-bold text-zinc-50">{unassignModal.assignment.equipmentItem.name}</div>
+            <div className="text-sm text-zinc-400 mt-1">כמות זמינה: {unassignModal.assignment.quantity}</div>
+            {unassignModal.assignment.serialNumber && (
+              <div className="text-sm text-zinc-400 mt-1">מספר סידורי: <span className="font-mono text-zinc-300">{unassignModal.assignment.serialNumber}</span></div>
             )}
+          </div>
+          <form id={UNASSIGN_FORM_ID} action={handleUnassign} className="space-y-6">
+            <input type="hidden" name="userId" value={user.id} />
+            <input type="hidden" name="assignmentId" value={unassignModal.assignment.id} />
+            <div>
+              <label className="text-sm font-bold text-zinc-400 mb-2 block">כמות לביטול</label>
+              <input name="quantity" type="number" min="1" max={unassignModal.assignment.quantity} defaultValue={unassignModal.assignment.quantity}
+                onChange={(e) => setUnassignModal({ ...unassignModal, quantity: Math.min(Math.max(1, parseInt(e.target.value) || 1), unassignModal.assignment.quantity) })}
+                className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-lg font-bold text-zinc-50 focus:ring-2 focus:ring-zinc-500 outline-none transition-all" required />
+            </div>
+            <div>
+              <label className="text-sm font-bold text-red-400 mb-2 block">הערות <span className="text-red-500">*</span></label>
+              <textarea name="adminNotes" rows={4} placeholder="הסבר מדוע הציוד מוחזר למלאי (חובה)..."
+                className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-50 placeholder:text-zinc-600 outline-none focus:ring-2 focus:ring-zinc-500 transition-all resize-none" required />
+              <p className="mt-2 text-xs text-zinc-500">הערות אלו יתועדו בהיסטוריית הניהול השרירותי</p>
+            </div>
+            {error && <div className="rounded-xl border border-red-900/40 bg-red-900/10 p-3 text-sm text-red-400">{error}</div>}
+          </form>
+        </Sheet>
+      )}
 
-            <div className="flex gap-3">
+      {/* ===== SINGLE MOVE TO BOX MODAL ===== */}
+      {moveToBoxModal && (
+        <Sheet
+          open
+          onClose={() => setMoveToBoxModal(null)}
+          dismissible={!isSubmitting}
+          size="md"
+          title={<span className="text-amber-400">העברה לקרטון</span>}
+          footer={
+            <SheetActions>
+              <button
+                onClick={handleMoveToBox}
+                disabled={isSubmitting}
+                className={`${SHEET_BTN} bg-amber-600 text-white hover:bg-amber-500`}
+              >
+                {isSubmitting ? <LoadingSpinner size="sm" /> : "העבר לקרטון"}
+              </button>
+              <button
+                onClick={() => setMoveToBoxModal(null)}
+                disabled={isSubmitting}
+                className={SHEET_BTN_SECONDARY}
+              >
+                ביטול
+              </button>
+            </SheetActions>
+          }
+        >
+          <div className="mb-6 p-4 rounded-xl border border-amber-900/40 bg-amber-950/10">
+            <div className="text-lg font-bold text-zinc-50">{moveToBoxModal.assignment.equipmentItem.name}</div>
+            <div className="text-sm text-zinc-400 mt-1">כמות אצל החייל: {moveToBoxModal.assignment.quantity}</div>
+            <div className="text-sm text-amber-400 mt-1">מקום פנוי בקרטון: {moveToBoxModal.maxQuantity}</div>
+            {moveToBoxModal.assignment.serialNumber && (
+              <div className="text-sm text-zinc-400 mt-1">מספר סידורי: <span className="font-mono text-zinc-300">{moveToBoxModal.assignment.serialNumber}</span></div>
+            )}
+          </div>
+          <div className="space-y-6">
+            <div>
+              <label className="text-sm font-bold text-zinc-400 mb-2 block">כמות להעברה</label>
+              <input type="number" min="1" max={moveToBoxModal.maxQuantity} value={moveToBoxModal.quantity}
+                onChange={(e) => setMoveToBoxModal({ ...moveToBoxModal, quantity: Math.min(Math.max(1, parseInt(e.target.value) || 1), moveToBoxModal.maxQuantity) })}
+                className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-lg font-bold text-zinc-50 focus:ring-2 focus:ring-zinc-500 outline-none transition-all" />
+            </div>
+            {error && <div className="rounded-xl border border-red-900/40 bg-red-900/10 p-3 text-sm text-red-400">{error}</div>}
+          </div>
+        </Sheet>
+      )}
+
+      {/* ===== SINGLE TRANSFER TO USER MODAL ===== */}
+      {transferModal && (
+        <Sheet
+          open
+          onClose={() => setTransferModal(null)}
+          dismissible={!isSubmitting}
+          size="md"
+          title={<span className="text-sky-400">העברה למשתמש אחר</span>}
+          footer={
+            <SheetActions>
               <button
                 type="button"
                 onClick={handleAdminTransferSingle}
                 disabled={isSubmitting || !transferToUserId || !transferAdminNotes.trim()}
-                className="flex-1 h-14 inline-flex items-center justify-center gap-2 rounded-2xl bg-sky-600 text-base font-bold text-white hover:bg-sky-500 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className={`${SHEET_BTN} bg-sky-600 text-white hover:bg-sky-500`}
               >
                 {isSubmitting ? <LoadingSpinner size="sm" /> : "אשר העברה"}
               </button>
@@ -1458,368 +1350,479 @@ export function EquipmentTab({
                 type="button"
                 onClick={() => setTransferModal(null)}
                 disabled={isSubmitting}
-                className="flex-1 h-14 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-base font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer disabled:opacity-50"
+                className={SHEET_BTN_SECONDARY}
               >
                 ביטול
               </button>
-            </div>
+            </SheetActions>
+          }
+        >
+          <div className="mb-4 p-4 rounded-xl border border-sky-900/40 bg-sky-950/10">
+            <div className="text-lg font-bold text-zinc-50">{transferModal.assignment.equipmentItem.name}</div>
+            <div className="text-sm text-zinc-400 mt-1">כמות אצל {user.name}: {transferModal.assignment.quantity}</div>
+            {transferModal.assignment.serialNumber && (
+              <div className="text-sm text-zinc-400 mt-1">
+                מספר סידורי:{" "}
+                <span className="font-mono text-zinc-300">{transferModal.assignment.serialNumber}</span>
+              </div>
+            )}
           </div>
-        </div>
-        </ModalPortal>
+
+          {!transferModal.assignment.serialNumber && (
+            <div className="mb-4">
+              <label className="text-sm font-bold text-zinc-400 mb-2 block">כמות להעברה</label>
+              <input
+                type="number"
+                min={1}
+                max={transferModal.assignment.quantity}
+                value={transferModal.quantity}
+                onChange={(e) =>
+                  setTransferModal({
+                    ...transferModal,
+                    quantity: Math.min(
+                      Math.max(1, parseInt(e.target.value, 10) || 1),
+                      transferModal.assignment.quantity,
+                    ),
+                  })
+                }
+                className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-lg font-bold text-zinc-50 focus:ring-2 focus:ring-sky-600/50 outline-none transition-all"
+              />
+            </div>
+          )}
+
+          <div className="mb-4 space-y-2">
+            <label className="text-sm font-bold text-sky-400 block">בחירת נמען</label>
+            <input
+              type="search"
+              value={transferRecipientSearch}
+              onChange={(e) => setTransferRecipientSearch(e.target.value)}
+              placeholder="שם או מספר אישי…"
+              className="h-11 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-sm text-zinc-50 placeholder:text-zinc-600 outline-none focus:ring-2 focus:ring-sky-600/50"
+            />
+            <div className="rounded-xl border border-zinc-800 max-h-40 overflow-y-auto bg-zinc-950">
+              {filteredTransferTargets.length === 0 ? (
+                <div className="p-4 text-sm text-zinc-500 text-center">לא נמצאו תוצאות</div>
+              ) : (
+                filteredTransferTargets.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setTransferToUserId(t.id)}
+                    className={`w-full text-right px-4 py-2.5 border-b border-zinc-800 last:border-0 text-sm transition-colors cursor-pointer ${
+                      transferToUserId === t.id
+                        ? "bg-sky-950/50 text-sky-300 font-bold"
+                        : "text-zinc-300 hover:bg-zinc-800/80"
+                    }`}
+                  >
+                    <div>{t.name}</div>
+                    {t.personalNumber && <div className="text-xs text-zinc-500">מ״א {t.personalNumber}</div>}
+                  </button>
+                ))
+              )}
+            </div>
+            {selectedTransferRecipientName && (
+              <p className="text-sm text-emerald-400 font-medium">נבחר: {selectedTransferRecipientName}</p>
+            )}
+          </div>
+
+          <div className="mb-4">
+            <label className="text-sm font-bold text-sky-400 mb-2 block">
+              הערות <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              value={transferAdminNotes}
+              onChange={(e) => setTransferAdminNotes(e.target.value)}
+              rows={3}
+              placeholder="סיבת ההעברה…"
+              className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-50 placeholder:text-zinc-600 outline-none focus:ring-2 focus:ring-sky-600/40 resize-none"
+            />
+          </div>
+
+          {error && (
+            <div className="rounded-xl border border-red-900/40 bg-red-900/10 p-3 text-sm text-red-400">{error}</div>
+          )}
+        </Sheet>
       )}
 
       {/* ===== RESTORE FROM BOX MODAL ===== */}
       {restoreModal && (
-        <ModalPortal>
-        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
-          <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => !isSubmitting && setRestoreModal(null)} />
-          <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-2xl font-bold text-blue-400">שחזור מקרטון</h3>
-              <button onClick={() => !isSubmitting && setRestoreModal(null)} className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-zinc-50 cursor-pointer" disabled={isSubmitting}>
-                <CloseIcon />
+        <Sheet
+          open
+          onClose={() => setRestoreModal(null)}
+          dismissible={!isSubmitting}
+          size="md"
+          title={<span className="text-blue-400">שחזור מקרטון</span>}
+          footer={
+            <SheetActions>
+              <button
+                onClick={handleRestore}
+                disabled={isSubmitting}
+                className={`${SHEET_BTN} bg-blue-600 text-white hover:bg-blue-500`}
+              >
+                {isSubmitting ? <LoadingSpinner size="sm" /> : "שחזר לחייל"}
               </button>
-            </div>
-            <div className="mb-6 p-4 rounded-xl border border-blue-900/40 bg-blue-950/10">
-              <div className="text-lg font-bold text-zinc-50">{restoreModal.boxItem.equipmentItem.name}</div>
-              <div className="text-sm text-zinc-400 mt-1">כמות בקרטון: {restoreModal.boxItem.quantity}</div>
-              {restoreModal.boxItem.serialNumber && (
-                <div className="text-sm text-zinc-400 mt-1">מספר סידורי: <span className="font-mono text-zinc-300">{restoreModal.boxItem.serialNumber}</span></div>
-              )}
-            </div>
-            <div className="space-y-6">
-              <div>
-                <label className="text-sm font-bold text-zinc-400 mb-2 block">כמות לשחזור</label>
-                <input type="number" min="1" max={restoreModal.boxItem.quantity} value={restoreModal.quantity}
-                  onChange={(e) => setRestoreModal({ ...restoreModal, quantity: Math.min(Math.max(1, parseInt(e.target.value) || 1), restoreModal.boxItem.quantity) })}
-                  className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-lg font-bold text-zinc-50 focus:ring-2 focus:ring-zinc-500 outline-none transition-all" />
-              </div>
-              {error && <div className="rounded-xl border border-red-900/40 bg-red-900/10 p-3 text-sm text-red-400">{error}</div>}
-              <div className="flex gap-3">
-                <button onClick={handleRestore} disabled={isSubmitting} className="flex-1 h-14 inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 text-base font-bold text-white hover:bg-blue-500 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
-                  {isSubmitting ? <LoadingSpinner size="sm" /> : "שחזר לחייל"}
-                </button>
-                <button onClick={() => setRestoreModal(null)} disabled={isSubmitting} className="flex-1 h-14 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-base font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer disabled:opacity-50">ביטול</button>
-              </div>
-            </div>
+              <button
+                onClick={() => setRestoreModal(null)}
+                disabled={isSubmitting}
+                className={SHEET_BTN_SECONDARY}
+              >
+                ביטול
+              </button>
+            </SheetActions>
+          }
+        >
+          <div className="mb-6 p-4 rounded-xl border border-blue-900/40 bg-blue-950/10">
+            <div className="text-lg font-bold text-zinc-50">{restoreModal.boxItem.equipmentItem.name}</div>
+            <div className="text-sm text-zinc-400 mt-1">כמות בקרטון: {restoreModal.boxItem.quantity}</div>
+            {restoreModal.boxItem.serialNumber && (
+              <div className="text-sm text-zinc-400 mt-1">מספר סידורי: <span className="font-mono text-zinc-300">{restoreModal.boxItem.serialNumber}</span></div>
+            )}
           </div>
-        </div>
-        </ModalPortal>
+          <div className="space-y-6">
+            <div>
+              <label className="text-sm font-bold text-zinc-400 mb-2 block">כמות לשחזור</label>
+              <input type="number" min="1" max={restoreModal.boxItem.quantity} value={restoreModal.quantity}
+                onChange={(e) => setRestoreModal({ ...restoreModal, quantity: Math.min(Math.max(1, parseInt(e.target.value) || 1), restoreModal.boxItem.quantity) })}
+                className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-lg font-bold text-zinc-50 focus:ring-2 focus:ring-zinc-500 outline-none transition-all" />
+            </div>
+            {error && <div className="rounded-xl border border-red-900/40 bg-red-900/10 p-3 text-sm text-red-400">{error}</div>}
+          </div>
+        </Sheet>
       )}
 
       {/* ===== REMOVE FROM BOX MODAL ===== */}
       {removeFromBoxModal && (
-        <ModalPortal>
-        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
-          <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => !isSubmitting && setRemoveFromBoxModal(null)} />
-          <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-2xl font-bold text-red-400">הסרה מקרטון</h3>
-              <button onClick={() => !isSubmitting && setRemoveFromBoxModal(null)} className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-zinc-50 cursor-pointer" disabled={isSubmitting}>
-                <CloseIcon />
+        <Sheet
+          open
+          onClose={() => setRemoveFromBoxModal(null)}
+          dismissible={!isSubmitting}
+          size="md"
+          title={<span className="text-red-400">הסרה מקרטון</span>}
+          footer={
+            <SheetActions>
+              <button
+                onClick={handleRemoveFromBox}
+                disabled={isSubmitting}
+                className={`${SHEET_BTN} bg-red-600 text-white hover:bg-red-500`}
+              >
+                {isSubmitting ? <LoadingSpinner size="sm" /> : "הסר מקרטון"}
               </button>
-            </div>
-            <div className="mb-6 p-4 rounded-xl border border-red-900/40 bg-red-950/10">
-              <div className="text-lg font-bold text-zinc-50">{removeFromBoxModal.boxItem.equipmentItem.name}</div>
-              <div className="text-sm text-zinc-400 mt-1">כמות בקרטון: {removeFromBoxModal.boxItem.quantity}</div>
-              {removeFromBoxModal.boxItem.serialNumber && (
-                <div className="text-sm text-zinc-400 mt-1">מספר סידורי: <span className="font-mono text-zinc-300">{removeFromBoxModal.boxItem.serialNumber}</span></div>
-              )}
-              <div className="text-sm text-amber-400 mt-2">הפריט יוחזר למלאי ימ״ח.</div>
-            </div>
-            <div className="space-y-6">
-              {!removeFromBoxModal.boxItem.serialNumber && (
-                <div>
-                  <label className="text-sm font-bold text-zinc-400 mb-2 block">כמות להסרה</label>
-                  <input type="number" min="1" max={removeFromBoxModal.boxItem.quantity} value={removeFromBoxModal.quantity}
-                    onChange={(e) => setRemoveFromBoxModal({ ...removeFromBoxModal, quantity: Math.min(Math.max(1, parseInt(e.target.value) || 1), removeFromBoxModal.boxItem.quantity) })}
-                    className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-lg font-bold text-zinc-50 focus:ring-2 focus:ring-zinc-500 outline-none transition-all" />
-                </div>
-              )}
-              {error && <div className="rounded-xl border border-red-900/40 bg-red-900/10 p-3 text-sm text-red-400">{error}</div>}
-              <div className="flex gap-3">
-                <button onClick={handleRemoveFromBox} disabled={isSubmitting} className="flex-1 h-14 inline-flex items-center justify-center gap-2 rounded-2xl bg-red-600 text-base font-bold text-white hover:bg-red-500 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
-                  {isSubmitting ? <LoadingSpinner size="sm" /> : "הסר מקרטון"}
-                </button>
-                <button onClick={() => setRemoveFromBoxModal(null)} disabled={isSubmitting} className="flex-1 h-14 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-base font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer disabled:opacity-50">ביטול</button>
-              </div>
-            </div>
+              <button
+                onClick={() => setRemoveFromBoxModal(null)}
+                disabled={isSubmitting}
+                className={SHEET_BTN_SECONDARY}
+              >
+                ביטול
+              </button>
+            </SheetActions>
+          }
+        >
+          <div className="mb-6 p-4 rounded-xl border border-red-900/40 bg-red-950/10">
+            <div className="text-lg font-bold text-zinc-50">{removeFromBoxModal.boxItem.equipmentItem.name}</div>
+            <div className="text-sm text-zinc-400 mt-1">כמות בקרטון: {removeFromBoxModal.boxItem.quantity}</div>
+            {removeFromBoxModal.boxItem.serialNumber && (
+              <div className="text-sm text-zinc-400 mt-1">מספר סידורי: <span className="font-mono text-zinc-300">{removeFromBoxModal.boxItem.serialNumber}</span></div>
+            )}
+            <div className="text-sm text-amber-400 mt-2">הפריט יוחזר למלאי ימ״ח.</div>
           </div>
-        </div>
-        </ModalPortal>
+          <div className="space-y-6">
+            {!removeFromBoxModal.boxItem.serialNumber && (
+              <div>
+                <label className="text-sm font-bold text-zinc-400 mb-2 block">כמות להסרה</label>
+                <input type="number" min="1" max={removeFromBoxModal.boxItem.quantity} value={removeFromBoxModal.quantity}
+                  onChange={(e) => setRemoveFromBoxModal({ ...removeFromBoxModal, quantity: Math.min(Math.max(1, parseInt(e.target.value) || 1), removeFromBoxModal.boxItem.quantity) })}
+                  className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-lg font-bold text-zinc-50 focus:ring-2 focus:ring-zinc-500 outline-none transition-all" />
+              </div>
+            )}
+            {error && <div className="rounded-xl border border-red-900/40 bg-red-900/10 p-3 text-sm text-red-400">{error}</div>}
+          </div>
+        </Sheet>
       )}
 
       {/* ===== TRANSFER BOX ITEM TO ANOTHER USER'S BOX MODAL ===== */}
       {transferBoxModal && (
-        <ModalPortal>
-        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
-          <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => !isSubmitting && setTransferBoxModal(null)} />
-          <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-2xl font-bold text-sky-400">העברה לקרטון אחר</h3>
-              <button onClick={() => !isSubmitting && setTransferBoxModal(null)} className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-zinc-50 cursor-pointer" disabled={isSubmitting}>
-                <CloseIcon />
+        <Sheet
+          open
+          onClose={() => setTransferBoxModal(null)}
+          dismissible={!isSubmitting}
+          size="md"
+          title={<span className="text-sky-400">העברה לקרטון אחר</span>}
+          footer={
+            <SheetActions>
+              <button
+                onClick={handleTransferBoxItem}
+                disabled={isSubmitting || !boxTransferToUserId}
+                className={`${SHEET_BTN} bg-sky-600 text-white hover:bg-sky-500`}
+              >
+                {isSubmitting ? <LoadingSpinner size="sm" /> : "העבר לקרטון"}
               </button>
-            </div>
-            <div className="mb-6 p-4 rounded-xl border border-sky-900/40 bg-sky-950/10">
-              <div className="text-lg font-bold text-zinc-50">{transferBoxModal.boxItem.equipmentItem.name}</div>
-              <div className="text-sm text-zinc-400 mt-1">כמות בקרטון: {transferBoxModal.boxItem.quantity}</div>
-              {transferBoxModal.boxItem.serialNumber && (
-                <div className="text-sm text-zinc-400 mt-1">מספר סידורי: <span className="font-mono text-zinc-300">{transferBoxModal.boxItem.serialNumber}</span></div>
-              )}
-            </div>
-            <div className="space-y-5">
-              {!transferBoxModal.boxItem.serialNumber && (
-                <div>
-                  <label className="text-sm font-bold text-zinc-400 mb-2 block">כמות להעברה</label>
-                  <input type="number" min="1" max={transferBoxModal.boxItem.quantity} value={transferBoxModal.quantity}
-                    onChange={(e) => setTransferBoxModal({ ...transferBoxModal, quantity: Math.min(Math.max(1, parseInt(e.target.value) || 1), transferBoxModal.boxItem.quantity) })}
-                    className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-lg font-bold text-zinc-50 focus:ring-2 focus:ring-zinc-500 outline-none transition-all" />
-                </div>
-              )}
-              <div>
-                <label className="text-sm font-bold text-zinc-400 mb-2 block">חייל יעד</label>
-                <input
-                  type="text"
-                  value={boxTransferSearch}
-                  onChange={(e) => { setBoxTransferSearch(e.target.value); setBoxTransferToUserId(null); }}
-                  placeholder="חיפוש לפי שם או מ״א..."
-                  className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-sm text-zinc-50 placeholder:text-zinc-600 outline-none focus:ring-2 focus:ring-zinc-500 transition-all mb-2"
-                />
-                <div className="max-h-52 overflow-y-auto rounded-xl border border-zinc-800 divide-y divide-zinc-800">
-                  {filteredBoxTransferTargets.length === 0 ? (
-                    <div className="py-4 text-center text-sm text-zinc-500">לא נמצאו חיילים</div>
-                  ) : filteredBoxTransferTargets.map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => setBoxTransferToUserId(t.id)}
-                      className={`w-full flex items-center gap-3 px-4 py-3 text-right transition-colors cursor-pointer ${boxTransferToUserId === t.id ? "bg-sky-900/30 text-sky-300" : "hover:bg-zinc-800 text-zinc-300"}`}
-                    >
-                      <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-400 flex-shrink-0">
-                        {t.name.charAt(0)}
-                      </div>
-                      <div className="text-right">
-                        <div className="text-sm font-bold">{t.name}</div>
-                        {t.personalNumber && <div className="text-xs text-zinc-500">מ״א: {t.personalNumber}</div>}
-                      </div>
-                      {boxTransferToUserId === t.id && (
-                        <svg className="mr-auto flex-shrink-0 text-sky-400" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
-                      )}
-                    </button>
-                  ))}
-                </div>
-                {boxTransferToUserId && (
-                  <div className="mt-2 text-sm text-sky-400 font-bold">
-                    נבחר: {transferTargets.find((t) => t.id === boxTransferToUserId)?.name}
-                  </div>
-                )}
-              </div>
-              {error && <div className="rounded-xl border border-red-900/40 bg-red-900/10 p-3 text-sm text-red-400">{error}</div>}
-              <div className="flex gap-3">
-                <button onClick={handleTransferBoxItem} disabled={isSubmitting || !boxTransferToUserId} className="flex-1 h-14 inline-flex items-center justify-center gap-2 rounded-2xl bg-sky-600 text-base font-bold text-white hover:bg-sky-500 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
-                  {isSubmitting ? <LoadingSpinner size="sm" /> : "העבר לקרטון"}
-                </button>
-                <button onClick={() => setTransferBoxModal(null)} disabled={isSubmitting} className="flex-1 h-14 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-base font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer disabled:opacity-50">ביטול</button>
-              </div>
-            </div>
+              <button
+                onClick={() => setTransferBoxModal(null)}
+                disabled={isSubmitting}
+                className={SHEET_BTN_SECONDARY}
+              >
+                ביטול
+              </button>
+            </SheetActions>
+          }
+        >
+          <div className="mb-6 p-4 rounded-xl border border-sky-900/40 bg-sky-950/10">
+            <div className="text-lg font-bold text-zinc-50">{transferBoxModal.boxItem.equipmentItem.name}</div>
+            <div className="text-sm text-zinc-400 mt-1">כמות בקרטון: {transferBoxModal.boxItem.quantity}</div>
+            {transferBoxModal.boxItem.serialNumber && (
+              <div className="text-sm text-zinc-400 mt-1">מספר סידורי: <span className="font-mono text-zinc-300">{transferBoxModal.boxItem.serialNumber}</span></div>
+            )}
           </div>
-        </div>
-        </ModalPortal>
+          <div className="space-y-5">
+            {!transferBoxModal.boxItem.serialNumber && (
+              <div>
+                <label className="text-sm font-bold text-zinc-400 mb-2 block">כמות להעברה</label>
+                <input type="number" min="1" max={transferBoxModal.boxItem.quantity} value={transferBoxModal.quantity}
+                  onChange={(e) => setTransferBoxModal({ ...transferBoxModal, quantity: Math.min(Math.max(1, parseInt(e.target.value) || 1), transferBoxModal.boxItem.quantity) })}
+                  className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-lg font-bold text-zinc-50 focus:ring-2 focus:ring-zinc-500 outline-none transition-all" />
+              </div>
+            )}
+            <div>
+              <label className="text-sm font-bold text-zinc-400 mb-2 block">חייל יעד</label>
+              <input
+                type="text"
+                value={boxTransferSearch}
+                onChange={(e) => { setBoxTransferSearch(e.target.value); setBoxTransferToUserId(null); }}
+                placeholder="חיפוש לפי שם או מ״א..."
+                className="h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-sm text-zinc-50 placeholder:text-zinc-600 outline-none focus:ring-2 focus:ring-zinc-500 transition-all mb-2"
+              />
+              <div className="max-h-52 overflow-y-auto rounded-xl border border-zinc-800 divide-y divide-zinc-800">
+                {filteredBoxTransferTargets.length === 0 ? (
+                  <div className="py-4 text-center text-sm text-zinc-500">לא נמצאו חיילים</div>
+                ) : filteredBoxTransferTargets.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setBoxTransferToUserId(t.id)}
+                    className={`w-full flex items-center gap-3 px-4 py-3 text-right transition-colors cursor-pointer ${boxTransferToUserId === t.id ? "bg-sky-900/30 text-sky-300" : "hover:bg-zinc-800 text-zinc-300"}`}
+                  >
+                    <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-400 flex-shrink-0">
+                      {t.name.charAt(0)}
+                    </div>
+                    <div className="text-right min-w-0">
+                      <div className="text-sm font-bold">{t.name}</div>
+                      {t.personalNumber && <div className="text-xs text-zinc-500">מ״א: {t.personalNumber}</div>}
+                    </div>
+                    {boxTransferToUserId === t.id && (
+                      <svg className="mr-auto flex-shrink-0 text-sky-400" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+                    )}
+                  </button>
+                ))}
+              </div>
+              {boxTransferToUserId && (
+                <div className="mt-2 text-sm text-sky-400 font-bold">
+                  נבחר: {transferTargets.find((t) => t.id === boxTransferToUserId)?.name}
+                </div>
+              )}
+            </div>
+            {error && <div className="rounded-xl border border-red-900/40 bg-red-900/10 p-3 text-sm text-red-400">{error}</div>}
+          </div>
+        </Sheet>
       )}
 
       {/* ===== ADD TO BOX DIRECTLY MODAL ===== */}
-      {addToBoxModal && (
-        <ModalPortal>
-        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
-          <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => !isSubmitting && setAddToBoxModal(false)} />
-          <div className="relative w-full max-w-lg rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-2xl font-bold text-emerald-400">הוספה ישירה לקרטון</h3>
-              <button onClick={() => !isSubmitting && setAddToBoxModal(false)} className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-zinc-50 cursor-pointer" disabled={isSubmitting}>
-                <CloseIcon />
-              </button>
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-              <p className="text-sm text-zinc-400 flex-1 min-w-[200px]">
-                סמנו כמה פריטים מתבנית הקרטון (מלאי ימ״ח). הכמויות והמ״ס לכל שורה, ואז אישור אחד.
-              </p>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={selectAllAddToBoxItems}
-                  disabled={isSubmitting || addableBoxItems.length === 0}
-                  className="text-xs font-bold px-3 py-1.5 rounded-xl border border-emerald-800 text-emerald-400 hover:bg-emerald-900/30 cursor-pointer disabled:opacity-40"
-                >
-                  בחר הכל
-                </button>
-                <button
-                  type="button"
-                  onClick={clearAddToBoxSelection}
-                  disabled={isSubmitting || addToBoxSelectedCount === 0}
-                  className="text-xs font-bold px-3 py-1.5 rounded-xl border border-zinc-700 text-zinc-400 hover:bg-zinc-800 cursor-pointer disabled:opacity-40"
-                >
-                  נקה בחירה
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-5">
-              <div>
-                <label className="text-sm font-bold text-zinc-400 mb-2 block">פריטים זמינים</label>
-                {addableBoxItems.length === 0 ? (
-                  <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-950 text-sm text-zinc-500 text-center">
-                    אין פריטים זמינים להוספה (כל הפריטים מלאים או אין מלאי בימ״ח).
-                  </div>
-                ) : (
-                  <div className="max-h-56 overflow-y-auto rounded-xl border border-zinc-800 divide-y divide-zinc-800">
-                    {addableBoxItems.map((item) => {
-                      const checked = Boolean(addToBoxSelection[item.id]);
-                      return (
-                        <div
-                          key={item.id}
-                          className={`flex items-start gap-3 px-4 py-3 ${checked ? "bg-emerald-900/20" : "hover:bg-zinc-800/50"}`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleAddToBoxItem(item)}
-                            disabled={isSubmitting}
-                            className="mt-1 h-4 w-4 rounded border-zinc-600 accent-emerald-500 cursor-pointer"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => toggleAddToBoxItem(item)}
-                            disabled={isSubmitting}
-                            className="flex-1 text-right cursor-pointer disabled:cursor-not-allowed"
-                          >
-                            <div className="text-sm font-bold text-zinc-100">{item.name}</div>
-                            <div className="text-xs text-zinc-500 mt-0.5">
-                              מלאי ימ״ח: {item.stock} | נותר בקרטון: {item.capacity}
-                            </div>
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {addToBoxSelectedCount > 0 && (
-                <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-950/50 p-4 max-h-56 overflow-y-auto">
-                  <div className="text-sm font-bold text-zinc-300">נבחרו {addToBoxSelectedCount} פריטים</div>
-                  {addableBoxItems.filter((i) => addToBoxSelection[i.id]).map((item) => {
-                    const draft = addToBoxSelection[item.id];
-                    const maxQ = Math.min(item.stock, item.capacity);
-                    return (
-                      <div key={item.id} className="flex flex-wrap gap-3 items-end border-b border-zinc-800/80 pb-3 last:border-0 last:pb-0">
-                        <div className="flex-1 min-w-[140px] text-sm font-bold text-zinc-200">{item.name}</div>
-                        <div>
-                          <label className="text-xs text-zinc-500 mb-1 block">כמות</label>
-                          <input
-                            type="number"
-                            min={1}
-                            max={maxQ}
-                            disabled={Boolean(draft.serial.trim())}
-                            value={draft.serial.trim() ? 1 : draft.qty}
-                            onChange={(e) =>
-                              setAddToBoxLineQty(item.id, parseInt(e.target.value, 10) || 1, item.capacity, item.stock)
-                            }
-                            className="h-11 w-20 rounded-xl border border-zinc-800 bg-zinc-950 px-3 text-sm font-bold text-zinc-50 outline-none disabled:opacity-50"
-                          />
-                        </div>
-                        <div className="flex-1 min-w-[160px]">
-                          <label className="text-xs text-zinc-500 mb-1 block">מ״ס (אופציונלי)</label>
-                          <input
-                            type="text"
-                            value={draft.serial}
-                            onChange={(e) => setAddToBoxLineSerial(item.id, e.target.value)}
-                            placeholder="מספר סידורי..."
-                            className="h-11 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-50 placeholder:text-zinc-600 outline-none font-mono"
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+      <Sheet
+        open={addToBoxModal}
+        onClose={() => setAddToBoxModal(false)}
+        dismissible={!isSubmitting}
+        size="md"
+        title={<span className="text-emerald-400">הוספה ישירה לקרטון</span>}
+        footer={
+          <SheetActions>
+            <button
+              onClick={handleAddToBoxDirect}
+              disabled={isSubmitting || addToBoxSelectedCount === 0 || !addToBoxNotes.trim()}
+              className={`${SHEET_BTN} bg-emerald-600 text-white hover:bg-emerald-500`}
+            >
+              {isSubmitting ? (
+                <LoadingSpinner size="sm" />
+              ) : addToBoxSelectedCount === 1 ? (
+                "הוסף פריט לקרטון"
+              ) : (
+                `הוסף ${addToBoxSelectedCount} פריטים לקרטון`
               )}
-
-              {/* Admin notes */}
-              <div>
-                <label className="text-sm font-bold text-emerald-400 mb-2 block">הערות <span className="text-red-500">*</span></label>
-                <textarea
-                  value={addToBoxNotes}
-                  onChange={(e) => setAddToBoxNotes(e.target.value)}
-                  rows={3}
-                  placeholder="סיבת ההוספה הישירה לקרטון (חובה) — יתועד בניהול שרירותי..."
-                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-50 placeholder:text-zinc-600 outline-none focus:ring-2 focus:ring-zinc-500 transition-all resize-none"
-                />
-              </div>
-
-              {error && <div className="rounded-xl border border-red-900/40 bg-red-900/10 p-3 text-sm text-red-400">{error}</div>}
-
-              <div className="flex gap-3">
-                <button
-                  onClick={handleAddToBoxDirect}
-                  disabled={isSubmitting || addToBoxSelectedCount === 0 || !addToBoxNotes.trim()}
-                  className="flex-1 h-14 inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-base font-bold text-white hover:bg-emerald-500 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isSubmitting ? (
-                    <LoadingSpinner size="sm" />
-                  ) : addToBoxSelectedCount === 1 ? (
-                    "הוסף פריט לקרטון"
-                  ) : (
-                    `הוסף ${addToBoxSelectedCount} פריטים לקרטון`
-                  )}
-                </button>
-                <button onClick={() => setAddToBoxModal(false)} disabled={isSubmitting} className="flex-1 h-14 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-base font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer disabled:opacity-50">ביטול</button>
-              </div>
-            </div>
+            </button>
+            <button
+              onClick={() => setAddToBoxModal(false)}
+              disabled={isSubmitting}
+              className={SHEET_BTN_SECONDARY}
+            >
+              ביטול
+            </button>
+          </SheetActions>
+        }
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <p className="text-sm text-zinc-400 flex-1 min-w-0 basis-48">
+            סמנו כמה פריטים מתבנית הקרטון (מלאי ימ״ח). הכמויות והמ״ס לכל שורה, ואז אישור אחד.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={selectAllAddToBoxItems}
+              disabled={isSubmitting || addableBoxItems.length === 0}
+              className="h-10 text-xs font-bold px-3 rounded-xl border border-emerald-800 text-emerald-400 hover:bg-emerald-900/30 cursor-pointer disabled:opacity-40"
+            >
+              בחר הכל
+            </button>
+            <button
+              type="button"
+              onClick={clearAddToBoxSelection}
+              disabled={isSubmitting || addToBoxSelectedCount === 0}
+              className="h-10 text-xs font-bold px-3 rounded-xl border border-zinc-700 text-zinc-400 hover:bg-zinc-800 cursor-pointer disabled:opacity-40"
+            >
+              נקה בחירה
+            </button>
           </div>
         </div>
-        </ModalPortal>
-      )}
+
+        <div className="space-y-5">
+          <div>
+            <label className="text-sm font-bold text-zinc-400 mb-2 block">פריטים זמינים</label>
+            {addableBoxItems.length === 0 ? (
+              <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-950 text-sm text-zinc-500 text-center">
+                אין פריטים זמינים להוספה (כל הפריטים מלאים או אין מלאי בימ״ח).
+              </div>
+            ) : (
+              <div className="max-h-56 overflow-y-auto rounded-xl border border-zinc-800 divide-y divide-zinc-800">
+                {addableBoxItems.map((item) => {
+                  const checked = Boolean(addToBoxSelection[item.id]);
+                  return (
+                    <div
+                      key={item.id}
+                      className={`flex items-start gap-3 px-4 py-3 ${checked ? "bg-emerald-900/20" : "hover:bg-zinc-800/50"}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleAddToBoxItem(item)}
+                        disabled={isSubmitting}
+                        className="mt-1 h-4 w-4 rounded border-zinc-600 accent-emerald-500 cursor-pointer"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => toggleAddToBoxItem(item)}
+                        disabled={isSubmitting}
+                        className="flex-1 min-w-0 text-right cursor-pointer disabled:cursor-not-allowed"
+                      >
+                        <div className="text-sm font-bold text-zinc-100">{item.name}</div>
+                        <div className="text-xs text-zinc-500 mt-0.5">
+                          מלאי ימ״ח: {item.stock} | נותר בקרטון: {item.capacity}
+                        </div>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {addToBoxSelectedCount > 0 && (
+            <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-950/50 p-4 max-h-56 overflow-y-auto">
+              <div className="text-sm font-bold text-zinc-300">נבחרו {addToBoxSelectedCount} פריטים</div>
+              {addableBoxItems.filter((i) => addToBoxSelection[i.id]).map((item) => {
+                const draft = addToBoxSelection[item.id];
+                const maxQ = Math.min(item.stock, item.capacity);
+                return (
+                  <div key={item.id} className="flex flex-wrap gap-3 items-end border-b border-zinc-800/80 pb-3 last:border-0 last:pb-0">
+                    <div className="flex-1 min-w-0 basis-40 text-sm font-bold text-zinc-200">{item.name}</div>
+                    <div>
+                      <label className="text-xs text-zinc-500 mb-1 block">כמות</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={maxQ}
+                        disabled={Boolean(draft.serial.trim())}
+                        value={draft.serial.trim() ? 1 : draft.qty}
+                        onChange={(e) =>
+                          setAddToBoxLineQty(item.id, parseInt(e.target.value, 10) || 1, item.capacity, item.stock)
+                        }
+                        className="h-11 w-20 rounded-xl border border-zinc-800 bg-zinc-950 px-3 text-sm font-bold text-zinc-50 outline-none disabled:opacity-50"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0 basis-40">
+                      <label className="text-xs text-zinc-500 mb-1 block">מ״ס (אופציונלי)</label>
+                      <input
+                        type="text"
+                        value={draft.serial}
+                        onChange={(e) => setAddToBoxLineSerial(item.id, e.target.value)}
+                        placeholder="מספר סידורי..."
+                        className="h-11 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-50 placeholder:text-zinc-600 outline-none font-mono"
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Admin notes */}
+          <div>
+            <label className="text-sm font-bold text-emerald-400 mb-2 block">הערות <span className="text-red-500">*</span></label>
+            <textarea
+              value={addToBoxNotes}
+              onChange={(e) => setAddToBoxNotes(e.target.value)}
+              rows={3}
+              placeholder="סיבת ההוספה הישירה לקרטון (חובה) — יתועד בניהול שרירותי..."
+              className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-50 placeholder:text-zinc-600 outline-none focus:ring-2 focus:ring-zinc-500 transition-all resize-none"
+            />
+          </div>
+
+          {error && <div className="rounded-xl border border-red-900/40 bg-red-900/10 p-3 text-sm text-red-400">{error}</div>}
+        </div>
+      </Sheet>
 
       {/* ===== ASSIGN MODAL ===== */}
-      {assignModal && (
-        <ModalPortal>
-        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4">
-          <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" onClick={() => !isSubmitting && setAssignModal(false)} />
-          <div className="relative w-full max-w-4xl rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-2xl font-bold text-zinc-50">הקצאת ציוד חדש</h3>
-              <button onClick={() => !isSubmitting && setAssignModal(false)} className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-zinc-50 cursor-pointer" disabled={isSubmitting}>
-                <CloseIcon />
-              </button>
-            </div>
-            <form onSubmit={handleAssign} className="space-y-6">
-              <EquipmentSelector
-                availableItems={availableEquipment}
-                availableUnits={unitTemplates}
-                selectedItems={selectedItems}
-                onItemsChange={setSelectedItems}
-                mode="assign"
-                stockByItemId={yamahStockByItemId}
-              />
-              <div>
-                <label className="text-sm font-bold text-emerald-400 mb-2 block">הערות <span className="text-red-500">*</span></label>
-                <textarea value={adminNotes} onChange={(e) => setAdminNotes(e.target.value)} rows={4} placeholder="הסבר מדוע הציוד מוקצה (חובה)..."
-                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-50 placeholder:text-zinc-600 outline-none focus:ring-2 focus:ring-zinc-500 transition-all resize-none" required />
-                <p className="mt-2 text-xs text-zinc-500">הערות אלו יתועדו בהיסטוריית הניהול השרירותי</p>
-              </div>
-              {error && <div className="rounded-xl border border-red-900/40 bg-red-900/10 p-3 text-sm text-red-400">{error}</div>}
-              <div className="flex gap-3">
-                <button type="submit" disabled={isSubmitting || selectedItems.length === 0} className="flex-1 h-14 inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-base font-bold text-white hover:bg-emerald-500 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
-                  {isSubmitting ? <LoadingSpinner size="sm" /> : selectedItems.length > 0 ? `הקצאת ${selectedItems.length} פריטים` : "בחר פריטים תחילה"}
-                </button>
-                <button type="button" onClick={() => { setAssignModal(false); setSelectedItems([]); setAdminNotes(""); setError(null); }} disabled={isSubmitting}
-                  className="flex-1 h-14 inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 text-base font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer disabled:opacity-50">ביטול</button>
-              </div>
-            </form>
+      <Sheet
+        open={assignModal}
+        onClose={() => setAssignModal(false)}
+        dismissible={!isSubmitting}
+        size="xl"
+        title="הקצאת ציוד חדש"
+        footer={
+          <SheetActions>
+            <button
+              type="submit"
+              form={ASSIGN_FORM_ID}
+              disabled={isSubmitting || selectedItems.length === 0}
+              className={`${SHEET_BTN} bg-emerald-600 text-white hover:bg-emerald-500`}
+            >
+              {isSubmitting ? <LoadingSpinner size="sm" /> : selectedItems.length > 0 ? `הקצאת ${selectedItems.length} פריטים` : "בחר פריטים תחילה"}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setAssignModal(false); setSelectedItems([]); setAdminNotes(""); setError(null); }}
+              disabled={isSubmitting}
+              className={SHEET_BTN_SECONDARY}
+            >
+              ביטול
+            </button>
+          </SheetActions>
+        }
+      >
+        <form id={ASSIGN_FORM_ID} onSubmit={handleAssign} className="space-y-6">
+          <EquipmentSelector
+            availableItems={availableEquipment}
+            availableUnits={unitTemplates}
+            selectedItems={selectedItems}
+            onItemsChange={setSelectedItems}
+            mode="assign"
+            stockByItemId={yamahStockByItemId}
+          />
+          <div>
+            <label className="text-sm font-bold text-emerald-400 mb-2 block">הערות <span className="text-red-500">*</span></label>
+            <textarea value={adminNotes} onChange={(e) => setAdminNotes(e.target.value)} rows={4} placeholder="הסבר מדוע הציוד מוקצה (חובה)..."
+              className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-50 placeholder:text-zinc-600 outline-none focus:ring-2 focus:ring-zinc-500 transition-all resize-none" required />
+            <p className="mt-2 text-xs text-zinc-500">הערות אלו יתועדו בהיסטוריית הניהול השרירותי</p>
           </div>
-        </div>
-        </ModalPortal>
-      )}
+          {error && <div className="rounded-xl border border-red-900/40 bg-red-900/10 p-3 text-sm text-red-400">{error}</div>}
+        </form>
+      </Sheet>
     </div>
   );
 }

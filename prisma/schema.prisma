@@ -588,3 +588,41 @@ model TashLocation {
 
   @@index([name])
 }
+
+/// Application-level logical backups (full JSON dump of every table, gzipped).
+/// Written by the daily cron, by a super admin from /admin/backups, or by the
+/// backup scripts. Kept inside the DB (covered by Neon history) and optionally
+/// mirrored to a private Vercel Blob store (off-provider copy).
+model DatabaseBackup {
+  id            String     @id @default(cuid())
+  createdAt     DateTime   @default(now())
+  kind          BackupKind
+  trigger       String
+  actorId       String?
+  label         String?
+  schemaVersion String?
+  appCommit     String?
+  tableCounts   Json
+  totalRows     Int
+  rawBytes      Int
+  sizeBytes     Int
+  checksum      String
+  storage       String     @default("db")
+  blobUrl       String?
+  blobPath      String?
+  data          Bytes?
+  verifiedAt    DateTime?
+  expiresAt     DateTime?
+
+  @@index([createdAt(sort: Desc)])
+  @@index([kind, createdAt(sort: Desc)])
+}
+
+enum BackupKind {
+  DAILY
+  WEEKLY
+  MONTHLY
+  MANUAL
+  PRE_RESET
+  PRE_RESTORE
+}

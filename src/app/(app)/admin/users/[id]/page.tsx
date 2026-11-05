@@ -172,16 +172,10 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
     }),
   ]);
 
-  const yamahLoc = await prisma.storageLocation.findFirst({
-    where: { name: "ימ״ח", active: true },
-    select: { id: true },
+  const yamahStockRows = await prisma.storageInventory.findMany({
+    where: { location: { name: "ימ״ח", active: true } },
+    select: { equipmentItemId: true, quantity: true },
   });
-  const yamahStockRows = yamahLoc
-    ? await prisma.storageInventory.findMany({
-        where: { locationId: yamahLoc.id },
-        select: { equipmentItemId: true, quantity: true },
-      })
-    : [];
   const yamahStockByItemId: Record<string, number> = Object.fromEntries(
     yamahStockRows.map((r) => [r.equipmentItemId, r.quantity]),
   );

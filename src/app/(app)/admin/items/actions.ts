@@ -71,7 +71,10 @@ export async function createItemAction(formData: FormData) {
   });
 
   revalidatePath("/admin/items");
+
+  revalidatePath("/admin/inventory/items");
   revalidatePath("/admin/storage");
+  revalidatePath("/admin/inventory/storage");
 }
 
 const UpdateSchema = z.object({
@@ -133,6 +136,8 @@ export async function updateItemAction(formData: FormData) {
   });
 
   revalidatePath("/admin/items");
+
+  revalidatePath("/admin/inventory/items");
 }
 
 export async function deleteItemAction(formData: FormData): Promise<{ success: boolean; error?: string }> {
@@ -270,6 +275,9 @@ export async function deleteItemAction(formData: FormData): Promise<{ success: b
   }
 
   revalidatePath("/admin/items");
+
+  revalidatePath("/admin/inventory/items");
   revalidatePath("/admin/storage");
+  revalidatePath("/admin/inventory/storage");
   return { success: true };
 }

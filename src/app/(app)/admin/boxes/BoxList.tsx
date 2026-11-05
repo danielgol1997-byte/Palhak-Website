@@ -306,10 +306,10 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
   return (
     <div className="flex flex-col gap-4">
       {/* Stats Bar — clickable filters */}
-      <div className="flex flex-wrap gap-3">
+      <div className={`grid grid-cols-2 gap-3 ${usersWithoutBox.length > 0 ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
         <button
           onClick={() => setStatFilter("all")}
-          className={`flex-1 min-w-[140px] rounded-xl border p-4 text-right transition-all cursor-pointer ${
+          className={`min-w-0 rounded-xl border p-4 text-right transition-all cursor-pointer ${
             statFilter === "all"
               ? "border-zinc-500 bg-zinc-800 ring-2 ring-zinc-500/30"
               : "border-zinc-800 bg-zinc-950 hover:border-zinc-700"
@@ -320,7 +320,7 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
         </button>
         <button
           onClick={() => setStatFilter("complete")}
-          className={`flex-1 min-w-[140px] rounded-xl border p-4 text-right transition-all cursor-pointer ${
+          className={`min-w-0 rounded-xl border p-4 text-right transition-all cursor-pointer ${
             statFilter === "complete"
               ? "border-emerald-500 bg-emerald-950/30 ring-2 ring-emerald-500/30"
               : "border-emerald-900/40 bg-emerald-950/10 hover:border-emerald-700/60"
@@ -331,7 +331,7 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
         </button>
         <button
           onClick={() => setStatFilter("incomplete")}
-          className={`flex-1 min-w-[140px] rounded-xl border p-4 text-right transition-all cursor-pointer ${
+          className={`min-w-0 rounded-xl border p-4 text-right transition-all cursor-pointer ${
             statFilter === "incomplete"
               ? "border-amber-500 bg-amber-950/30 ring-2 ring-amber-500/30"
               : "border-amber-900/40 bg-amber-950/10 hover:border-amber-700/60"
@@ -343,7 +343,7 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
         {usersWithoutBox.length > 0 && (
           <button
             onClick={() => setStatFilter("nobox")}
-            className={`flex-1 min-w-[140px] rounded-xl border p-4 text-right transition-all cursor-pointer ${
+            className={`min-w-0 rounded-xl border p-4 text-right transition-all cursor-pointer ${
               statFilter === "nobox"
                 ? "border-red-500 bg-red-950/30 ring-2 ring-red-500/30"
                 : "border-red-900/40 bg-red-950/10 hover:border-red-700/60"
@@ -365,7 +365,7 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
           <button
             onClick={handleRecoverBoxes}
             disabled={recovering}
-            className="shrink-0 inline-flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-bold text-zinc-950 hover:bg-amber-400 disabled:opacity-60 transition-colors"
+            className="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-bold text-zinc-950 hover:bg-amber-400 disabled:opacity-60 transition-colors w-full sm:w-auto"
           >
             {recovering ? <LoadingSpinner size="sm" /> : "♻ שחזר קרטונים"}
           </button>
@@ -374,18 +374,18 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
       )}
 
       {/* Search + Item filter toggle */}
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
         <input
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="חיפוש לפי שם, מ״א או מחלקה..."
-          className="h-12 flex-1 min-w-[200px] rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-sm text-zinc-50 placeholder:text-zinc-600 focus:ring-2 focus:ring-zinc-500 outline-none transition-all"
+          className="h-12 w-full min-w-0 sm:flex-1 sm:min-w-[200px] rounded-xl border border-zinc-800 bg-zinc-950 px-4 text-sm text-zinc-50 placeholder:text-zinc-600 focus:ring-2 focus:ring-zinc-500 outline-none transition-all"
         />
         {statFilter !== "nobox" && (
           <button
             onClick={() => setShowItemFilter((v) => !v)}
-            className={`h-12 px-5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+            className={`h-12 px-5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 w-full sm:w-auto ${
               showItemFilter || selectedItemFilters.size > 0
                 ? itemFilterMode === "present"
                   ? "bg-teal-600 text-white shadow-lg shadow-teal-900/30"
@@ -409,7 +409,7 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
       {/* Item filter panel */}
       {showItemFilter && (
         <div
-          className={`rounded-2xl border p-5 transition-colors ${
+          className={`rounded-2xl border p-4 sm:p-5 transition-colors ${
             itemFilterMode === "present"
               ? "border-teal-900/40 bg-gradient-to-br from-teal-950/25 to-zinc-950/80"
               : "border-rose-900/40 bg-gradient-to-br from-rose-950/20 to-zinc-950/80"
@@ -423,11 +423,11 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
               </p>
             </div>
             {/* Mode switch */}
-            <div className="flex-shrink-0 flex rounded-2xl p-1 bg-zinc-900 border border-zinc-800 shadow-inner">
+            <div className="flex-shrink-0 flex w-full lg:w-auto rounded-2xl p-1 bg-zinc-900 border border-zinc-800 shadow-inner">
               <button
                 type="button"
                 onClick={() => setItemFilterMode("missing")}
-                className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                className={`flex-1 lg:flex-none px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
                   itemFilterMode === "missing"
                     ? "bg-rose-600 text-white shadow-md"
                     : "text-zinc-500 hover:text-zinc-300"
@@ -439,7 +439,7 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
               <button
                 type="button"
                 onClick={() => setItemFilterMode("present")}
-                className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                className={`flex-1 lg:flex-none px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
                   itemFilterMode === "present"
                     ? "bg-teal-600 text-white shadow-md"
                     : "text-zinc-500 hover:text-zinc-300"
@@ -571,7 +571,7 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
               {usersWithoutBox.length === 0 ? "כל המשתמשים הפעילים מחזיקים קרטון" : "לא נמצאו משתמשים תואמים"}
             </div>
           ) : (
-            <div className="rounded-xl border border-zinc-800 overflow-hidden">
+            <div className="rounded-xl border border-zinc-800 overflow-x-auto md:overflow-hidden">
               <table className="w-full">
                 <thead>
                   <tr className="bg-zinc-950 text-xs font-bold text-zinc-500 uppercase tracking-wider border-b border-zinc-800">
@@ -611,7 +611,7 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
           {rows.length === 0 ? "אין קרטונים במערכת" : "לא נמצאו קרטונים תואמים"}
         </div>
       ) : statFilter !== "nobox" && (
-        <div className="rounded-xl border border-zinc-800 overflow-hidden">
+        <div className="rounded-xl border border-zinc-800 overflow-x-auto md:overflow-hidden">
           <table className="w-full">
             <thead>
               <tr className="bg-zinc-950 text-xs font-bold text-zinc-500 uppercase tracking-wider border-b border-zinc-800">
@@ -704,8 +704,8 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
                     </tr>
                     {isExpanded && (
                       <tr>
-                        <td colSpan={7} className="bg-zinc-950/70 px-4 pb-4 pt-2">
-                          <div className="rounded-xl border border-zinc-800 overflow-hidden">
+                        <td colSpan={7} className="bg-zinc-950/70 px-2 md:px-4 pb-4 pt-2">
+                          <div className="rounded-xl border border-zinc-800 overflow-x-auto md:overflow-hidden">
                             <table className="w-full">
                               <thead>
                                 <tr className="bg-zinc-950 text-xs font-bold text-zinc-500 uppercase border-b border-zinc-800">
@@ -737,7 +737,7 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
                                       }`}
                                     >
                                       <td className="px-4 py-2.5 text-sm font-medium text-zinc-50">
-                                        <span className="flex items-center gap-2">
+                                        <span className="flex flex-wrap items-center gap-2">
                                           {ts.name}
                                           {isFilteredItem && (
                                             <span

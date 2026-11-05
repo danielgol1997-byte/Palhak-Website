@@ -1,120 +1,109 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/auth";
 import { Role, RequestItemStatus } from "@prisma/client";
 import { HomeTile } from "./HomeTile";
 import { PendingTransfers } from "./PendingTransfers";
+import { MobileTile } from "@/components/MobileTile";
+import { NavIcon } from "@/components/layout/NavIcon";
 import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/auth";
+import { hasAtLeastRole } from "@/lib/rbac";
 
 export const dynamic = "force-dynamic";
 
 export default async function MePage() {
-  const session = await getServerSession(authOptions);
+  const session = await getSession();
   const role = session?.user?.role ?? Role.USER;
+  const isAdmin = hasAtLeastRole(role, Role.ADMIN);
 
-  // Fetch pending transfer requests for this user
-  const pendingTransfers = await prisma.request.findMany({
-    where: {
-      recipientId: session?.user?.id,
-      items: {
-        some: {
-          status: RequestItemStatus.AWAITING_ACCEPTANCE,
-        },
-      },
-    },
-    include: {
-      requester: {
-        select: {
-          id: true,
-          name: true,
-          personalNumber: true,
-        },
-      },
-      items: {
+  // Pending transfer requests addressed to this user
+  const pendingTransfers = session?.user?.id
+    ? await prisma.request.findMany({
         where: {
-          status: RequestItemStatus.AWAITING_ACCEPTANCE,
+          recipientId: session.user.id,
+          items: { some: { status: RequestItemStatus.AWAITING_ACCEPTANCE } },
         },
         include: {
-          equipmentItem: {
-            select: {
-              id: true,
-              name: true,
-              isWeapon: true,
-              isSight: true,
-              isClothing: true,
-              isShoe: true,
-              category: {
+          requester: { select: { id: true, name: true, personalNumber: true } },
+          items: {
+            where: { status: RequestItemStatus.AWAITING_ACCEPTANCE },
+            include: {
+              equipmentItem: {
                 select: {
-                  division: true,
+                  id: true,
+                  name: true,
+                  isWeapon: true,
+                  isSight: true,
+                  isClothing: true,
+                  isShoe: true,
+                  category: { select: { division: true } },
                 },
               },
             },
           },
         },
-      },
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-  });
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      })
+    : [];
 
   const tiles = [
     {
       href: "/requests",
       title: "ציוד",
-      icon: (
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M20 7h-9M14 17H5M17 11V5M17 19v-3M7 11V5M7 19v-3"/>
-        </svg>
-      ),
+      subtitle: "בקשת ציוד חדש, הצהרות בלאי/אובדן, החזרות והעברות",
+      icon: <NavIcon name="gear" size={32} />,
     },
     {
       href: "/personal",
       title: "אזור אישי",
-      icon: (
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-        </svg>
-      ),
+      subtitle: "הפרטים שלי, הציוד המוקצה והיסטוריית הבקשות",
+      icon: <NavIcon name="user" size={32} />,
     },
   ];
-
-  if (role !== Role.USER) {
+  if (isAdmin) {
     tiles.push({
       href: "/admin",
       title: "ניהול",
-      icon: (
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-        </svg>
-      ),
+      subtitle: "משתמשים, מלאי, בקשות, קרטונים וייצוא",
+      icon: <NavIcon name="shield" size={32} />,
     });
   }
 
+  const firstName = (session?.user?.name ?? "").trim().split(/\s+/)[0] ?? "";
+
   return (
-    <div className="flex min-h-[calc(100vh-160px)] flex-col gap-8 py-10">
-      {/* Pending Transfers Notification */}
+    <div className="flex flex-col gap-6 py-2 md:min-h-[calc(100dvh-220px)] md:gap-8 md:py-10">
       {pendingTransfers.length > 0 && (
-        <div className="w-full max-w-6xl mx-auto px-4">
+        <div className="mx-auto w-full max-w-6xl">
           <PendingTransfers pendingTransfers={pendingTransfers} />
         </div>
       )}
 
-      {/* Home Tiles */}
-      <div className="flex items-center justify-center">
-        <div className="grid w-full grid-cols-1 gap-6 sm:grid-cols-2 md:gap-8 lg:max-w-4xl px-4">
-          {tiles.map((tile, index) => (
-          <div 
-            key={tile.href} 
-            className={`aspect-square sm:aspect-auto sm:h-64 ${
-              tile.href === "/admin" && tiles.length % 2 !== 0 ? "sm:col-span-2 sm:h-40" : ""
-            }`}
-          >
-            <HomeTile {...tile} />
-          </div>
-        ))}
+      {/* Mobile: greeting + flat list */}
+      <section className="md:hidden">
+        <div className="mb-4 px-1">
+          <p className="text-sm" style={{ color: "var(--t-fg-muted)" }}>שלום{firstName ? `, ${firstName}` : ""} 👋</p>
+          <h1 className="text-2xl font-black tracking-tight">מה תרצה לעשות?</h1>
+        </div>
+        <div className="flex flex-col gap-3">
+          {tiles.map((t) => (
+            <MobileTile key={t.href} href={t.href} title={t.title} subtitle={t.subtitle} icon={t.icon} />
+          ))}
+        </div>
+      </section>
+
+      {/* Desktop: 3D tilt cards */}
+      <div className="hidden items-center justify-center md:flex">
+        <div className="grid w-full grid-cols-2 gap-8 lg:max-w-4xl">
+          {tiles.map((tile) => (
+            <div
+              key={tile.href}
+              className={`h-64 ${tile.href === "/admin" && tiles.length % 2 !== 0 ? "col-span-2 h-40" : ""}`}
+            >
+              <HomeTile href={tile.href} title={tile.title} icon={tile.icon} />
+            </div>
+          ))}
         </div>
       </div>
     </div>
   );
 }
-

@@ -12,10 +12,21 @@ export { mergeTuning, DEFAULT_TUNING } from "@/lib/theme-tuning";
 
 export type ThemeMode = "dark" | "light";
 
+export type ThemeCategory = "classic" | "modern" | "light" | "girly" | "nature";
+
+export const THEME_CATEGORIES: { id: ThemeCategory; name: string }[] = [
+  { id: "classic", name: "קלאסי" },
+  { id: "modern", name: "מודרני" },
+  { id: "nature", name: "טבע" },
+  { id: "light", name: "בהיר" },
+  { id: "girly", name: "נסיכות" },
+];
+
 export type ThemePreset = {
   id: string;
   name: string;
   emoji: string;
+  category?: ThemeCategory;
   bg: string;
   surface: string;
   border: string;
@@ -30,7 +41,7 @@ export type ThemePreset = {
   mode?: ThemeMode;
   /** Full-screen CSS background (gradient); animated when non-transparent */
   immersiveGradient?: string;
-  /** Opacity of /bg.jpg (0–1) */
+  /** Opacity of the background photo (0–1) */
   photoOpacity?: number;
   /** Full CSS background for vignette / atmosphere layer */
   vignette?: string;
@@ -77,6 +88,7 @@ export function resolvePreset(p: ThemePreset): ResolvedThemePreset {
 export const THEME_PRESETS: ThemePreset[] = [
   {
     id: "default",
+    category: "classic",
     name: "מקורי אשר",
     emoji: "🛡️",
     bg: "#09090b",
@@ -95,6 +107,7 @@ export const THEME_PRESETS: ThemePreset[] = [
   /* ─── Girly & light — immersive ─── */
   {
     id: "princess_cloud",
+    category: "girly",
     name: "עננת נסיכות",
     emoji: "👑",
     bg: "#fff5fb",
@@ -114,6 +127,7 @@ export const THEME_PRESETS: ThemePreset[] = [
   },
   {
     id: "strawberry_milk",
+    category: "girly",
     name: "חלב תות",
     emoji: "🍓",
     bg: "#fff0f3",
@@ -134,6 +148,7 @@ export const THEME_PRESETS: ThemePreset[] = [
   },
   {
     id: "lavender_latte",
+    category: "girly",
     name: "לאטה לילך",
     emoji: "💜",
     bg: "#f5f3ff",
@@ -153,6 +168,7 @@ export const THEME_PRESETS: ThemePreset[] = [
   },
   {
     id: "rose_champagne",
+    category: "girly",
     name: "שמפניה ורדים",
     emoji: "🥂",
     bg: "#fff7ed",
@@ -173,6 +189,7 @@ export const THEME_PRESETS: ThemePreset[] = [
   },
   {
     id: "cotton_candy",
+    category: "girly",
     name: "צמר גפן מתוק",
     emoji: "🍬",
     bg: "#f0f9ff",
@@ -192,6 +209,7 @@ export const THEME_PRESETS: ThemePreset[] = [
   },
   {
     id: "sakura_dream",
+    category: "girly",
     name: "חלום סאקורה",
     emoji: "🌸",
     bg: "#fdf2f8",
@@ -212,6 +230,7 @@ export const THEME_PRESETS: ThemePreset[] = [
   },
   {
     id: "unicorn_glow",
+    category: "girly",
     name: "זוהר חד-קרן",
     emoji: "🦄",
     bg: "#1a0a1f",
@@ -232,6 +251,7 @@ export const THEME_PRESETS: ThemePreset[] = [
   },
   {
     id: "bubblegum_night",
+    category: "girly",
     name: "ליל בומבוניירה",
     emoji: "💗",
     bg: "#2a0a18",
@@ -253,6 +273,7 @@ export const THEME_PRESETS: ThemePreset[] = [
   /* ─── Original catalogue (tweaked for resolve) ─── */
   {
     id: "galaxy",
+    category: "classic",
     name: "גלקסיה",
     emoji: "🌌",
     bg: "#08001a",
@@ -267,6 +288,7 @@ export const THEME_PRESETS: ThemePreset[] = [
   },
   {
     id: "dawn",
+    category: "nature",
     name: "שחר",
     emoji: "🌅",
     bg: "#120800",
@@ -281,6 +303,7 @@ export const THEME_PRESETS: ThemePreset[] = [
   },
   {
     id: "ocean",
+    category: "nature",
     name: "ים עמוק",
     emoji: "🌊",
     bg: "#001218",
@@ -295,6 +318,7 @@ export const THEME_PRESETS: ThemePreset[] = [
   },
   {
     id: "forest",
+    category: "nature",
     name: "יער קסום",
     emoji: "🌲",
     bg: "#001205",
@@ -309,6 +333,7 @@ export const THEME_PRESETS: ThemePreset[] = [
   },
   {
     id: "sunset",
+    category: "nature",
     name: "שקיעה",
     emoji: "🌇",
     bg: "#180008",
@@ -323,6 +348,7 @@ export const THEME_PRESETS: ThemePreset[] = [
   },
   {
     id: "cosmic_rose",
+    category: "classic",
     name: "ורד קוסמי",
     emoji: "🌺",
     bg: "#180010",
@@ -337,6 +363,7 @@ export const THEME_PRESETS: ThemePreset[] = [
   },
   {
     id: "sapphire",
+    category: "classic",
     name: "ספיר",
     emoji: "💎",
     bg: "#000a1a",
@@ -351,6 +378,7 @@ export const THEME_PRESETS: ThemePreset[] = [
   },
   {
     id: "arctic",
+    category: "nature",
     name: "ארקטי",
     emoji: "❄️",
     bg: "#00080f",
@@ -365,6 +393,7 @@ export const THEME_PRESETS: ThemePreset[] = [
   },
   {
     id: "neon",
+    category: "classic",
     name: "ניאון",
     emoji: "⚡",
     bg: "#020d00",
@@ -377,7 +406,209 @@ export const THEME_PRESETS: ThemePreset[] = [
       "radial-gradient(circle at 50% 100%, rgba(63,98,18,0.45) 0%, transparent 50%)",
     photoOpacity: 0.12,
   },
+  /* ─── Modern ─── */
+  {
+    id: "midnight_slate",
+    name: "צפחה לילית",
+    emoji: "🌃",
+    category: "modern",
+    bg: "#0b1120",
+    surface: "#111a2e",
+    border: "#1f2b45",
+    accent: "#818cf8",
+    accent2: "#38bdf8",
+    glow: "rgba(129,140,248,0.3)",
+    overlayColor: "rgba(99,102,241,0.06)",
+    fg: "#e8ecf7",
+    fgMuted: "#9aa6c2",
+    immersiveGradient:
+      "radial-gradient(ellipse 90% 60% at 80% -10%, rgba(99,102,241,0.35) 0%, transparent 55%), radial-gradient(ellipse 70% 50% at 0% 100%, rgba(14,165,233,0.2) 0%, transparent 50%)",
+    photoOpacity: 0.1,
+  },
+  {
+    id: "olive_ops",
+    name: "זית מבצעי",
+    emoji: "🪖",
+    category: "modern",
+    bg: "#0d110b",
+    surface: "#161c12",
+    border: "#2a3322",
+    accent: "#a3b86c",
+    accent2: "#d9c27a",
+    glow: "rgba(163,184,108,0.28)",
+    overlayColor: "rgba(120,140,70,0.06)",
+    fg: "#eef1e6",
+    fgMuted: "#a7b096",
+    immersiveGradient: "linear-gradient(170deg, rgba(60,75,35,0.4) 0%, transparent 55%)",
+    photoOpacity: 0.2,
+  },
+  {
+    id: "graphite_mono",
+    name: "גרפיט",
+    emoji: "⬛",
+    category: "modern",
+    bg: "#0f0f10",
+    surface: "#19191b",
+    border: "#2b2b2f",
+    accent: "#f4f4f5",
+    accent2: "#a1a1aa",
+    glow: "rgba(255,255,255,0.1)",
+    overlayColor: "transparent",
+    fg: "#fafafa",
+    fgMuted: "#9f9fa6",
+    immersiveGradient: "transparent",
+    photoOpacity: 0.08,
+    vignette: "linear-gradient(to bottom, rgba(0,0,0,0.4) 0%, transparent 40%, rgba(0,0,0,0.5) 100%)",
+  },
+  {
+    id: "emerald_night",
+    name: "אזמרגד",
+    emoji: "💚",
+    category: "modern",
+    bg: "#04110d",
+    surface: "#0a1b15",
+    border: "#163327",
+    accent: "#34d399",
+    accent2: "#a7f3d0",
+    glow: "rgba(52,211,153,0.3)",
+    overlayColor: "rgba(16,185,129,0.05)",
+    fg: "#ecfdf5",
+    fgMuted: "#8fb8a6",
+    immersiveGradient: "radial-gradient(ellipse 80% 50% at 50% 100%, rgba(5,150,105,0.35) 0%, transparent 55%)",
+    photoOpacity: 0.12,
+  },
+  {
+    id: "royal_gold",
+    name: "זהב מלכותי",
+    emoji: "👑",
+    category: "modern",
+    bg: "#120d05",
+    surface: "#1c150a",
+    border: "#3a2d14",
+    accent: "#f5c451",
+    accent2: "#fde68a",
+    glow: "rgba(245,196,81,0.3)",
+    overlayColor: "rgba(217,119,6,0.05)",
+    fg: "#fdf6e3",
+    fgMuted: "#c4b48a",
+    immersiveGradient: "radial-gradient(ellipse 90% 60% at 50% -20%, rgba(180,130,30,0.35) 0%, transparent 55%)",
+    photoOpacity: 0.12,
+  },
+  {
+    id: "crimson_command",
+    name: "ארגמן",
+    emoji: "🟥",
+    category: "modern",
+    bg: "#120507",
+    surface: "#1d0a0e",
+    border: "#3b141b",
+    accent: "#fb7185",
+    accent2: "#fda4af",
+    glow: "rgba(251,113,133,0.3)",
+    overlayColor: "rgba(225,29,72,0.05)",
+    fg: "#fff1f2",
+    fgMuted: "#c89aa2",
+    immersiveGradient: "radial-gradient(ellipse 80% 55% at 85% 0%, rgba(190,24,60,0.4) 0%, transparent 55%)",
+    photoOpacity: 0.12,
+  },
+  {
+    id: "high_contrast",
+    name: "ניגודיות גבוהה",
+    emoji: "🔆",
+    category: "modern",
+    bg: "#000000",
+    surface: "#0a0a0a",
+    border: "#5a5a5a",
+    accent: "#ffe600",
+    accent2: "#ffffff",
+    glow: "rgba(255,230,0,0.25)",
+    overlayColor: "transparent",
+    fg: "#ffffff",
+    fgMuted: "#d4d4d4",
+    immersiveGradient: "transparent",
+    photoOpacity: 0,
+    vignette: "transparent",
+  },
+  /* ─── Light (clean) ─── */
+  {
+    id: "paper_light",
+    name: "נייר לבן",
+    emoji: "📄",
+    category: "light",
+    bg: "#f8fafc",
+    surface: "#ffffff",
+    border: "#d7dde6",
+    accent: "#0f172a",
+    accent2: "#475569",
+    glow: "rgba(15,23,42,0.12)",
+    overlayColor: "transparent",
+    fg: "#0f172a",
+    fgMuted: "#5b6577",
+    mode: "light",
+    immersiveGradient: "transparent",
+    photoOpacity: 0.04,
+    vignette: "linear-gradient(to bottom, rgba(148,163,184,0.12) 0%, transparent 40%, rgba(148,163,184,0.16) 100%)",
+  },
+  {
+    id: "nordic_light",
+    name: "נורדי בהיר",
+    emoji: "🧊",
+    category: "light",
+    bg: "#eef4f8",
+    surface: "#ffffff",
+    border: "#c9d8e3",
+    accent: "#0369a1",
+    accent2: "#0ea5e9",
+    glow: "rgba(3,105,161,0.2)",
+    overlayColor: "rgba(14,165,233,0.04)",
+    fg: "#0c2233",
+    fgMuted: "#4f6b7d",
+    mode: "light",
+    immersiveGradient: "linear-gradient(135deg, #eef4f8 0%, #e3eef6 50%, #f1f5f9 100%)",
+    photoOpacity: 0.05,
+    vignette: "linear-gradient(to bottom, rgba(3,105,161,0.08) 0%, transparent 45%, rgba(3,105,161,0.1) 100%)",
+  },
+  {
+    id: "desert_sand",
+    name: "חול מדבר",
+    emoji: "🏜️",
+    category: "light",
+    bg: "#f7f1e6",
+    surface: "#fffaf0",
+    border: "#e3d3b8",
+    accent: "#9a6b1c",
+    accent2: "#c9893a",
+    glow: "rgba(154,107,28,0.2)",
+    overlayColor: "rgba(201,137,58,0.05)",
+    fg: "#2d2214",
+    fgMuted: "#7a6650",
+    mode: "light",
+    immersiveGradient: "linear-gradient(160deg, #f7f1e6 0%, #f1e6d2 50%, #faf5ea 100%)",
+    photoOpacity: 0.07,
+    vignette: "linear-gradient(to bottom, rgba(154,107,28,0.1) 0%, transparent 45%, rgba(154,107,28,0.14) 100%)",
+  },
+  {
+    id: "mint_fresh",
+    name: "מנטה",
+    emoji: "🌿",
+    category: "light",
+    bg: "#eefaf3",
+    surface: "#ffffff",
+    border: "#bfe3cf",
+    accent: "#047857",
+    accent2: "#10b981",
+    glow: "rgba(4,120,87,0.2)",
+    overlayColor: "rgba(16,185,129,0.04)",
+    fg: "#0b2e22",
+    fgMuted: "#4a7363",
+    mode: "light",
+    immersiveGradient: "linear-gradient(135deg, #eefaf3 0%, #e1f5ea 50%, #f0fdf4 100%)",
+    photoOpacity: 0.05,
+    vignette: "linear-gradient(to bottom, rgba(4,120,87,0.08) 0%, transparent 45%, rgba(4,120,87,0.1) 100%)",
+  },
 ];
+
+export const CUSTOM_PRESET_ID = "custom";
 
 export const THEME_EFFECTS: ThemeEffect[] = [
   { id: "none", name: "ללא אפקטים", emoji: "✕" },
@@ -389,14 +620,68 @@ export const THEME_EFFECTS: ThemeEffect[] = [
   { id: "bubbles", name: "בועות", emoji: "🫧" },
   { id: "fireflies", name: "גחליליות", emoji: "🪲" },
   { id: "matrix", name: "מטריקס", emoji: "💚" },
+  { id: "snow", name: "שלג", emoji: "❄️" },
+  { id: "confetti", name: "קונפטי", emoji: "🎉" },
 ];
 
 export function getPreset(id: string): ThemePreset {
   return THEME_PRESETS.find((p) => p.id === id) ?? THEME_PRESETS[0];
 }
 
-export function getResolvedPreset(id: string): ResolvedThemePreset {
+/**
+ * Resolve a preset id. When the id is "custom" and the tuning carries a custom
+ * palette, the palette is used; otherwise falls back to the default preset.
+ */
+export function getResolvedPreset(id: string, tuningStored?: unknown): ResolvedThemePreset {
+  if (id === CUSTOM_PRESET_ID) {
+    const tun = mergeTuning(tuningStored);
+    const c = tun.customColors;
+    if (c) {
+      const isLight = c.mode === "light";
+      return resolvePreset({
+        id: CUSTOM_PRESET_ID,
+        name: "מותאם אישית",
+        emoji: "🎨",
+        category: "modern",
+        bg: c.bg,
+        surface: c.surface,
+        border: c.border,
+        accent: c.accent,
+        accent2: c.accent2,
+        glow: hexToRgba(c.accent, 0.3),
+        overlayColor: hexToRgba(c.accent, 0.05),
+        fg: c.fg,
+        fgMuted: c.fgMuted,
+        mode: c.mode,
+        immersiveGradient: `linear-gradient(135deg, ${hexToRgba(c.accent, isLight ? 0.12 : 0.28)} 0%, transparent 60%)`,
+        photoOpacity: isLight ? 0.05 : 0.12,
+      });
+    }
+  }
   return resolvePreset(getPreset(id));
+}
+
+export function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace("#", "");
+  const full = h.length === 3 ? h.split("").map((ch) => ch + ch).join("") : h.slice(0, 6);
+  const n = parseInt(full, 16);
+  if (Number.isNaN(n)) return `rgba(255,255,255,${alpha})`;
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+}
+
+/** Build a custom palette from an existing preset (starting point for the color editor). */
+export function customColorsFromPreset(id: string, tuningStored?: unknown) {
+  const p = getResolvedPreset(id === CUSTOM_PRESET_ID ? "default" : id, tuningStored);
+  return {
+    bg: p.bg,
+    surface: p.surface,
+    border: p.border,
+    accent: p.accent,
+    accent2: p.accent2,
+    fg: p.fg,
+    fgMuted: p.fgMuted,
+    mode: p.mode,
+  };
 }
 
 export function getEffect(id: string): ThemeEffect {
@@ -436,8 +721,10 @@ export function getRootThemeServerSnapshot(
   hasImmersive: boolean;
   cardFloat: boolean;
   cardWiggle: boolean;
+  saturate: boolean;
+  reduceMotion: boolean;
 } {
-  const p = getResolvedPreset(presetId);
+  const p = getResolvedPreset(presetId, tuningStored);
   const tun = mergeTuning(tuningStored);
   const immersive = p.immersiveGradient;
   const hasImmersive = immersive !== "transparent" && immersive.length > 2;
@@ -468,6 +755,8 @@ export function getRootThemeServerSnapshot(
     hasImmersive,
     cardFloat: tun.cardFloat,
     cardWiggle: tun.cardWiggle,
+    saturate: tun.globalSaturate !== 100,
+    reduceMotion: tun.reduceMotion,
   };
 }
 
@@ -477,7 +766,7 @@ export function buildThemeVarScript(
   effect: string,
   tuningStored?: unknown
 ): string {
-  const p = getResolvedPreset(presetId);
+  const p = getResolvedPreset(presetId, tuningStored);
   const tun = mergeTuning(tuningStored);
   const immersive = p.immersiveGradient;
   const hasImmersive = immersive !== "transparent" && immersive.length > 2;
@@ -514,7 +803,7 @@ export function applyThemeVarsToRoot(
   effect: string,
   tuningStored?: unknown
 ): void {
-  const p = getResolvedPreset(presetId);
+  const p = getResolvedPreset(presetId, tuningStored);
   const tun = mergeTuning(tuningStored);
   const root = document.documentElement;
   const s = root.style;

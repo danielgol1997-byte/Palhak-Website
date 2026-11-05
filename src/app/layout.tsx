@@ -1,10 +1,10 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import type { CSSProperties } from "react";
 import { Heebo } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
-import { prisma } from "@/lib/prisma";
-import { DEFAULT_THEME, buildThemeVarScript, getRootThemeServerSnapshot } from "@/lib/theme";
+import { getSiteTheme } from "@/lib/siteTheme";
+import { buildThemeVarScript, getRootThemeServerSnapshot } from "@/lib/theme";
 
 const heebo = Heebo({
   variable: "--font-heebo",
@@ -15,6 +15,14 @@ const heebo = Heebo({
 export const metadata: Metadata = {
   title: "אשר",
   description: "מערכת ניהול ציוד מתקדמת",
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "אשר" },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#09090b",
 };
 
 export default async function RootLayout({
@@ -22,19 +30,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  let presetId = DEFAULT_THEME.preset;
-  let effect = DEFAULT_THEME.effect;
-  let tuningStored: unknown = undefined;
-  try {
-    const theme = await prisma.siteTheme.findUnique({ where: { id: "singleton" } });
-    if (theme) {
-      presetId = theme.preset;
-      effect = theme.effect;
-      tuningStored = theme.tuning ?? undefined;
-    }
-  } catch {
-    // DB unavailable — script still applies defaults
-  }
+  const { preset: presetId, effect, tuningStored } = await getSiteTheme();
 
   const themeScript = buildThemeVarScript(presetId, effect, tuningStored);
   const themeSnap = getRootThemeServerSnapshot(presetId, effect, tuningStored);
@@ -49,6 +45,8 @@ export default async function RootLayout({
       {...(themeSnap.hasImmersive ? { "data-immersive": "1" } : {})}
       {...(themeSnap.cardFloat ? { "data-theme-card-float": "1" } : {})}
       {...(themeSnap.cardWiggle ? { "data-theme-card-wiggle": "1" } : {})}
+      {...(themeSnap.saturate ? { "data-theme-saturate": "1" } : {})}
+      {...(themeSnap.reduceMotion ? { "data-theme-reduce-motion": "1" } : {})}
     >
       <body
         className={`${heebo.variable} antialiased`}

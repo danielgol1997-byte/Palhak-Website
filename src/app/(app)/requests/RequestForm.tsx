@@ -450,7 +450,7 @@ export function RequestForm({ items, unitTemplates, userAssignments, pendingDecl
       {!hideRequestTypeSelector && (
         <div>
           <p className="text-sm text-zinc-400 mb-3">בחר את סוג הבקשה</p>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {Object.values(RequestType)
               .filter((type) => type !== RequestType.MISSING)
               .map((type) => (
@@ -458,7 +458,7 @@ export function RequestForm({ items, unitTemplates, userAssignments, pendingDecl
                   key={type}
                   type="button"
                   onClick={() => setRequestType(type)}
-                  className={`h-12 rounded-xl px-4 text-sm font-bold transition-all cursor-pointer ${
+                  className={`min-h-12 rounded-xl px-3 py-2 text-sm font-bold leading-tight transition-all cursor-pointer ${
                     requestType === type
                       ? "bg-zinc-50 text-zinc-950 scale-105"
                       : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
@@ -472,7 +472,7 @@ export function RequestForm({ items, unitTemplates, userAssignments, pendingDecl
       )}
 
       {/* Equipment Selection */}
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 sm:p-6">
         <p className="text-sm text-zinc-400 mb-4">
           חפש והוסף פריטים לבקשה
           {(requestType === RequestType.STOLEN || requestType === RequestType.DAMAGED || requestType === RequestType.MISSING) && (
@@ -483,11 +483,11 @@ export function RequestForm({ items, unitTemplates, userAssignments, pendingDecl
         {/* Division Filters */}
         <div className="mb-4">
           <label className="text-sm font-bold text-zinc-400 mb-2 block">סינון לפי חטיבה</label>
-          <div className="flex gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <button
               type="button"
               onClick={() => setSelectedDivision("ALL")}
-              className={`flex-1 h-10 px-4 rounded-xl text-xs font-bold transition-all ${
+              className={`h-11 px-3 rounded-xl text-xs font-bold transition-all ${
                 selectedDivision === "ALL"
                   ? "bg-zinc-50 text-zinc-950"
                   : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
@@ -498,7 +498,7 @@ export function RequestForm({ items, unitTemplates, userAssignments, pendingDecl
             <button
               type="button"
               onClick={() => setSelectedDivision(Division.LOGISTICS)}
-              className={`flex-1 h-10 px-4 rounded-xl text-xs font-bold transition-all ${
+              className={`h-11 px-3 rounded-xl text-xs font-bold transition-all ${
                 selectedDivision === Division.LOGISTICS
                   ? "bg-blue-600 text-white"
                   : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
@@ -509,7 +509,7 @@ export function RequestForm({ items, unitTemplates, userAssignments, pendingDecl
             <button
               type="button"
               onClick={() => setSelectedDivision(Division.COMBAT)}
-              className={`flex-1 h-10 px-4 rounded-xl text-xs font-bold transition-all ${
+              className={`h-11 px-3 rounded-xl text-xs font-bold transition-all ${
                 selectedDivision === Division.COMBAT
                   ? "bg-red-600 text-white"
                   : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
@@ -520,7 +520,7 @@ export function RequestForm({ items, unitTemplates, userAssignments, pendingDecl
             <button
               type="button"
               onClick={() => setSelectedDivision(Division.MEDICAL)}
-              className={`flex-1 h-10 px-4 rounded-xl text-xs font-bold transition-all ${
+              className={`h-11 px-3 rounded-xl text-xs font-bold transition-all ${
                 selectedDivision === Division.MEDICAL
                   ? "bg-emerald-600 text-white"
                   : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
@@ -717,12 +717,12 @@ export function RequestForm({ items, unitTemplates, userAssignments, pendingDecl
             {selectedItems.map((item) => (
               <div
                 key={item.id}
-                className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900 p-3 transition-all hover:border-zinc-700"
+                className="flex flex-wrap items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900 p-3 transition-all hover:border-zinc-700"
               >
                 <button
                   type="button"
                   onClick={() => handleRemoveItem(item.id)}
-                  className="flex h-6 w-6 items-center justify-center rounded-full bg-red-900/30 text-red-400 hover:bg-red-900/50 hover:text-red-300 transition-all shrink-0"
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-red-900/30 text-red-400 hover:bg-red-900/50 hover:text-red-300 transition-all shrink-0"
                 >
                   <svg
                     width="12"
@@ -758,7 +758,7 @@ export function RequestForm({ items, unitTemplates, userAssignments, pendingDecl
                     <div className="text-xs text-zinc-500 mt-1">נעליים - נדרשת בחירת מידה</div>
                   )}
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
                   {item.isClothing && (
                     <select
                       value={item.clothingSize || ""}

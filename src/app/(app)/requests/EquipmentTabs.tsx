@@ -116,7 +116,7 @@ export function EquipmentTabs(props: EquipmentTabsProps) {
       </div>
 
       {/* Tab Content */}
-      <div className="rounded-3xl border border-zinc-800 bg-zinc-900 p-8 shadow-sm">
+      <div className="rounded-3xl border border-zinc-800 bg-zinc-900 p-4 sm:p-8 shadow-sm">
         {activeTab === "transfers" ? (
           <TransferForm
             currentUserId={props.currentUserId}

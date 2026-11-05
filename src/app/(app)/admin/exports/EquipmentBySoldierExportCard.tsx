@@ -57,9 +57,9 @@ export function EquipmentBySoldierExportCard() {
   const qs = matrix ? "?layout=matrix" : "";
 
   return (
-    <div className="rounded-3xl border border-zinc-800 bg-zinc-900 p-6 shadow-sm">
+    <div className="rounded-3xl border border-zinc-800 bg-zinc-900 p-4 sm:p-6 shadow-sm">
       <div className="flex flex-col gap-5">
-        <div>
+        <div className="min-w-0">
           <div className="text-lg font-bold text-zinc-50">ציוד (לפי חייל)</div>
           <p className="mt-2 text-sm text-zinc-400 leading-relaxed">
             מייצא את כל הציוד המוקצה למשתמשים פעילים. בחרו אם הקובץ יהיה{" "}
@@ -79,9 +79,9 @@ export function EquipmentBySoldierExportCard() {
             </span>
             <span className="text-xs text-zinc-500">רחפו כאן או על המתג לתיאור מלא</span>
           </div>
-          <div className="flex items-center gap-3" dir="rtl">
+          <div className="flex flex-wrap items-center gap-3" dir="rtl">
             <span
-              className={`text-sm whitespace-nowrap transition-colors ${!matrix ? "font-bold text-emerald-400" : "text-zinc-500"}`}
+              className={`text-sm sm:whitespace-nowrap transition-colors ${!matrix ? "font-bold text-emerald-400" : "text-zinc-500"}`}
             >
               גליון לכל חייל
             </span>
@@ -105,17 +105,17 @@ export function EquipmentBySoldierExportCard() {
               />
             </button>
             <span
-              className={`text-sm whitespace-nowrap transition-colors ${matrix ? "font-bold text-emerald-400" : "text-zinc-500"}`}
+              className={`text-sm sm:whitespace-nowrap transition-colors ${matrix ? "font-bold text-emerald-400" : "text-zinc-500"}`}
             >
               גליון אחד (מטריצה)
             </span>
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
           <a
             href={`/api/export/equipment-by-soldier/excel${qs}`}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 text-sm font-bold text-zinc-100 transition-all hover:bg-zinc-800 hover:scale-[1.02] active:scale-[0.98]"
+            className="inline-flex h-12 sm:h-11 items-center justify-center gap-1.5 sm:gap-2 rounded-2xl border border-zinc-800 bg-zinc-950 px-2 sm:px-4 text-sm font-bold text-zinc-100 transition-all hover:bg-zinc-800 hover:scale-[1.02] active:scale-[0.98]"
             title="Excel"
           >
             <IconExcel />
@@ -123,7 +123,7 @@ export function EquipmentBySoldierExportCard() {
           </a>
           <a
             href={`/api/export/equipment-by-soldier/sheets${qs}`}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 text-sm font-bold text-zinc-100 transition-all hover:bg-zinc-800 hover:scale-[1.02] active:scale-[0.98]"
+            className="inline-flex h-12 sm:h-11 items-center justify-center gap-1.5 sm:gap-2 rounded-2xl border border-zinc-800 bg-zinc-950 px-2 sm:px-4 text-sm font-bold text-zinc-100 transition-all hover:bg-zinc-800 hover:scale-[1.02] active:scale-[0.98]"
             title="Google Sheets"
           >
             <IconSheets />
@@ -131,7 +131,7 @@ export function EquipmentBySoldierExportCard() {
           </a>
           <a
             href={`/api/export/equipment-by-soldier/csv${qs}`}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 text-sm font-bold text-zinc-100 transition-all hover:bg-zinc-800 hover:scale-[1.02] active:scale-[0.98]"
+            className="inline-flex h-12 sm:h-11 items-center justify-center gap-1.5 sm:gap-2 rounded-2xl border border-zinc-800 bg-zinc-950 px-2 sm:px-4 text-sm font-bold text-zinc-100 transition-all hover:bg-zinc-800 hover:scale-[1.02] active:scale-[0.98]"
             title="CSV"
           >
             <IconCsv />

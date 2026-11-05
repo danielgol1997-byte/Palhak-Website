@@ -55,41 +55,61 @@ export default async function BoxesPage() {
 
   const totalTemplateQuantity = boxTemplate.items.reduce((s, i) => s + i.quantity, 0);
 
-  const boxes = await prisma.box.findMany({
-    select: {
-      id: true,
-      userId: true,
-      createdAt: true,
-      user: {
-        select: {
-          id: true,
-          name: true,
-          personalNumber: true,
-          active: true,
-          userDepartments: {
-            select: { department: { select: { name: true } } },
+  const YAMAH_NAME = "ימ״ח";
+  const [boxes, allActiveUsers, storageRows] = await Promise.all([
+    prisma.box.findMany({
+      select: {
+        id: true,
+        userId: true,
+        createdAt: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            personalNumber: true,
+            active: true,
+            userDepartments: {
+              select: { department: { select: { name: true } } },
+            },
           },
         },
-      },
-      items: {
-        select: {
-          id: true,
-          equipmentItemId: true,
-          quantity: true,
-          serialNumber: true,
-          movedAt: true,
-          equipmentItem: {
-            select: {
-              id: true,
-              name: true,
-              category: { select: { division: true, name: true } },
+        items: {
+          select: {
+            id: true,
+            equipmentItemId: true,
+            quantity: true,
+            serialNumber: true,
+            movedAt: true,
+            equipmentItem: {
+              select: {
+                id: true,
+                name: true,
+                category: { select: { division: true, name: true } },
+              },
             },
           },
         },
       },
-    },
-    orderBy: { user: { name: "asc" } },
-  });
+      orderBy: { user: { name: "asc" } },
+    }),
+    prisma.user.findMany({
+      where: { active: true },
+      select: {
+        id: true,
+        name: true,
+        personalNumber: true,
+        userDepartments: { select: { department: { select: { name: true } } }, take: 1 },
+      },
+      orderBy: { name: "asc" },
+    }),
+    prisma.storageInventory.findMany({
+      where: { location: { name: YAMAH_NAME } },
+      select: { equipmentItemId: true, quantity: true },
+    }),
+  ]);
+  const storageMap: Record<string, number> = Object.fromEntries(
+    storageRows.map((r) => [r.equipmentItemId, r.quantity]),
+  );
 
   const userIds = boxes.map((b) => b.userId);
   const assignments = await prisma.assignment.findMany({
@@ -102,28 +122,6 @@ export default async function BoxesPage() {
       serialNumber: true,
     },
   });
-
-  const allActiveUsers = await prisma.user.findMany({
-    where: { active: true },
-    select: {
-      id: true,
-      name: true,
-      personalNumber: true,
-      userDepartments: { select: { department: { select: { name: true } } }, take: 1 },
-    },
-    orderBy: { name: "asc" },
-  });
-
-  const YAMAH_NAME = "ימ״ח";
-  const yamah = await prisma.storageLocation.findUnique({ where: { name: YAMAH_NAME } });
-  let storageMap: Record<string, number> = {};
-  if (yamah) {
-    const storageRows = await prisma.storageInventory.findMany({
-      where: { locationId: yamah.id },
-      select: { equipmentItemId: true, quantity: true },
-    });
-    storageMap = Object.fromEntries(storageRows.map((r) => [r.equipmentItemId, r.quantity]));
-  }
 
   const assignmentsByUser: Record<string, typeof assignments> = {};
   for (const a of assignments) {

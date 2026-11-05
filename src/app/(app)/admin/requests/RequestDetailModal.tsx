@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { RequestType, RequestStatus, Priority, Division } from "@prisma/client";
-import { requestTypeLabel, requestStatusLabel, priorityLabel, divisionLabel, requestItemStatusLabel } from "@/lib/he";
+import { requestTypeLabel, priorityLabel, divisionLabel, requestItemStatusLabel } from "@/lib/he";
 import {
   updateRequestPriorityAction,
   markRequestViewedAction,
@@ -12,7 +12,7 @@ import {
 } from "./actions";
 import { useRouter } from "next/navigation";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
-import { ModalPortal } from "@/components/ui/ModalPortal";
+import { Sheet, SheetActions } from "@/components/ui/Sheet";
 
 interface Request {
   id: string;
@@ -97,6 +97,13 @@ export function RequestDetailModal({
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
   const [bulkFulfillDrafts, setBulkFulfillDrafts] = useState<Record<string, { quantity: number; serial: string }>>({});
   const [bulkPanel, setBulkPanel] = useState<null | "fulfill">(null);
+  const bulkPanelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (bulkPanel === "fulfill") {
+      bulkPanelRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+    }
+  }, [bulkPanel]);
 
   // Check request type for appropriate action labels
   const isDeclaration = request.type === RequestType.DAMAGED || request.type === RequestType.STOLEN || request.type === RequestType.MISSING;
@@ -392,48 +399,97 @@ export function RequestDetailModal({
     return request.items.reduce((sum, item) => sum + item.quantity, 0);
   };
 
-  const hasPendingItems = request.items.some((item) => item.status === "PENDING");
   const pendingItems = request.items.filter((item) => item.status === "PENDING");
   const selectedPendingCount = pendingItems.filter((i) => selectedItemIds.has(i.id)).length;
-  
-  const hasWeaponsOrSights = request.items.some((item) => 
-    (item.equipmentItem.isWeapon || item.equipmentItem.isSight) && item.status === "PENDING"
-  );
 
-  return (
-    <ModalPortal>
-    <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-2 sm:p-4">
-      <div
-        className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      <div className="relative w-full max-w-4xl rounded-2xl sm:rounded-3xl bg-zinc-900 p-4 sm:p-8 shadow-2xl overflow-hidden border border-zinc-800 animate-in fade-in zoom-in duration-200 max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
-        <div className="flex items-start justify-between mb-4 sm:mb-6">
-          <div className="flex-1 min-w-0 pr-2">
-            <h3 className="text-xl sm:text-2xl font-bold text-zinc-50 truncate">פרטי בקשה</h3>
-            <div className="mt-1 text-xs sm:text-sm text-zinc-400">
-              {requestTypeLabel(request.type)} · {request.items.length} פריטים
-            </div>
-          </div>
+  const showBulkBar = !isAdminEquipmentTransfer && pendingItems.length > 0;
+  const bulkDraftCount = Object.keys(bulkFulfillDrafts).length;
+
+  // Footer is contextual: bulk-fulfill confirm while that panel is open, otherwise the
+  // multi-select actions (when there is anything pending), otherwise just "close".
+  const footer =
+    bulkPanel === "fulfill" && bulkDraftCount > 0 ? (
+      <SheetActions>
+        <button
+          type="button"
+          onClick={submitBulkFulfill}
+          disabled={isProcessing}
+          className="h-12 w-full sm:w-auto px-5 rounded-xl bg-green-900/40 text-green-300 border border-green-800 text-sm font-bold disabled:opacity-50"
+        >
+          {isProcessing ? "מעבד…" : `אשר ${bulkDraftCount} פריטים`}
+        </button>
+        <button
+          type="button"
+          onClick={() => setBulkPanel(null)}
+          disabled={isProcessing}
+          className="h-12 w-full sm:w-auto px-5 rounded-xl border border-zinc-600 text-zinc-300 text-sm font-bold disabled:opacity-50"
+        >
+          סגור אישור מרובה
+        </button>
+      </SheetActions>
+    ) : showBulkBar ? (
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <span className="text-xs text-zinc-500">
+          נבחרו {selectedPendingCount}/{pendingItems.length} ממתינים
+        </span>
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
           <button
-            onClick={onClose}
-            className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-zinc-50 cursor-pointer flex-shrink-0"
+            type="button"
+            onClick={openBulkFulfillPanel}
+            disabled={isProcessing || selectedPendingCount === 0}
+            className="h-11 px-3 rounded-xl bg-green-900/30 text-green-400 border border-green-900/50 text-sm font-bold hover:bg-green-900/50 disabled:opacity-50"
           >
-            <svg
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
+            אשר נבחרים…
+          </button>
+          <button
+            type="button"
+            onClick={() => runBulkDenyOrCancel("DENY")}
+            disabled={isProcessing || selectedPendingCount === 0}
+            className="h-11 px-3 rounded-xl bg-red-900/30 text-red-400 border border-red-900/50 text-sm font-bold hover:bg-red-900/50 disabled:opacity-50"
+          >
+            דחה נבחרים
+          </button>
+          <button
+            type="button"
+            onClick={() => runBulkDenyOrCancel("CANCEL")}
+            disabled={isProcessing || selectedPendingCount === 0}
+            className="h-11 px-3 rounded-xl bg-zinc-800 text-zinc-400 border border-zinc-600 text-sm font-bold hover:bg-zinc-700 disabled:opacity-50"
+          >
+            בטל נבחרים
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-11 px-3 rounded-xl bg-zinc-800 text-zinc-300 text-sm font-bold hover:bg-zinc-700"
+          >
+            סגור
           </button>
         </div>
+      </div>
+    ) : (
+      <SheetActions>
+        <button
+          type="button"
+          onClick={onClose}
+          className="h-12 w-full sm:w-auto px-6 rounded-xl bg-zinc-800 text-zinc-300 text-sm font-bold hover:bg-zinc-700"
+        >
+          סגור
+        </button>
+      </SheetActions>
+    );
 
+  return (
+    <>
+    <Sheet
+      open
+      onClose={onClose}
+      title="פרטי בקשה"
+      subtitle={`${requestTypeLabel(request.type)} · ${request.items.length} פריטים`}
+      size="xl"
+      // While the quantity/serial sheet is stacked on top, Escape/backdrop must not also close this one.
+      dismissible={!quantityModal}
+      footer={footer}
+    >
         <div className="grid gap-4 sm:gap-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
@@ -541,7 +597,7 @@ export function RequestDetailModal({
                     type="button"
                     onClick={selectAllPendingItems}
                     disabled={isProcessing}
-                    className="px-2 py-1 rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+                    className="min-h-9 px-3 py-1 rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
                   >
                     בחר הכל הממתינים
                   </button>
@@ -549,42 +605,18 @@ export function RequestDetailModal({
                     type="button"
                     onClick={clearItemSelection}
                     disabled={isProcessing || selectedItemIds.size === 0}
-                    className="px-2 py-1 rounded-lg border border-zinc-700 text-zinc-400 hover:bg-zinc-800 disabled:opacity-50"
+                    className="min-h-9 px-3 py-1 rounded-lg border border-zinc-700 text-zinc-400 hover:bg-zinc-800 disabled:opacity-50"
                   >
                     נקה
-                  </button>
-                  <button
-                    type="button"
-                    onClick={openBulkFulfillPanel}
-                    disabled={isProcessing || selectedPendingCount === 0}
-                    className="px-2 py-1 rounded-lg bg-green-900/30 text-green-400 border border-green-900/50 hover:bg-green-900/50 disabled:opacity-50"
-                  >
-                    אשר נבחרים…
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => runBulkDenyOrCancel("DENY")}
-                    disabled={isProcessing || selectedPendingCount === 0}
-                    className="px-2 py-1 rounded-lg bg-red-900/30 text-red-400 border border-red-900/50 hover:bg-red-900/50 disabled:opacity-50"
-                  >
-                    דחה נבחרים
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => runBulkDenyOrCancel("CANCEL")}
-                    disabled={isProcessing || selectedPendingCount === 0}
-                    className="px-2 py-1 rounded-lg bg-zinc-800 text-zinc-400 border border-zinc-600 hover:bg-zinc-700 disabled:opacity-50"
-                  >
-                    בטל נבחרים
                   </button>
                 </div>
               )}
             </div>
 
             {bulkPanel === "fulfill" && Object.keys(bulkFulfillDrafts).length > 0 && (
-              <div className="mb-4 rounded-xl border border-green-900/40 bg-green-950/20 p-4 space-y-3">
+              <div ref={bulkPanelRef} className="mb-4 rounded-xl border border-green-900/40 bg-green-950/20 p-4 space-y-3 scroll-mt-2">
                 <div className="text-xs font-bold text-green-400 uppercase tracking-wider">
-                  אישור מרובה — כוונן כמות ומספר סידורי לפני שליחה
+                  אישור מרובה — כוונן כמות ומספר סידורי לפני שליחה (האישור בתחתית החלון)
                 </div>
                 <div className="space-y-3 max-h-48 overflow-y-auto">
                   {Object.entries(bulkFulfillDrafts).map(([itemId, draft]) => {
@@ -606,7 +638,7 @@ export function RequestDetailModal({
                               const v = Math.max(1, Math.min(item.quantity, parseInt(e.target.value, 10) || 1));
                               setBulkFulfillDrafts((prev) => ({ ...prev, [itemId]: { ...prev[itemId], quantity: v } }));
                             }}
-                            className="w-full h-9 rounded-lg border border-zinc-700 bg-zinc-950 px-2 text-sm text-zinc-100"
+                            className="w-full h-11 rounded-lg border border-zinc-700 bg-zinc-950 px-2 text-sm text-zinc-100"
                           />
                         </div>
                         {needsSerial ? (
@@ -621,7 +653,7 @@ export function RequestDetailModal({
                                   [itemId]: { ...prev[itemId], serial: e.target.value },
                                 }))
                               }
-                              className="w-full h-9 rounded-lg border border-zinc-700 bg-zinc-950 px-2 text-sm text-zinc-100 font-mono"
+                              className="w-full h-11 rounded-lg border border-zinc-700 bg-zinc-950 px-2 text-sm text-zinc-100 font-mono"
                             />
                           </div>
                         ) : (
@@ -630,24 +662,6 @@ export function RequestDetailModal({
                       </div>
                     );
                   })}
-                </div>
-                <div className="flex flex-wrap gap-2 justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setBulkPanel(null)}
-                    disabled={isProcessing}
-                    className="px-3 py-2 rounded-lg border border-zinc-600 text-zinc-300 text-sm"
-                  >
-                    סגור
-                  </button>
-                  <button
-                    type="button"
-                    onClick={submitBulkFulfill}
-                    disabled={isProcessing}
-                    className="px-3 py-2 rounded-lg bg-green-900/40 text-green-300 border border-green-800 text-sm font-bold disabled:opacity-50"
-                  >
-                    {isProcessing ? "מעבד…" : `אשר ${Object.keys(bulkFulfillDrafts).length} פריטים`}
-                  </button>
                 </div>
               </div>
             )}
@@ -756,12 +770,12 @@ export function RequestDetailModal({
                       </td>
                       <td className="px-4 py-3">
                         {!isAdminEquipmentTransfer ? (
-                          <div className="flex gap-1 justify-center">
+                          <div className="flex flex-wrap gap-1 justify-center">
                             {item.status !== "FULFILLED" && (
                               <button
                                 onClick={() => handleItemAction(item.id, "FULFILL")}
                                 disabled={isProcessing}
-                                className={`px-2 py-1 rounded-md text-xs font-bold border transition-all cursor-pointer disabled:opacity-50 ${
+                                className={`inline-flex h-10 min-w-10 items-center justify-center px-3 rounded-lg text-sm font-bold border transition-all cursor-pointer disabled:opacity-50 ${
                                   item.status === "FULFILLED"
                                     ? "bg-green-900/40 text-green-300 border-green-900/60"
                                     : "bg-green-900/20 text-green-400 border-green-900/40 hover:bg-green-900/40"
@@ -775,7 +789,7 @@ export function RequestDetailModal({
                               <button
                                 onClick={() => handleItemAction(item.id, "DENY")}
                                 disabled={isProcessing}
-                                className={`px-2 py-1 rounded-md text-xs font-bold border transition-all cursor-pointer disabled:opacity-50 ${
+                                className={`inline-flex h-10 min-w-10 items-center justify-center px-3 rounded-lg text-sm font-bold border transition-all cursor-pointer disabled:opacity-50 ${
                                   item.status === "DENIED"
                                     ? "bg-red-900/40 text-red-300 border-red-900/60"
                                     : "bg-red-900/20 text-red-400 border-red-900/40 hover:bg-red-900/40"
@@ -789,7 +803,7 @@ export function RequestDetailModal({
                               <button
                                 onClick={() => handleItemAction(item.id, "CANCEL")}
                                 disabled={isProcessing}
-                                className={`px-2 py-1 rounded-md text-xs font-bold border transition-all cursor-pointer disabled:opacity-50 ${
+                                className={`inline-flex h-10 min-w-10 items-center justify-center px-3 rounded-lg text-sm font-bold border transition-all cursor-pointer disabled:opacity-50 ${
                                   item.status === "CANCELLED"
                                     ? "bg-zinc-700 text-zinc-400 border-zinc-600"
                                     : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:bg-zinc-700"
@@ -803,7 +817,7 @@ export function RequestDetailModal({
                               <button
                                 onClick={() => handleItemAction(item.id, "RESET")}
                                 disabled={isProcessing}
-                                className="px-2 py-1 rounded-md text-xs font-bold bg-blue-900/20 text-blue-400 border border-blue-900/40 hover:bg-blue-900/40 transition-all cursor-pointer disabled:opacity-50"
+                                className="inline-flex h-10 min-w-10 items-center justify-center px-3 rounded-lg text-sm font-bold bg-blue-900/20 text-blue-400 border border-blue-900/40 hover:bg-blue-900/40 transition-all cursor-pointer disabled:opacity-50"
                                 title="איפוס לממתין"
                               >
                                 ↺
@@ -909,7 +923,7 @@ export function RequestDetailModal({
                         <button
                           onClick={() => handleItemAction(item.id, "FULFILL")}
                           disabled={isProcessing}
-                          className={`flex-1 min-w-[80px] px-3 py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer disabled:opacity-50 ${
+                          className={`flex-1 min-w-[80px] inline-flex h-10 items-center justify-center px-3 rounded-lg text-xs font-bold border transition-all cursor-pointer disabled:opacity-50 ${
                             item.status === "FULFILLED"
                               ? "bg-green-900/40 text-green-300 border-green-900/60"
                               : "bg-green-900/20 text-green-400 border-green-900/40 hover:bg-green-900/40"
@@ -922,7 +936,7 @@ export function RequestDetailModal({
                         <button
                           onClick={() => handleItemAction(item.id, "DENY")}
                           disabled={isProcessing}
-                          className={`flex-1 min-w-[80px] px-3 py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer disabled:opacity-50 ${
+                          className={`flex-1 min-w-[80px] inline-flex h-10 items-center justify-center px-3 rounded-lg text-xs font-bold border transition-all cursor-pointer disabled:opacity-50 ${
                             item.status === "DENIED"
                               ? "bg-red-900/40 text-red-300 border-red-900/60"
                               : "bg-red-900/20 text-red-400 border-red-900/40 hover:bg-red-900/40"
@@ -935,7 +949,7 @@ export function RequestDetailModal({
                         <button
                           onClick={() => handleItemAction(item.id, "CANCEL")}
                           disabled={isProcessing}
-                          className={`px-3 py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer disabled:opacity-50 ${
+                          className={`inline-flex h-10 items-center justify-center px-3 rounded-lg text-xs font-bold border transition-all cursor-pointer disabled:opacity-50 ${
                             item.status === "CANCELLED"
                               ? "bg-zinc-700 text-zinc-400 border-zinc-600"
                               : "bg-zinc-800 text-zinc-400 border-zinc-700 hover:bg-zinc-700"
@@ -948,7 +962,7 @@ export function RequestDetailModal({
                         <button
                           onClick={() => handleItemAction(item.id, "RESET")}
                           disabled={isProcessing}
-                          className="px-3 py-2 rounded-lg text-xs font-bold bg-blue-900/20 text-blue-400 border border-blue-900/40 hover:bg-blue-900/40 transition-all cursor-pointer disabled:opacity-50"
+                          className="inline-flex h-10 items-center justify-center px-3 rounded-lg text-xs font-bold bg-blue-900/20 text-blue-400 border border-blue-900/40 hover:bg-blue-900/40 transition-all cursor-pointer disabled:opacity-50"
                         >
                           ↺
                         </button>
@@ -996,7 +1010,7 @@ export function RequestDetailModal({
                   key={priority}
                   onClick={() => handlePriorityChange(priority)}
                   disabled={isProcessing}
-                  className={`px-3 py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                  className={`inline-flex h-10 items-center justify-center px-3 rounded-lg text-xs font-bold border transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
                     selectedPriority === priority
                       ? getPriorityColor(priority)
                       : "bg-zinc-800 text-zinc-500 border-zinc-700 hover:bg-zinc-700"
@@ -1058,29 +1072,44 @@ export function RequestDetailModal({
             </div>
           )}
         </div>
-      </div>
+    </Sheet>
 
-      {/* Quantity Modal */}
+      {/* Quantity / serial confirm — its own sheet stacked above the detail sheet */}
       {quantityModal && (
-        <div className="absolute inset-0 flex items-center justify-center z-50 p-4">
-          <div
-            className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm"
-            onClick={() => setQuantityModal(null)}
-          />
-          <div className="relative w-full max-w-md rounded-2xl sm:rounded-3xl bg-zinc-900 p-4 sm:p-8 shadow-2xl border border-zinc-800 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
-            <div className="mb-6">
-              <h3 className="text-2xl font-bold text-zinc-50 mb-2">
-                {quantityModal.requiresSerialNumber 
-                  ? getApproveLabel()
-                  : `כמות ל${isDeclaration ? "אישור" : isReturn ? "אישור" : "אישור"}`
-                }
-              </h3>
-              <p className="text-sm text-zinc-400">
-                {quantityModal.itemName}
-              </p>
-            </div>
-
-            <div className="mb-6 space-y-4">
+        <Sheet
+          open
+          onClose={() => setQuantityModal(null)}
+          size="sm"
+          zIndex={210}
+          dismissible={!isProcessing}
+          title={
+            quantityModal.requiresSerialNumber
+              ? getApproveLabel()
+              : `כמות ל${isDeclaration ? "אישור" : isReturn ? "אישור" : "אישור"}`
+          }
+          subtitle={quantityModal.itemName}
+          footer={
+            <SheetActions>
+              <button
+                type="button"
+                onClick={handleConfirmQuantity}
+                disabled={isProcessing}
+                className="h-12 w-full sm:w-auto px-6 rounded-xl bg-green-900/20 text-green-400 font-bold border border-green-900/40 hover:bg-green-900/40 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isProcessing ? <LoadingSpinner size="sm" /> : getApproveLabel()}
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuantityModal(null)}
+                disabled={isProcessing}
+                className="h-12 w-full sm:w-auto px-6 rounded-xl bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 font-bold transition-all cursor-pointer disabled:opacity-50"
+              >
+                ביטול
+              </button>
+            </SheetActions>
+          }
+        >
+            <div className="space-y-4">
               {quantityModal.requestedQuantity > 1 && (
                 <div>
                   <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-3">
@@ -1156,26 +1185,8 @@ export function RequestDetailModal({
                 </div>
               )}
             </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => setQuantityModal(null)}
-                className="h-12 rounded-xl bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 font-bold transition-all cursor-pointer"
-              >
-                ביטול
-              </button>
-              <button
-                onClick={handleConfirmQuantity}
-                disabled={isProcessing}
-                className="h-12 rounded-xl bg-green-900/20 text-green-400 font-bold border border-green-900/40 hover:bg-green-900/40 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {isProcessing ? <LoadingSpinner size="sm" /> : getApproveLabel()}
-              </button>
-            </div>
-          </div>
-        </div>
+        </Sheet>
       )}
-    </div>
-    </ModalPortal>
+    </>
   );
 }

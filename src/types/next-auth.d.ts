@@ -18,6 +18,8 @@ declare module "next-auth/jwt" {
     role?: Role;
     active?: boolean;
     onboardedAt?: string | null;
+    /** Epoch ms of the last DB refresh of role/active/onboardedAt. */
+    roleCheckedAt?: number;
   }
 }
 

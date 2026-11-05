@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { getResolvedPreset } from "@/lib/theme";
 
 type Particle = {
@@ -14,7 +14,35 @@ type Particle = {
   opacity: number;
 };
 
+/** Fewer animated DOM nodes on phones and when the user prefers reduced motion. */
+function budget(count: number): number {
+  if (typeof window === "undefined") return count;
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return 0;
+  const narrow = window.matchMedia("(max-width: 767px)").matches;
+  const lowEnd = (navigator as Navigator & { hardwareConcurrency?: number }).hardwareConcurrency
+    ? (navigator.hardwareConcurrency ?? 8) <= 4
+    : false;
+  if (narrow || lowEnd) return Math.round(count * 0.35);
+  return count;
+}
+
+/** Particles are random, so they must be generated on the client only (after hydration). */
+function useClientOnly(): boolean {
+  return useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
+}
+
+function useParticles<T>(factory: () => T[], deps: unknown[] = []): T[] {
+  const mounted = useClientOnly();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useMemo(() => (mounted ? factory() : []), [mounted, ...deps]);
+}
+
 function generateParticles(count: number): Particle[] {
+  count = budget(count);
   return Array.from({ length: count }, (_, i) => ({
     id: i,
     x: Math.random() * 100,
@@ -28,10 +56,7 @@ function generateParticles(count: number): Particle[] {
 }
 
 function StarsEffect({ accent }: { accent: string }) {
-  const [stars, setStars] = useState<Particle[]>([]);
-  useEffect(() => {
-    setStars(generateParticles(160));
-  }, []);
+  const stars = useParticles(() => generateParticles(160));
   if (!stars.length) return null;
   return (
     <div className="fixed inset-0 overflow-hidden pointer-events-none">
@@ -55,10 +80,7 @@ function StarsEffect({ accent }: { accent: string }) {
 }
 
 function SparklesEffect({ accent }: { accent: string }) {
-  const [particles, setParticles] = useState<Particle[]>([]);
-  useEffect(() => {
-    setParticles(generateParticles(80));
-  }, []);
+  const particles = useParticles(() => generateParticles(80));
   if (!particles.length) return null;
   return (
     <div className="fixed inset-0 overflow-hidden pointer-events-none">
@@ -115,10 +137,7 @@ function AuroraEffect({ accent }: { accent: string }) {
 }
 
 function BubblesEffect({ accent }: { accent: string }) {
-  const [bubbles, setBubbles] = useState<Particle[]>([]);
-  useEffect(() => {
-    setBubbles(generateParticles(50));
-  }, []);
+  const bubbles = useParticles(() => generateParticles(50));
   if (!bubbles.length) return null;
   return (
     <div className="fixed inset-0 overflow-hidden pointer-events-none">
@@ -142,12 +161,8 @@ function BubblesEffect({ accent }: { accent: string }) {
 }
 
 function FirefliesEffect({ accent }: { accent: string }) {
-  const [flies, setFlies] = useState<
-    (Particle & { dx1: number; dy1: number; dx2: number; dy2: number; dx3: number; dy3: number })[]
-  >([]);
-  useEffect(() => {
-    setFlies(
-      Array.from({ length: 45 }, (_, i) => ({
+  const flies = useParticles(() =>
+      Array.from({ length: budget(45) }, (_, i) => ({
         id: i,
         x: Math.random() * 100,
         y: Math.random() * 100,
@@ -163,8 +178,7 @@ function FirefliesEffect({ accent }: { accent: string }) {
         dx3: (Math.random() - 0.5) * 70,
         dy3: (Math.random() - 0.5) * 70,
       }))
-    );
-  }, []);
+  );
   if (!flies.length) return null;
   return (
     <div className="fixed inset-0 overflow-hidden pointer-events-none">
@@ -194,22 +208,17 @@ function FirefliesEffect({ accent }: { accent: string }) {
 }
 
 function HeartsEffect({ accent }: { accent: string }) {
-  const [items, setItems] = useState<
-    { id: number; x: number; delay: number; dur: number; emoji: string; drift: number }[]
-  >([]);
-  useEffect(() => {
+  const items = useParticles(() => {
     const em = ["💕", "💖", "💗", "💝", "🩷", "💓", "✨", "🌸"];
-    setItems(
-      Array.from({ length: 42 }, (_, i) => ({
+    return Array.from({ length: budget(42) }, (_, i) => ({
         id: i,
         x: Math.random() * 100,
         delay: Math.random() * 12,
         dur: 7 + Math.random() * 9,
         emoji: em[Math.floor(Math.random() * em.length)]!,
         drift: (Math.random() - 0.5) * 100,
-      }))
-    );
-  }, []);
+      }));
+  });
   if (!items.length) return null;
   return (
     <div className="fixed inset-0 overflow-hidden pointer-events-none">
@@ -233,12 +242,8 @@ function HeartsEffect({ accent }: { accent: string }) {
 }
 
 function PetalsEffect({ accent }: { accent: string }) {
-  const [petals, setPetals] = useState<
-    { id: number; x: number; delay: number; dur: number; rot: number; w: number }[]
-  >([]);
-  useEffect(() => {
-    setPetals(
-      Array.from({ length: 55 }, (_, i) => ({
+  const petals = useParticles(() =>
+      Array.from({ length: budget(55) }, (_, i) => ({
         id: i,
         x: Math.random() * 100,
         delay: Math.random() * 15,
@@ -246,8 +251,7 @@ function PetalsEffect({ accent }: { accent: string }) {
         rot: Math.random() * 360,
         w: 8 + Math.random() * 14,
       }))
-    );
-  }, []);
+  );
   if (!petals.length) return null;
   return (
     <div className="fixed inset-0 overflow-hidden pointer-events-none">
@@ -271,13 +275,88 @@ function PetalsEffect({ accent }: { accent: string }) {
   );
 }
 
+function SnowEffect() {
+  const flakes = useParticles(() =>
+      Array.from({ length: budget(70) }, (_, i) => ({
+        id: i,
+        x: Math.random() * 100,
+        delay: Math.random() * 12,
+        dur: 9 + Math.random() * 10,
+        size: 2 + Math.random() * 4,
+        drift: (Math.random() - 0.5) * 90,
+        op: 0.5 + Math.random() * 0.5,
+      }))
+  );
+  if (!flakes.length) return null;
+  return (
+    <div className="fixed inset-0 overflow-hidden pointer-events-none">
+      {flakes.map((f) => (
+        <div
+          key={f.id}
+          className="absolute rounded-full bg-white"
+          style={{
+            left: `${f.x}%`,
+            top: "-4%",
+            width: `${f.size}px`,
+            height: `${f.size}px`,
+            opacity: f.op,
+            boxShadow: "0 0 6px rgba(255,255,255,0.8)",
+            animation: `yuval-snow-fall ${f.dur}s ${f.delay}s linear infinite`,
+            ["--snow-drift" as string]: `${f.drift}px`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ConfettiEffect({ accent }: { accent: string }) {
+  const bits = useParticles(() => {
+    const palette = [accent, "#f472b6", "#38bdf8", "#fbbf24", "#34d399", "#a78bfa", "#ffffff"];
+    return Array.from({ length: budget(60) }, (_, i) => ({
+        id: i,
+        x: Math.random() * 100,
+        delay: Math.random() * 10,
+        dur: 7 + Math.random() * 8,
+        w: 6 + Math.random() * 6,
+        h: 8 + Math.random() * 8,
+        color: palette[i % palette.length]!,
+        rot: 360 + Math.random() * 720,
+      }));
+  }, [accent]);
+  if (!bits.length) return null;
+  return (
+    <div className="fixed inset-0 overflow-hidden pointer-events-none">
+      {bits.map((b) => (
+        <div
+          key={b.id}
+          className="absolute rounded-sm"
+          style={{
+            left: `${b.x}%`,
+            top: "-6%",
+            width: `${b.w}px`,
+            height: `${b.h}px`,
+            background: b.color,
+            opacity: 0.9,
+            animation: `yuval-confetti-fall ${b.dur}s ${b.delay}s linear infinite`,
+            ["--confetti-rot" as string]: `${b.rot}deg`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 function MatrixEffect() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    const frameGap = window.matchMedia("(max-width: 767px)").matches ? 2 : 1;
+    let frame = 0;
 
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
@@ -288,6 +367,10 @@ function MatrixEffect() {
 
     let raf: number;
     function draw() {
+      if (++frame % frameGap !== 0) {
+        raf = requestAnimationFrame(draw);
+        return;
+      }
       ctx!.fillStyle = "rgba(2,13,0,0.05)";
       ctx!.fillRect(0, 0, canvas!.width, canvas!.height);
       ctx!.fillStyle = "#a3e635";
@@ -327,18 +410,20 @@ function MatrixEffect() {
 export function ThemeEffects({
   initialEffect,
   initialPreset,
+  initialTuning,
 }: {
   initialEffect: string;
   initialPreset: string;
+  initialTuning?: unknown;
 }) {
   const [effect, setEffect] = useState(initialEffect);
-  const [accentColor, setAccentColor] = useState(getResolvedPreset(initialPreset).accent);
+  const [accentColor, setAccentColor] = useState(getResolvedPreset(initialPreset, initialTuning).accent);
 
   useEffect(() => {
     const handler = (e: Event) => {
-      const ce = e as CustomEvent<{ effect: string; preset: string }>;
+      const ce = e as CustomEvent<{ effect: string; preset: string; tuning?: unknown }>;
       setEffect(ce.detail.effect);
-      setAccentColor(getResolvedPreset(ce.detail.preset).accent);
+      setAccentColor(getResolvedPreset(ce.detail.preset, ce.detail.tuning).accent);
     };
     window.addEventListener("yuval-theme-change", handler);
     return () => window.removeEventListener("yuval-theme-change", handler);
@@ -347,7 +432,7 @@ export function ThemeEffects({
   if (effect === "none") return null;
 
   return (
-    <>
+    <div className="theme-effects-layer" aria-hidden="true">
       {effect === "stars" && <StarsEffect accent={accentColor} />}
       {effect === "sparkles" && <SparklesEffect accent={accentColor} />}
       {effect === "hearts" && <HeartsEffect accent={accentColor} />}
@@ -356,6 +441,8 @@ export function ThemeEffects({
       {effect === "bubbles" && <BubblesEffect accent={accentColor} />}
       {effect === "fireflies" && <FirefliesEffect accent={accentColor} />}
       {effect === "matrix" && <MatrixEffect />}
-    </>
+      {effect === "snow" && <SnowEffect />}
+      {effect === "confetti" && <ConfettiEffect accent={accentColor} />}
+    </div>
   );
 }

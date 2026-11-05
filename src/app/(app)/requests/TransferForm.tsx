@@ -6,7 +6,7 @@ import { divisionLabel } from "@/lib/he";
 import { createRequestAction } from "./actions";
 import { LoadingOverlay } from "@/components/ui/LoadingSpinner";
 import { SuccessModal } from "@/components/ui/SuccessModal";
-import { ModalPortal } from "@/components/ui/ModalPortal";
+import { Sheet, SheetActions } from "@/components/ui/Sheet";
 
 interface Item {
   id: string;
@@ -361,7 +361,7 @@ export function TransferForm({ currentUserId, userAssignments, availableUnits, a
       {/* Recipient Selection */}
       <div 
         ref={recipientRef}
-        className={`rounded-2xl border p-6 shadow-sm transition-all duration-300 ${
+        className={`rounded-2xl border p-4 sm:p-6 shadow-sm transition-all duration-300 ${
           recipientError 
             ? "border-red-500 bg-red-900/10 animate-pulse" 
             : "border-zinc-800 bg-zinc-900"
@@ -402,17 +402,17 @@ export function TransferForm({ currentUserId, userAssignments, availableUnits, a
       </div>
 
       {/* Equipment Selection */}
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-sm">
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 sm:p-6 shadow-sm">
         <p className="text-sm text-zinc-400 mb-4">בחר פריטים להעברה</p>
 
         {/* Division Filters */}
         <div className="mb-4">
           <label className="text-sm font-bold text-zinc-400 mb-2 block">סינון לפי חטיבה</label>
-          <div className="flex gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <button
               type="button"
               onClick={() => setSelectedDivision("ALL")}
-              className={`flex-1 h-10 px-4 rounded-xl text-xs font-bold transition-all ${
+              className={`h-11 px-3 rounded-xl text-xs font-bold transition-all ${
                 selectedDivision === "ALL"
                   ? "bg-zinc-50 text-zinc-950"
                   : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
@@ -423,7 +423,7 @@ export function TransferForm({ currentUserId, userAssignments, availableUnits, a
             <button
               type="button"
               onClick={() => setSelectedDivision(Division.LOGISTICS)}
-              className={`flex-1 h-10 px-4 rounded-xl text-xs font-bold transition-all ${
+              className={`h-11 px-3 rounded-xl text-xs font-bold transition-all ${
                 selectedDivision === Division.LOGISTICS
                   ? "bg-blue-600 text-white"
                   : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
@@ -434,7 +434,7 @@ export function TransferForm({ currentUserId, userAssignments, availableUnits, a
             <button
               type="button"
               onClick={() => setSelectedDivision(Division.COMBAT)}
-              className={`flex-1 h-10 px-4 rounded-xl text-xs font-bold transition-all ${
+              className={`h-11 px-3 rounded-xl text-xs font-bold transition-all ${
                 selectedDivision === Division.COMBAT
                   ? "bg-red-600 text-white"
                   : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
@@ -445,7 +445,7 @@ export function TransferForm({ currentUserId, userAssignments, availableUnits, a
             <button
               type="button"
               onClick={() => setSelectedDivision(Division.MEDICAL)}
-              className={`flex-1 h-10 px-4 rounded-xl text-xs font-bold transition-all ${
+              className={`h-11 px-3 rounded-xl text-xs font-bold transition-all ${
                 selectedDivision === Division.MEDICAL
                   ? "bg-emerald-600 text-white"
                   : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
@@ -582,7 +582,7 @@ export function TransferForm({ currentUserId, userAssignments, availableUnits, a
 
       {/* Selected Items */}
       {selectedItems.length > 0 && (
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-sm">
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 sm:p-6 shadow-sm">
           <label className="text-sm font-bold text-zinc-400 mb-4 block">
             פריטים נבחרים להעברה ({selectedItems.length})
           </label>
@@ -649,7 +649,7 @@ export function TransferForm({ currentUserId, userAssignments, availableUnits, a
       )}
 
       {/* User Notes */}
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-sm">
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 sm:p-6 shadow-sm">
         <label className="text-sm font-bold text-zinc-400 mb-2 block">הערות (אופציונלי)</label>
         <textarea
           value={userNotes}
@@ -671,19 +671,25 @@ export function TransferForm({ currentUserId, userAssignments, availableUnits, a
 
       {/* Quantity Prompt Modal */}
       {quantityPrompt && (
-        <ModalPortal>
-        <div className="fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto overscroll-contain p-4" onClick={() => setQuantityPrompt(null)}>
-          <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm" />
-          <div 
-            className="relative rounded-3xl bg-zinc-900 p-8 shadow-2xl border border-zinc-800 w-full max-w-md animate-in fade-in zoom-in duration-200"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-2xl font-bold text-zinc-50 mb-4">כמה יחידות להעביר?</h3>
-            <p className="text-zinc-400 mb-6">
-              {quantityPrompt.item.name} - יש לך {quantityPrompt.maxQuantity} יחידות זמינות
-            </p>
-            
-            <div className="grid grid-cols-5 gap-3 mb-6">
+        <Sheet
+          open
+          onClose={() => setQuantityPrompt(null)}
+          title="כמה יחידות להעביר?"
+          subtitle={`${quantityPrompt.item.name} - יש לך ${quantityPrompt.maxQuantity} יחידות זמינות`}
+          size="sm"
+          footer={
+            <SheetActions>
+              <button
+                type="button"
+                onClick={() => setQuantityPrompt(null)}
+                className="w-full sm:w-auto sm:px-8 h-12 rounded-xl border border-zinc-700 text-zinc-400 hover:bg-zinc-800 transition-all"
+              >
+                ביטול
+              </button>
+            </SheetActions>
+          }
+        >
+            <div className="grid grid-cols-4 gap-3 sm:grid-cols-5">
               {Array.from({ length: Math.min(quantityPrompt.maxQuantity, 10) }, (_, i) => i + 1).map(num => (
                 <button
                   key={num}
@@ -696,7 +702,7 @@ export function TransferForm({ currentUserId, userAssignments, availableUnits, a
             </div>
             
             {quantityPrompt.maxQuantity > 10 && (
-              <div className="mb-6">
+              <div className="mt-6">
                 <label className="text-sm font-bold text-zinc-400 mb-2 block">או הזן כמות מותאמת אישית:</label>
                 <input
                   type="number"
@@ -715,16 +721,7 @@ export function TransferForm({ currentUserId, userAssignments, availableUnits, a
                 />
               </div>
             )}
-            
-            <button
-              onClick={() => setQuantityPrompt(null)}
-              className="w-full h-12 rounded-xl border border-zinc-700 text-zinc-400 hover:bg-zinc-800 transition-all"
-            >
-              ביטול
-            </button>
-          </div>
-        </div>
-        </ModalPortal>
+        </Sheet>
       )}
 
       {/* Success Modal */}

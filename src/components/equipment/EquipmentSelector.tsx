@@ -195,11 +195,11 @@ export function EquipmentSelector({
       {/* Division Filters */}
       <div>
         <label className="text-sm font-bold text-zinc-400 mb-2 block">סינון לפי חטיבה</label>
-        <div className="flex gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <button
             type="button"
             onClick={() => setSelectedDivision("ALL")}
-            className={`flex-1 h-10 px-4 rounded-xl text-xs font-bold transition-all ${
+            className={`h-11 px-3 rounded-xl text-xs font-bold transition-all ${
               selectedDivision === "ALL"
                 ? "bg-zinc-50 text-zinc-950"
                 : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
@@ -210,7 +210,7 @@ export function EquipmentSelector({
           <button
             type="button"
             onClick={() => setSelectedDivision(Division.LOGISTICS)}
-            className={`flex-1 h-10 px-4 rounded-xl text-xs font-bold transition-all ${
+            className={`h-11 px-3 rounded-xl text-xs font-bold transition-all ${
               selectedDivision === Division.LOGISTICS
                 ? "bg-blue-600 text-white"
                 : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
@@ -221,7 +221,7 @@ export function EquipmentSelector({
           <button
             type="button"
             onClick={() => setSelectedDivision(Division.COMBAT)}
-            className={`flex-1 h-10 px-4 rounded-xl text-xs font-bold transition-all ${
+            className={`h-11 px-3 rounded-xl text-xs font-bold transition-all ${
               selectedDivision === Division.COMBAT
                 ? "bg-red-600 text-white"
                 : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
@@ -232,7 +232,7 @@ export function EquipmentSelector({
           <button
             type="button"
             onClick={() => setSelectedDivision(Division.MEDICAL)}
-            className={`flex-1 h-10 px-4 rounded-xl text-xs font-bold transition-all ${
+            className={`h-11 px-3 rounded-xl text-xs font-bold transition-all ${
               selectedDivision === Division.MEDICAL
                 ? "bg-emerald-600 text-white"
                 : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"

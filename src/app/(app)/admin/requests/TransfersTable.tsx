@@ -141,7 +141,7 @@ export function TransfersTable({
   };
 
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+    <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 sm:p-6">
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
@@ -185,7 +185,7 @@ export function TransfersTable({
                 onClick={() => handleSort("approvedBy")}
               >
                 <div className="flex items-center justify-end gap-1">
-                  אושר על ידי
+                  אושר ע״י
                   {sortField === "approvedBy" && (
                     <span className="text-zinc-400">{sortDirection === "asc" ? "↑" : "↓"}</span>
                   )}

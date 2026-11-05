@@ -17,6 +17,7 @@ import {
 } from "../actions";
 import { LocationCombobox } from "./LocationCombobox";
 import type { SavedLocation } from "./LocationCombobox";
+import { Sheet } from "@/components/ui/Sheet";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -109,20 +110,24 @@ function FormattedDate({ value }: { value: Date | string }) {
 
 // ─── Shared modal wrapper ─────────────────────────────────────────────────────
 
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+/** Thin wrapper over the responsive <Sheet> (portaled; bottom sheet on phones, centered modal on desktop). */
+function Modal({
+  title,
+  subtitle,
+  onClose,
+  children,
+  size = "sm",
+}: {
+  title: string;
+  subtitle?: React.ReactNode;
+  onClose: () => void;
+  children: React.ReactNode;
+  size?: "sm" | "md" | "lg";
+}) {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 shadow-2xl flex flex-col max-h-[90vh]">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
-          <h2 className="text-lg font-bold text-zinc-50">{title}</h2>
-          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-200 text-xl leading-none">✕</button>
-        </div>
-        <div className="overflow-y-auto flex-1">{children}</div>
-      </div>
-    </div>
+    <Sheet open onClose={onClose} title={title} subtitle={subtitle} size={size}>
+      {children}
+    </Sheet>
   );
 }
 
@@ -137,7 +142,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-const inputCls = "w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-500";
+const inputCls = "w-full min-h-11 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-500";
 
 // ─── Item form modal (add / edit) ─────────────────────────────────────────────
 
@@ -189,7 +194,7 @@ function ItemFormModal({
 
   return (
     <Modal title={mode === "add" ? "פריט חדש" : "עריכת פריט"} onClose={onClose}>
-      <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         {item && <input type="hidden" name="id" value={item.id} />}
         <Field label="שם *">
           <input className={inputCls} name="name" defaultValue={item?.name} required />
@@ -205,11 +210,11 @@ function ItemFormModal({
           <button
             type="submit"
             disabled={pending}
-            className="flex-1 rounded-lg bg-zinc-100 py-2 text-sm font-bold text-zinc-900 hover:bg-white disabled:opacity-50 transition-colors"
+            className="flex-1 rounded-lg bg-zinc-100 h-12 text-sm font-bold text-zinc-900 hover:bg-white disabled:opacity-50 transition-colors"
           >
             {pending ? "שומר..." : mode === "add" ? "הוסף" : "שמור"}
           </button>
-          <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-zinc-700 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors">
+          <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-zinc-700 h-12 text-sm text-zinc-400 hover:text-zinc-200 transition-colors">
             ביטול
           </button>
         </div>
@@ -242,7 +247,7 @@ function DeleteModal({ item, onClose, onSuccess }: { item: TashItemData; onClose
 
   return (
     <Modal title="מחיקת פריט" onClose={onClose}>
-      <div className="p-6 flex flex-col gap-4">
+      <div className="flex flex-col gap-4">
         <p className="text-sm text-zinc-300">
           <span className="font-bold text-zinc-50">{item.name}</span>
           {total > 0 ? (
@@ -256,11 +261,11 @@ function DeleteModal({ item, onClose, onSuccess }: { item: TashItemData; onClose
           <button
             onClick={handleDelete}
             disabled={pending}
-            className="flex-1 rounded-lg bg-red-600 py-2 text-sm font-bold text-white hover:bg-red-500 disabled:opacity-40 transition-colors"
+            className="flex-1 rounded-lg bg-red-600 h-12 text-sm font-bold text-white hover:bg-red-500 disabled:opacity-40 transition-colors"
           >
             {pending ? "מוחק..." : "מחק"}
           </button>
-          <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-zinc-700 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors">
+          <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-zinc-700 h-12 text-sm text-zinc-400 hover:text-zinc-200 transition-colors">
             ביטול
           </button>
         </div>
@@ -307,7 +312,7 @@ function AddQtyModal({
 
   return (
     <Modal title={`הוספת כמות · ${item.name}`} onClose={onClose}>
-      <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Field label="מיקום">
           <LocationCombobox
             name="location"
@@ -327,10 +332,10 @@ function AddQtyModal({
         </Field>
         {error && <p className="text-sm text-red-400">{error}</p>}
         <div className="flex gap-3 pt-2">
-          <button type="submit" disabled={pending} className="flex-1 rounded-lg bg-emerald-600 py-2 text-sm font-bold text-white hover:bg-emerald-500 disabled:opacity-50 transition-colors">
+          <button type="submit" disabled={pending} className="flex-1 rounded-lg bg-emerald-600 h-12 text-sm font-bold text-white hover:bg-emerald-500 disabled:opacity-50 transition-colors">
             {pending ? "שומר..." : "הוסף"}
           </button>
-          <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-zinc-700 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors">
+          <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-zinc-700 h-12 text-sm text-zinc-400 hover:text-zinc-200 transition-colors">
             ביטול
           </button>
         </div>
@@ -376,7 +381,7 @@ function DeductQtyModal({
 
   return (
     <Modal title={`הורדה · ${item.name}`} onClose={onClose}>
-      <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div className="rounded-lg border border-zinc-700 bg-zinc-800/50 px-4 py-3 text-sm text-zinc-200">
           {location} — עכשיו {currentQty} {item.unit}
         </div>
@@ -388,10 +393,10 @@ function DeductQtyModal({
         </Field>
         {error && <p className="text-sm text-red-400">{error}</p>}
         <div className="flex gap-3 pt-2">
-          <button type="submit" disabled={pending} className="flex-1 rounded-lg bg-yellow-600 py-2 text-sm font-bold text-white hover:bg-yellow-500 disabled:opacity-50 transition-colors">
+          <button type="submit" disabled={pending} className="flex-1 rounded-lg bg-yellow-600 h-12 text-sm font-bold text-white hover:bg-yellow-500 disabled:opacity-50 transition-colors">
             {pending ? "שומר..." : "הורד"}
           </button>
-          <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-zinc-700 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors">
+          <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-zinc-700 h-12 text-sm text-zinc-400 hover:text-zinc-200 transition-colors">
             ביטול
           </button>
         </div>
@@ -444,7 +449,7 @@ function SetQtyModal({
 
   return (
     <Modal title={`כמות · ${item.name}`} onClose={onClose}>
-      <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div className="text-sm text-zinc-400">{location}</div>
         <Field label={`כמות (${item.unit})`}>
           <input
@@ -464,11 +469,11 @@ function SetQtyModal({
           <button
             type="submit"
             disabled={pending}
-            className="flex-1 rounded-lg bg-zinc-100 py-2 text-sm font-bold text-zinc-900 hover:bg-white disabled:opacity-50 transition-colors"
+            className="flex-1 rounded-lg bg-zinc-100 h-12 text-sm font-bold text-zinc-900 hover:bg-white disabled:opacity-50 transition-colors"
           >
             {pending ? "שומר..." : "עדכן"}
           </button>
-          <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-zinc-700 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors">
+          <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-zinc-700 h-12 text-sm text-zinc-400 hover:text-zinc-200 transition-colors">
             ביטול
           </button>
         </div>
@@ -521,7 +526,7 @@ function MoveModal({
 
   return (
     <Modal title={`העברה · ${item.name}`} onClose={onClose}>
-      <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div className="text-sm text-zinc-300">
           מ־{fromLocation} · זמין {currentQty} {item.unit}
         </div>
@@ -542,7 +547,7 @@ function MoveModal({
               <button
                 type="button"
                 onClick={() => setToLocation(YAMAH)}
-                className="self-start rounded-lg border border-teal-700 bg-teal-900/30 px-3 py-1.5 text-xs font-bold text-teal-300 hover:bg-teal-900/50 transition-colors"
+                className="self-start min-h-10 rounded-lg border border-teal-700 bg-teal-900/30 px-3 py-1.5 text-xs font-bold text-teal-300 hover:bg-teal-900/50 transition-colors"
               >
                 לימ״ח
               </button>
@@ -562,13 +567,13 @@ function MoveModal({
           <button
             type="submit"
             disabled={pending || !toLocation.trim()}
-            className={`flex-1 rounded-lg py-2 text-sm font-bold text-white disabled:opacity-50 transition-colors ${
+            className={`flex-1 h-12 rounded-lg text-sm font-bold text-white disabled:opacity-50 transition-colors ${
               isReturn ? "bg-teal-600 hover:bg-teal-500" : "bg-blue-600 hover:bg-blue-500"
             }`}
           >
             {pending ? "מעביר..." : isReturn ? "החזר לימ״ח" : "העבר"}
           </button>
-          <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-zinc-700 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors">
+          <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-zinc-700 h-12 text-sm text-zinc-400 hover:text-zinc-200 transition-colors">
             ביטול
           </button>
         </div>
@@ -614,7 +619,7 @@ function MarkLossModal({
 
   return (
     <Modal title={`אובדן · ${item.name}`} onClose={onClose}>
-      <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div className="text-sm text-zinc-300">
           {location} · {currentQty} {item.unit}
         </div>
@@ -637,10 +642,10 @@ function MarkLossModal({
 
         {error && <p className="text-sm text-red-400">{error}</p>}
         <div className="flex gap-3 pt-2">
-          <button type="submit" disabled={pending} className="flex-1 rounded-lg bg-orange-600 py-2 text-sm font-bold text-white hover:bg-orange-500 disabled:opacity-50 transition-colors">
+          <button type="submit" disabled={pending} className="flex-1 rounded-lg bg-orange-600 h-12 text-sm font-bold text-white hover:bg-orange-500 disabled:opacity-50 transition-colors">
             {pending ? "שומר..." : "אשר"}
           </button>
-          <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-zinc-700 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors">
+          <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-zinc-700 h-12 text-sm text-zinc-400 hover:text-zinc-200 transition-colors">
             ביטול
           </button>
         </div>
@@ -719,25 +724,18 @@ function HistoryModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+    <Modal
+      title={`היסטוריה · ${item.name}`}
+      subtitle={
+        <>
+          {logs.length}
+          {locationFilter ? ` · ${locationFilter}` : ""}
+        </>
+      }
+      size="md"
+      onClose={onClose}
     >
-      <div className="w-full max-w-lg rounded-2xl border border-zinc-700 bg-zinc-900 shadow-2xl flex flex-col max-h-[85vh]">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 shrink-0">
-          <div>
-            <h2 className="text-lg font-bold text-zinc-50">היסטוריה · {item.name}</h2>
-            <p className="text-xs text-zinc-500 mt-0.5">
-              {logs.length}
-              {locationFilter ? ` · ${locationFilter}` : ""}
-            </p>
-          </div>
-          <button type="button" onClick={onClose} className="text-zinc-400 hover:text-zinc-200 text-xl leading-none">
-            ✕
-          </button>
-        </div>
-
-        <div className="overflow-y-auto flex-1 p-4">
+        <div>
           {error && <p className="text-sm text-red-400 mb-3">{error}</p>}
           {logs.length === 0 ? (
             <p className="text-center text-sm text-zinc-500 py-8">אין רשומות (בסינון הנוכחי)</p>
@@ -784,14 +782,14 @@ function HistoryModal({
                           type="button"
                           disabled={pending}
                           onClick={() => saveNotes(log.id)}
-                          className="rounded-lg bg-zinc-100 px-3 py-1.5 text-xs font-bold text-zinc-900 hover:bg-white disabled:opacity-50"
+                          className="min-h-10 rounded-lg bg-zinc-100 px-3 py-1.5 text-xs font-bold text-zinc-900 hover:bg-white disabled:opacity-50"
                         >
                           שמור הערה
                         </button>
                         <button
                           type="button"
                           onClick={() => setEditingId(null)}
-                          className="rounded-lg border border-zinc-600 px-3 py-1.5 text-xs text-zinc-400"
+                          className="min-h-10 rounded-lg border border-zinc-600 px-3 py-1.5 text-xs text-zinc-400"
                         >
                           ביטול
                         </button>
@@ -814,14 +812,14 @@ function HistoryModal({
                         <button
                           type="button"
                           onClick={() => startEdit(log)}
-                          className="rounded-md border border-zinc-600 px-2 py-0.5 text-xs text-zinc-300 hover:bg-zinc-800"
+                          className="min-h-9 rounded-md border border-zinc-600 px-3 py-1 text-xs text-zinc-300 hover:bg-zinc-800"
                         >
                           ערוך הערה
                         </button>
                         <button
                           type="button"
                           onClick={() => setDeleteId(log.id)}
-                          className="rounded-md border border-red-900/60 px-2 py-0.5 text-xs text-red-400 hover:bg-red-950/40"
+                          className="min-h-9 rounded-md border border-red-900/60 px-3 py-1 text-xs text-red-400 hover:bg-red-950/40"
                         >
                           מחק שורה
                         </button>
@@ -837,14 +835,14 @@ function HistoryModal({
                           type="button"
                           disabled={pending}
                           onClick={() => confirmDelete(log.id)}
-                          className="rounded-lg bg-red-600 px-3 py-1 text-xs font-bold text-white hover:bg-red-500 disabled:opacity-50"
+                          className="min-h-10 rounded-lg bg-red-600 px-3 py-1 text-xs font-bold text-white hover:bg-red-500 disabled:opacity-50"
                         >
                           {pending ? "מבצע..." : "אשר"}
                         </button>
                         <button
                           type="button"
                           onClick={() => setDeleteId(null)}
-                          className="rounded-lg border border-zinc-600 px-3 py-1 text-xs text-zinc-400"
+                          className="min-h-10 rounded-lg border border-zinc-600 px-3 py-1 text-xs text-zinc-400"
                         >
                           ביטול
                         </button>
@@ -856,8 +854,7 @@ function HistoryModal({
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -881,35 +878,37 @@ function LocationRow({
   const isYamah = inv.location === YAMAH;
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2.5 border-b border-zinc-800/60 last:border-0">
-      <div className="flex items-center gap-2 flex-1 min-w-0">
-        {isYamah ? (
-          <span className="inline-flex items-center gap-1 rounded-md bg-teal-900/30 border border-teal-800 px-2 py-0.5 text-xs font-semibold text-teal-300 shrink-0">
-            🏭 {YAMAH}
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1 rounded-md bg-zinc-800 border border-zinc-700 px-2 py-0.5 text-xs font-medium text-zinc-300 shrink-0 truncate max-w-[160px]">
-            📍 {inv.location}
-          </span>
-        )}
+    <div className="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:gap-3 sm:px-4 border-b border-zinc-800/60 last:border-0">
+      <div className="flex items-center justify-between gap-2 sm:flex-1 sm:min-w-0">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          {isYamah ? (
+            <span className="inline-flex items-center gap-1 rounded-md bg-teal-900/30 border border-teal-800 px-2 py-0.5 text-xs font-semibold text-teal-300 shrink-0">
+              🏭 {YAMAH}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-md bg-zinc-800 border border-zinc-700 px-2 py-0.5 text-xs font-medium text-zinc-300 shrink-0 truncate max-w-[160px]">
+              📍 {inv.location}
+            </span>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={onEditQty}
+          title="ערוך כמות"
+          className="min-h-10 text-sm font-semibold text-zinc-100 shrink-0 tabular-nums rounded-md px-2.5 py-1 hover:bg-zinc-800 transition-colors"
+        >
+          {inv.quantity}
+          <span className="text-xs text-zinc-500 font-normal mr-0.5">{item.unit}</span>
+        </button>
       </div>
 
-      <button
-        type="button"
-        onClick={onEditQty}
-        title="ערוך כמות"
-        className="text-sm font-semibold text-zinc-100 shrink-0 tabular-nums rounded-md px-2 py-1 hover:bg-zinc-800 transition-colors"
-      >
-        {inv.quantity}
-        <span className="text-xs text-zinc-500 font-normal mr-0.5">{item.unit}</span>
-      </button>
-
-      <div className="flex items-center gap-1 shrink-0">
+      <div className="flex items-center gap-1.5 sm:shrink-0">
         <button
           type="button"
           onClick={onDeduct}
           title="הורד"
-          className="rounded-md px-2 py-1 text-xs text-yellow-400 hover:bg-yellow-900/30 transition-colors"
+          className="flex-1 sm:flex-none h-10 min-w-10 rounded-md px-3 text-sm sm:text-xs text-yellow-400 hover:bg-yellow-900/30 transition-colors"
         >
           −
         </button>
@@ -917,7 +916,7 @@ function LocationRow({
           type="button"
           onClick={onMove}
           title={isYamah ? "הוצא" : "העבר"}
-          className="rounded-md px-2 py-1 text-xs text-blue-400 hover:bg-blue-900/30 transition-colors"
+          className="flex-1 sm:flex-none h-10 min-w-10 rounded-md px-3 text-sm sm:text-xs text-blue-400 hover:bg-blue-900/30 transition-colors"
         >
           {isYamah ? "הוצא" : "הזז"}
         </button>
@@ -926,7 +925,7 @@ function LocationRow({
             type="button"
             onClick={onMove}
             title="לימ״ח"
-            className="rounded-md px-2 py-1 text-xs text-teal-400 hover:bg-teal-900/30 transition-colors font-semibold"
+            className="flex-1 sm:flex-none h-10 min-w-10 rounded-md px-3 text-sm sm:text-xs text-teal-400 hover:bg-teal-900/30 transition-colors font-semibold"
           >
             ימ״ח
           </button>
@@ -935,7 +934,7 @@ function LocationRow({
           type="button"
           onClick={onMarkLoss}
           title="אובדן"
-          className="rounded-md px-2 py-1 text-xs text-red-400 hover:bg-red-900/30 transition-colors"
+          className="flex-1 sm:flex-none h-10 min-w-10 rounded-md px-3 text-sm sm:text-xs text-red-400 hover:bg-red-900/30 transition-colors"
         >
           אובדן
         </button>
@@ -1019,7 +1018,7 @@ function ItemCard({
               <button
                 type="button"
                 onClick={() => onOpenModal({ type: "add-qty", item })}
-                className="rounded-lg bg-emerald-900/30 border border-emerald-800 px-3 py-1.5 text-xs font-bold text-emerald-300 hover:bg-emerald-900/50 transition-colors"
+                className="min-h-10 rounded-lg bg-emerald-900/30 border border-emerald-800 px-3 py-1.5 text-xs font-bold text-emerald-300 hover:bg-emerald-900/50 transition-colors"
               >
                 + כמות
               </button>
@@ -1028,21 +1027,21 @@ function ItemCard({
                 onClick={() =>
                   onOpenModal({ type: "history", item, locationFilter: locationTab || undefined })
                 }
-                className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+                className="min-h-10 rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
               >
                 היסטוריה
               </button>
               <button
                 type="button"
                 onClick={() => onOpenModal({ type: "edit-item", item })}
-                className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+                className="min-h-10 rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
               >
                 פריט
               </button>
               <button
                 type="button"
                 onClick={() => onOpenModal({ type: "delete-item", item })}
-                className="rounded-lg border border-red-900/50 px-2.5 py-1.5 text-xs text-red-400 hover:bg-red-950/40 transition-colors"
+                className="min-h-10 rounded-lg border border-red-900/50 px-3 py-1.5 text-xs text-red-400 hover:bg-red-950/40 transition-colors"
               >
                 מחק
               </button>
@@ -1170,7 +1169,7 @@ export function TashPage({
       <div className="flex flex-col gap-4">
         {/* Location tabs — see everything at a place */}
         <div className="flex flex-col gap-2">
-          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" dir="rtl">
+          <div className="ui-hscroll pb-1 -mx-1 px-1" dir="rtl">
             <button
               type="button"
               onClick={() => setLocationTab(null)}

@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { RequestType, RequestStatus, Priority, Division } from "@prisma/client";
-import { requestTypeLabel, requestStatusLabel, priorityLabel, priorityColor, divisionLabel, requestItemStatusLabel } from "@/lib/he";
+import { requestTypeLabel, requestStatusLabel, priorityLabel, priorityColor, divisionLabel } from "@/lib/he";
 import { RequestDetailModal } from "./RequestDetailModal";
 
 interface Request {
@@ -62,10 +62,13 @@ type SortDirection = "asc" | "desc";
 
 export function ClosedRequestsTable({ 
   requests, 
-  searchTerm = "" 
+  searchTerm = "",
+  cappedNote,
 }: { 
   requests: Request[];
   searchTerm?: string;
+  /** Shown under the list when the server returned only the most recent N rows. */
+  cappedNote?: string;
 }) {
   const [filters, setFilters] = useState<Record<FilterKey, string>>({
     status: "ALL",
@@ -94,7 +97,7 @@ export function ClosedRequestsTable({
   };
 
   const filteredRequests = useMemo(() => {
-    let filtered = requests.filter((req) => {
+    const filtered = requests.filter((req) => {
       // Apply search filter
       if (searchTerm) {
         const search = searchTerm.toLowerCase();
@@ -199,20 +202,6 @@ export function ClosedRequestsTable({
     }
   };
 
-  const getItemStatusColor = (status: string) => {
-    switch (status) {
-      case "FULFILLED":
-        return "bg-green-900/20 text-green-400 border-green-900/40";
-      case "DENIED":
-        return "bg-red-900/20 text-red-400 border-red-900/40";
-      case "CANCELLED":
-        return "bg-zinc-800/50 text-zinc-500 border-zinc-800";
-      case "PENDING":
-      default:
-        return "bg-blue-900/20 text-blue-400 border-blue-900/40";
-    }
-  };
-
   const closedStatuses = [RequestStatus.FULFILLED, RequestStatus.PARTIALLY_FULFILLED, RequestStatus.DENIED, RequestStatus.CANCELLED];
 
   const getTotalQuantity = (req: Request) => {
@@ -228,7 +217,7 @@ export function ClosedRequestsTable({
 
   return (
     <>
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 sm:p-6">
         {/* Filters */}
         <div className="mb-6 flex flex-wrap gap-2">
           <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider w-full mb-2">
@@ -308,7 +297,7 @@ export function ClosedRequestsTable({
                     onClick={() => handleSort("requester")}
                   >
                     <div className="flex items-center justify-end gap-1">
-                      משתמש / כיוון
+                      משתמש
                       {sortField === "requester" && (
                         <span className="text-zinc-400">{sortDirection === "asc" ? "↑" : "↓"}</span>
                       )}
@@ -331,7 +320,7 @@ export function ClosedRequestsTable({
                     onClick={() => handleSort("quantity")}
                   >
                     <div className="flex items-center justify-center gap-1">
-                      כמות כוללת
+                      כמות
                       {sortField === "quantity" && (
                         <span className="text-zinc-400">{sortDirection === "asc" ? "↑" : "↓"}</span>
                       )}
@@ -353,7 +342,7 @@ export function ClosedRequestsTable({
                     onClick={() => handleSort("createdAt")}
                   >
                     <div className="flex items-center justify-end gap-1">
-                      תאריך יצירה
+                      נוצר
                       {sortField === "createdAt" && (
                         <span className="text-zinc-400">{sortDirection === "asc" ? "↑" : "↓"}</span>
                       )}
@@ -364,13 +353,13 @@ export function ClosedRequestsTable({
                     onClick={() => handleSort("resolvedAt")}
                   >
                     <div className="flex items-center justify-end gap-1">
-                      תאריך סגירה
+                      נסגר
                       {sortField === "resolvedAt" && (
                         <span className="text-zinc-400">{sortDirection === "asc" ? "↑" : "↓"}</span>
                       )}
                     </div>
                   </th>
-                  <th className="px-4 py-3 text-right">טופל על ידי</th>
+                  <th className="px-4 py-3 text-right">טופל ע״י</th>
                   <th 
                     className="px-4 py-3 text-center cursor-pointer hover:text-zinc-300 transition-colors select-none"
                     onClick={() => handleSort("status")}
@@ -475,6 +464,10 @@ export function ClosedRequestsTable({
               </tbody>
             </table>
           </div>
+        )}
+
+        {cappedNote && (
+          <p className="mt-3 text-center text-xs text-zinc-500">{cappedNote}</p>
         )}
       </div>
 
