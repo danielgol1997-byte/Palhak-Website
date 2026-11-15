@@ -44,7 +44,7 @@ export function toRunView(run: RunRow, now = new Date()): RunView {
     status,
     summary: run.summary,
     userPrompt: run.userPrompt,
-    steps: asSteps(run.plan).map(({ title, details }) => ({ title, details })),
+    steps: asSteps(run.plan).map(({ title, details, warnings }) => ({ title, details, ...(warnings?.length ? { warnings } : {}) })),
     receipt: asReceipt(run.receipt),
     actorName: run.actor?.name,
     createdAt: run.createdAt.toISOString(),
@@ -156,7 +156,7 @@ export async function confirmAndExecuteRun(runId: string, actor: AgentActor): Pr
     }
     let view: StepView = { title: step.title, details: step.details };
     try {
-      const checked = await previewStep(step.action, step.params, actor);
+      const checked = await previewStep(step.action, step.params, actor, { phase: "execute", earlierSteps: [] });
       view = checked.view;
       await runAsAgent({ runId, actorId: actor.id }, () => checked.action.execute(checked.params, actor));
       receipt.push({ index, action: step.action, ...view, status: "done" });
@@ -200,7 +200,8 @@ export async function listRecentRuns(limit = 50): Promise<RunView[]> {
 
 /** One factual line per plan, appended to the conversation so the model knows what really happened. */
 export function runOutcomeNote(run: RunView): string {
-  const steps = run.steps.map((s) => s.title).join("; ");
+  const titles = run.steps.map((s) => s.title);
+  const steps = titles.length <= 6 ? titles.join("; ") : `${titles.slice(0, 5).join("; ")}; and ${titles.length - 5} more steps`;
   switch (run.status) {
     case "PROPOSED":
       return `[system note: the plan (${steps}) is still waiting for the operator's confirmation; nothing was executed]`;
@@ -213,10 +214,15 @@ export function runOutcomeNote(run: RunView): string {
     case "INTERRUPTED":
       return `[system note: execution of the plan (${steps}) was interrupted; look the records up again to see what was applied]`;
     default: {
-      const lines = (run.receipt ?? []).map(
-        (r) => `${r.title}: ${r.status === "done" ? "done" : r.status === "failed" ? `FAILED (${r.error})` : "skipped"}`,
-      );
-      return `[system note: the operator confirmed the plan and the system executed it. Result: ${lines.join("; ")}. Ids from before this point may be stale.]`;
+      const receipt = run.receipt ?? [];
+      const done = receipt.filter((r) => r.status === "done").length;
+      const failed = receipt.filter((r) => r.status === "failed").map((r) => `${r.title}: FAILED (${r.error})`);
+      const skipped = receipt.filter((r) => r.status === "skipped").length;
+      const result =
+        receipt.length <= 6
+          ? receipt.map((r) => `${r.title}: ${r.status === "done" ? "done" : r.status === "failed" ? `FAILED (${r.error})` : "skipped"}`).join("; ")
+          : [`${done} of ${receipt.length} steps done`, ...failed, ...(skipped ? [`${skipped} later steps skipped`] : [])].join("; ");
+      return `[system note: the operator confirmed the plan (${steps}) and the system executed it. Result: ${result}. Ids from before this point may be stale.]`;
     }
   }
 }

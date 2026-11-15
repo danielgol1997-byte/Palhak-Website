@@ -3,7 +3,7 @@
  *
  *   npx tsx scripts/agent/prod-smoke.ts
  *
- * It asks two questions and drafts one plan, which it then CANCELS. It never
+ * It asks three questions and drafts one plan, which it then CANCELS. It never
  * confirms a plan, so no equipment, stock, request or user data can change.
  * To prove that, it counts the rows of every business table before and after.
  * The only rows it adds are the agent's own log: AgentTurn (usage) and one
@@ -118,6 +118,10 @@ async function main() {
   );
   const equipAnswer = parseChat(chat(opCookie, `מה חתום על ${soldier.name}?`).body);
   check("equipment question answered, no plan", !equipAnswer.error && !equipAnswer.run && equipAnswer.text.length > 5, equipAnswer.error ?? equipAnswer.text.slice(0, 200));
+
+  const boxes = await db.box.count();
+  const boxAnswer = parseChat(chat(opCookie, "כמה קרטונים יש לי?").body);
+  check("knows the system's totals (number of boxes)", !boxAnswer.error && !boxAnswer.run && boxAnswer.text.includes(String(boxes)), boxAnswer.error ?? boxAnswer.text.slice(0, 200));
 
   // a plan that is drafted and then cancelled
   const plan = parseChat(chat(opCookie, `תחתים את ${soldier.name} על 1 ${inv.equipmentItem.name}`).body);

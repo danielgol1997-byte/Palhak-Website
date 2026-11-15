@@ -331,15 +331,15 @@ export function EquipmentSelector({
                     onClick={() => handleAddItem(item)}
                     className="w-full px-4 py-3 text-right border-b border-zinc-800 last:border-0 hover:bg-zinc-900 transition-all"
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-2">
                         {needsSerial && (
                           <span className="flex-shrink-0 px-2 py-0.5 rounded-full bg-orange-900/20 text-orange-400 border border-orange-900/40 text-xs font-bold">
                             צ
                           </span>
                         )}
-                        <div>
-                          <div className="font-bold text-sm text-zinc-50">{item.name}</div>
+                        <div className="min-w-0">
+                          <div className="font-bold text-sm text-zinc-50 [overflow-wrap:anywhere]">{item.name}</div>
                           <div className="text-xs text-zinc-500 mt-0.5">
                             {divisionLabel(item.category.division)} · {item.category.name}
                           </div>
@@ -376,14 +376,14 @@ export function EquipmentSelector({
                 {groupedItems.individual.map((item) => (
                   <div key={item.id} className="p-4 border-b border-zinc-800 last:border-0">
                     <div className="flex items-start gap-3">
-                      <div className="flex-1">
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 mb-2">
                           {requiresSerial(item) && (
                             <span className="flex-shrink-0 px-2 py-0.5 rounded-full bg-orange-900/20 text-orange-400 border border-orange-900/40 text-xs font-bold">
                               צ
                             </span>
                           )}
-                          <span className="font-bold text-sm text-zinc-50">{item.name}</span>
+                          <span className="min-w-0 font-bold text-sm text-zinc-50 [overflow-wrap:anywhere]">{item.name}</span>
                           {requiresSerial(item) && (
                             <span className="text-xs text-zinc-500">(כמות: 1)</span>
                           )}
@@ -508,14 +508,14 @@ export function EquipmentSelector({
                       {items.map((item) => (
                         <div key={item.id} className="p-4 border-b border-zinc-800 last:border-0 bg-zinc-900/30">
                           <div className="flex items-start gap-3">
-                            <div className="flex-1">
+                            <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2 mb-2">
                                 {requiresSerial(item) && (
                                   <span className="flex-shrink-0 px-2 py-0.5 rounded-full bg-orange-900/20 text-orange-400 border border-orange-900/40 text-xs font-bold">
                                     צ
                                   </span>
                                 )}
-                                <span className="font-bold text-sm text-zinc-50">{item.name}</span>
+                                <span className="min-w-0 font-bold text-sm text-zinc-50 [overflow-wrap:anywhere]">{item.name}</span>
                                 {requiresSerial(item) && (
                                   <span className="text-xs text-zinc-500">(כמות: 1)</span>
                                 )}

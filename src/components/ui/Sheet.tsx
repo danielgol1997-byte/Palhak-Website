@@ -54,6 +54,20 @@ export function Sheet({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, dismissible, onClose]);
 
+  // While a dialog is open the animated page background is paused (see globals.css):
+  // nobody is looking at it, and animating it behind a dialog makes typing lag on phones.
+  useEffect(() => {
+    if (!open) return;
+    const root = document.documentElement;
+    const count = Number(root.dataset.sheetOpen ?? "0") + 1;
+    root.dataset.sheetOpen = String(count);
+    return () => {
+      const left = Number(root.dataset.sheetOpen ?? "1") - 1;
+      if (left > 0) root.dataset.sheetOpen = String(left);
+      else delete root.dataset.sheetOpen;
+    };
+  }, [open]);
+
   if (!open) return null;
 
   return (
@@ -64,7 +78,7 @@ export function Sheet({
         role="presentation"
       >
         <div
-          className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm ui-sheet-fade"
+          className="absolute inset-0 bg-zinc-950/80 ui-sheet-fade"
           onClick={dismissible ? onClose : undefined}
           aria-hidden="true"
         />

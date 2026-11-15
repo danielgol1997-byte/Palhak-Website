@@ -7,7 +7,26 @@ export type StepView = {
   title: string;
   /** Extra lines (quantities, serial numbers, stock before/after…). */
   details: string[];
+  /**
+   * Consequences the operator should read before confirming: side effects on other
+   * records, things that will be left in an odd state, and the safer alternative.
+   * Written by the server from live data, never by the model.
+   */
+  warnings?: string[];
 };
+
+/** "draft": the model is building a plan. "execute": the operator confirmed and this step is about to run. */
+export type PreviewPhase = "draft" | "execute";
+
+/**
+ * What a preview may take into account besides the database: the steps already in
+ * the plan, which will have run by the time this one does. Without it, a step
+ * would warn about units that an earlier step of the same plan removes.
+ */
+export type PreviewContext = { phase: PreviewPhase; earlierSteps: readonly { action: string; params: Record<string, unknown> }[] };
+
+/** A step an action asks to have planned before itself (e.g. empty the boxes, then change the template). */
+export type PrerequisiteStep = { action: string; params: Record<string, unknown> };
 
 /** A step as stored on AgentRun.plan. */
 export type PlanStep = StepView & {
@@ -44,7 +63,12 @@ export type AgentAction<S extends z.ZodType = z.ZodType> = {
   /** Roles allowed to plan and run this action (default: every privileged operator). */
   superAdminOnly?: boolean;
   /** Check against live data and describe the step. Throws PlanError when it cannot work. */
-  preview(params: z.infer<S>, actor: AgentActor): Promise<StepView>;
+  preview(params: z.infer<S>, actor: AgentActor, ctx: PreviewContext): Promise<StepView>;
+  /**
+   * Optional: clean-up steps to plan before this one, built from live data. They are
+   * ordinary steps of other actions, so each gets its own line on the plan and receipt.
+   */
+  prerequisites?(params: z.infer<S>, actor: AgentActor, ctx: PreviewContext): Promise<PrerequisiteStep[]>;
   /** Run the site's own server action. Throws on failure. */
   execute(params: z.infer<S>, actor: AgentActor): Promise<void>;
 };

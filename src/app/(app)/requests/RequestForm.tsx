@@ -678,15 +678,15 @@ export function RequestForm({ items, unitTemplates, userAssignments, pendingDecl
                       onClick={() => handleSelectItem(item)}
                       className="w-full px-4 py-3 text-right border-b border-zinc-800 last:border-0 hover:bg-zinc-900 transition-all"
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-2">
                           {needsSerial && (
                             <span className="flex-shrink-0 px-2 py-0.5 rounded-full bg-orange-900/20 text-orange-400 border border-orange-900/40 text-xs font-bold">
                               צ
                             </span>
                           )}
-                          <div>
-                            <div className="font-bold text-sm text-zinc-50">
+                          <div className="min-w-0">
+                            <div className="font-bold text-sm text-zinc-50 [overflow-wrap:anywhere]">
                               {('displayName' in item) ? (item as any).displayName : item.name}
                             </div>
                             <div className="text-xs text-zinc-500 mt-0.5">
@@ -694,7 +694,7 @@ export function RequestForm({ items, unitTemplates, userAssignments, pendingDecl
                             </div>
                           </div>
                         </div>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-500">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-zinc-500">
                           <path d="M12 5v14M5 12h14" />
                         </svg>
                       </div>

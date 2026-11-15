@@ -2,7 +2,20 @@ import { z } from "zod";
 import { Division, Priority, Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { divisionLabel, priorityLabel, requestTypeLabel, roleLabel } from "@/lib/he";
-import { PlanError, type AgentAction, type AgentActor, type StepView } from "./types";
+import { PlanError, type AgentAction, type AgentActor, type PrerequisiteStep, type PreviewContext, type StepView } from "./types";
+import {
+  boxRowsFor,
+  excessRemovals,
+  loadTemplateSlots,
+  perBoxTotals,
+  slotAccepting,
+  slotItemIds,
+  slotLabel,
+  slotStanding,
+  usage,
+  type BoxRow,
+  type TemplateSlot,
+} from "./boxTemplateData";
 
 import {
   addToBoxDirectBulkAction,
@@ -15,6 +28,13 @@ import {
   transferBoxItemAction,
 } from "@/app/(app)/admin/users/[id]/equipment-actions";
 import { createEmptyBoxAction } from "@/app/(app)/admin/boxes/actions";
+import {
+  addAlternativeAction,
+  addBoxTemplateItemAction,
+  removeAlternativeAction,
+  removeBoxTemplateItemAction,
+  updateGroupNameAction,
+} from "@/app/(app)/admin/inventory/box-template/actions";
 import { upsertStorageInventoryAction } from "@/app/(app)/admin/storage/actions";
 import {
   handleRequestItemsBatchAction,
@@ -43,8 +63,14 @@ import {
  * permission checks as the buttons in the UI. Nothing here writes to the
  * database directly.
  *
- * Deliberately NOT available to the agent: deleting users / items / departments /
- * templates, database reset and restore, and theme changes.
+ * Deliberately NOT available to the agent: deleting users / items / departments,
+ * editing departments / positions / unit templates, database reset and restore,
+ * and theme changes.
+ *
+ * Steps that reach beyond the record they name (a template change affects every
+ * box, deactivating a user leaves equipment signed on them…) return `warnings`,
+ * which the plan card shows in amber. Where a clean way exists, the action can
+ * also plan it: see `prerequisites`.
  */
 
 const YAMAH = "ימ״ח";
@@ -408,6 +434,330 @@ const createBox = define({
   },
 });
 
+// ─── box template (תבנית קרטון) ───────────────────────────────────────────────
+// A template change reaches every soldier's box, so each of these says what it
+// will do to the boxes that exist, and can plan the clean-up first.
+
+// What earlier steps of the same plan will already have taken out by the time a step runs.
+
+type Line = { assignmentId?: string; quantity?: number };
+
+/** boxItemId → units that earlier steps of the plan take out of boxes. */
+function pendingBoxRemovals(ctx: PreviewContext): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const step of ctx.earlierSteps) {
+    if (!["remove_from_box_to_storage", "restore_from_box", "transfer_box_item"].includes(step.action)) continue;
+    const boxItemId = String(step.params.boxItemId ?? "");
+    out.set(boxItemId, (out.get(boxItemId) ?? 0) + Number(step.params.quantity ?? 0));
+  }
+  return out;
+}
+
+/** The box rows as they will be once the earlier steps of the plan have run. */
+function afterEarlierSteps(rows: BoxRow[], ctx: PreviewContext): BoxRow[] {
+  const pending = pendingBoxRemovals(ctx);
+  if (pending.size === 0) return rows;
+  return rows.map((r) => ({ ...r, quantity: r.quantity - (pending.get(r.boxItemId) ?? 0) })).filter((r) => r.quantity > 0);
+}
+
+/** Units earlier steps take off one soldier: signed equipment returned or transferred away, and box contents emptied. */
+function pendingForUser(userId: string, ctx: PreviewContext): { signedLeaving: number; boxLeaving: number; signedArriving: number } {
+  let signedLeaving = 0;
+  let boxLeaving = 0;
+  let signedArriving = 0;
+  for (const step of ctx.earlierSteps) {
+    const p = step.params;
+    const q = Number(p.quantity ?? 0);
+    if (step.action === "return_equipment_to_storage" && p.userId === userId) {
+      signedLeaving += ((p.items as Line[]) ?? []).reduce((s, l) => s + Number(l.quantity ?? 0), 0);
+    } else if (step.action === "transfer_equipment" && p.fromUserId === userId) signedLeaving += q;
+    else if (step.action === "move_to_box" && p.userId === userId) signedLeaving += ((p.items as Line[]) ?? []).reduce((s, l) => s + Number(l.quantity ?? 0), 0);
+    else if (step.action === "remove_from_box_to_storage" && p.userId === userId) boxLeaving += q;
+    else if (step.action === "transfer_box_item" && p.fromUserId === userId) boxLeaving += q;
+    else if (step.action === "restore_from_box" && p.userId === userId) {
+      boxLeaving += q;
+      signedArriving += q;
+    }
+  }
+  return { signedLeaving, boxLeaving, signedArriving };
+}
+
+type BoxContentsMode = "leave" | "return_to_storage" | "restore_to_soldiers";
+
+const boxContents = z
+  .enum(["leave", "return_to_storage", "restore_to_soldiers"])
+  .describe(
+    "What to do with the affected units that are inside soldiers' boxes right now. " +
+      "leave = they stay in the boxes but fall outside the template. " +
+      "return_to_storage = first take them out of the boxes back to the ימ״ח. " +
+      "restore_to_soldiers = first take them out and sign them back on each soldier. " +
+      "With the last two the system adds the clean-up steps to the plan by itself, one per box, so do not add them yourself. " +
+      "get_box_template shows how many units are affected. When units are affected and the operator has not said which of these they want, explain the options and ask before planning.",
+  );
+
+const CONTENTS_LABEL: Record<Exclude<BoxContentsMode, "leave">, string> = {
+  return_to_storage: "יוחזרו לימ״ח",
+  restore_to_soldiers: "יוחזרו לחתימת החיילים",
+};
+
+async function getSlot(equipmentItemId: string): Promise<{ slot: TemplateSlot; slots: TemplateSlot[] }> {
+  const slots = await loadTemplateSlots();
+  const slot = slots.find((s) => s.equipmentItemId === equipmentItemId);
+  if (!slot) {
+    throw new PlanError(
+      `Item "${equipmentItemId}" is not the main item of any box-template row. Call get_box_template and use the equipmentItemId of the row.`,
+    );
+  }
+  return { slot, slots };
+}
+
+/** One clean-up step per box row, through the ordinary box actions. */
+function clearingSteps(removals: { row: BoxRow; quantity: number }[], mode: BoxContentsMode): PrerequisiteStep[] {
+  if (mode === "leave") return [];
+  const action = mode === "return_to_storage" ? "remove_from_box_to_storage" : "restore_from_box";
+  return removals.map(({ row, quantity }) => ({ action, params: { userId: row.userId, boxItemId: row.boxItemId, quantity } }));
+}
+
+/** The lines that explain what happens to units already in boxes. */
+function boxContentsOutcome(
+  affected: { boxes: number; units: number },
+  mode: BoxContentsMode,
+  ctx: PreviewContext,
+  what: string,
+): { details: string[]; warnings: string[] } {
+  const { phase } = ctx;
+  if (affected.units === 0) {
+    const cleared = pendingBoxRemovals(ctx).size > 0;
+    return {
+      details: [cleared ? "הצעדים שמעל מוציאים את היחידות האלה מהקרטונים לפני השינוי." : "אין כרגע יחידות כאלה בקרטונים, כך שאף קרטון קיים לא מושפע."],
+      warnings: [],
+    };
+  }
+  if (mode === "leave") {
+    return {
+      details: [],
+      warnings: [
+        `ב-${affected.boxes} קרטונים יש ${affected.units} יחידות ${what}. הן יישארו בקרטונים, אבל מחוץ לתבנית: לא ייספרו במעקב המילוי ולא ניתן יהיה להעביר אותן לקרטון אחר.`,
+        `אפשר במקום זה לבקש מהסוכן להחזיר אותן קודם לימ״ח או לחתימת החיילים, ורק אז לבצע את השינוי.`,
+      ],
+    };
+  }
+  if (phase === "execute") {
+    // The clean-up steps ran before this one. If units are still there, stop rather than strand them.
+    throw new PlanError(`עדיין יש ${affected.units} יחידות ${what} ב-${affected.boxes} קרטונים, ולכן השינוי נעצר. בקש מהסוכן להכין את התוכנית מחדש.`);
+  }
+  return { details: [`לפני השינוי, ${affected.units} יחידות מ-${affected.boxes} קרטונים ${CONTENTS_LABEL[mode]} (הצעדים שמעל).`], warnings: [] };
+}
+
+const boxTemplateAddItem = define({
+  name: "box_template_add_item",
+  description:
+    "Add a new row to the box template: an item every soldier's box should hold, and how many (הוספת פריט לתבנית הקרטון). To change the quantity of an existing row use box_template_set_quantity.",
+  schema: z.object({
+    equipmentItemId: id("Equipment item"),
+    quantity: z.number().int().min(1).max(1000).describe("Units each box should hold"),
+    groupName: z.string().trim().max(80).optional().describe("Optional display name for the row, e.g. קסדה when several helmet models can fill it"),
+  }),
+  async preview(p) {
+    const item = await getItem(p.equipmentItemId);
+    if (!item.active) throw new PlanError(`הפריט ${item.name} אינו פעיל.`);
+    const slots = await loadTemplateSlots();
+    const existing = slotAccepting(slots, item.id);
+    if (existing) {
+      throw new PlanError(
+        existing.equipmentItemId === item.id
+          ? `${item.name} כבר בתבנית (כמות לקרטון ${existing.quantity}). To change the quantity use box_template_set_quantity.`
+          : `${item.name} כבר מוגדר בתבנית כחלופה בשורה "${slotLabel(existing)}".`,
+      );
+    }
+    const [totalBoxes, rows, signed, inStock] = await Promise.all([
+      prisma.box.count(),
+      boxRowsFor([item.id]),
+      prisma.assignment.aggregate({ where: { equipmentItemId: item.id, active: true }, _sum: { quantity: true } }),
+      yamahStock(item.id),
+    ]);
+    const already = [...perBoxTotals(rows).values()].filter((t) => t >= p.quantity).length;
+    const missing = totalBoxes - already;
+    return {
+      title: `הוספת ${item.name} לתבנית הקרטון`,
+      details: [
+        `כמות לקרטון: ${p.quantity}${p.groupName ? ` · שם השורה: ${p.groupName}` : ""}`,
+        `כיום: ${inStock} בימ״ח, ${signed._sum.quantity ?? 0} חתומות על חיילים, ${usage(rows).units} כבר בקרטונים.`,
+      ],
+      ...(missing > 0
+        ? {
+            warnings: [
+              `ב-${missing} מתוך ${totalBoxes} הקרטונים הקיימים השורה הזאת תופיע כחסרה, עד שיוכנס הפריט לכל קרטון.`,
+              `כדי למלא אותם נדרשות עד ${missing * p.quantity} יחידות. אפשר לבקש מהסוכן להוסיף לקרטונים מהימ״ח או להעביר מחתימת החיילים.`,
+            ],
+          }
+        : {}),
+    };
+  },
+  async execute(p) {
+    await run(addBoxTemplateItemAction(form({ equipmentItemId: p.equipmentItemId, quantity: p.quantity })));
+    if (p.groupName) {
+      const { slot } = await getSlot(p.equipmentItemId);
+      await run(updateGroupNameAction(form({ templateItemId: slot.templateItemId, groupName: p.groupName })));
+    }
+  },
+});
+
+const boxTemplateSetQuantity = define({
+  name: "box_template_set_quantity",
+  description: "Change how many units of a template row each box should hold (שינוי כמות בתבנית הקרטון).",
+  schema: z.object({
+    equipmentItemId: id("Main item of the template row (from get_box_template)"),
+    quantity: z.number().int().min(1).max(1000).describe("New number of units each box should hold"),
+    boxContents: boxContents.describe(
+      "Only matters when the quantity goes down: what to do with units above the new quantity that are in boxes now. " +
+        "leave / return_to_storage / restore_to_soldiers. Use leave when the quantity goes up.",
+    ),
+  }),
+  async preview(p, _actor, ctx) {
+    const { slot } = await getSlot(p.equipmentItemId);
+    if (slot.quantity === p.quantity) throw new PlanError(`הכמות לקרטון בשורה "${slotLabel(slot)}" כבר ${slot.quantity}.`);
+    const standing = await slotStanding(slot);
+    standing.rows = afterEarlierSteps(standing.rows, ctx);
+    const title = `שינוי כמות בתבנית הקרטון: ${slotLabel(slot)}`;
+    const details = [`כמות לקרטון: ${slot.quantity} ← ${p.quantity}`];
+
+    if (p.quantity > slot.quantity) {
+      const below = standing.totalBoxes - [...perBoxTotals(standing.rows).values()].filter((t) => t >= p.quantity).length;
+      return {
+        title,
+        details,
+        ...(below > 0
+          ? { warnings: [`ב-${below} מתוך ${standing.totalBoxes} הקרטונים הקיימים השורה תופיע כחסרה, עד שיושלם הפריט בכל קרטון.`] }
+          : {}),
+      };
+    }
+    const removals = excessRemovals(standing.rows, p.quantity);
+    const affected = { boxes: new Set(removals.map((r) => r.row.userId)).size, units: removals.reduce((s, r) => s + r.quantity, 0) };
+    const outcome = boxContentsOutcome(affected, p.boxContents, ctx, "מעבר לכמות החדשה");
+    return { title, details: [...details, ...outcome.details], ...(outcome.warnings.length ? { warnings: outcome.warnings } : {}) };
+  },
+  async prerequisites(p, _actor, ctx) {
+    const { slot } = await getSlot(p.equipmentItemId);
+    if (p.quantity >= slot.quantity) return [];
+    return clearingSteps(excessRemovals(afterEarlierSteps((await slotStanding(slot)).rows, ctx), p.quantity), p.boxContents);
+  },
+  async execute(p) {
+    // The site's action is an upsert: on an existing row it sets the quantity.
+    await run(addBoxTemplateItemAction(form({ equipmentItemId: p.equipmentItemId, quantity: p.quantity })));
+  },
+});
+
+const boxTemplateRemoveItem = define({
+  name: "box_template_remove_item",
+  description:
+    "Remove a row from the box template, together with its alternatives (הסרת פריט מתבנית הקרטון). Boxes are not emptied unless boxContents asks for it.",
+  schema: z.object({ equipmentItemId: id("Main item of the template row (from get_box_template)"), boxContents }),
+  async preview(p, _actor, ctx) {
+    const { slot } = await getSlot(p.equipmentItemId);
+    const rows = afterEarlierSteps(await boxRowsFor(slotItemIds(slot)), ctx);
+    const outcome = boxContentsOutcome(usage(rows), p.boxContents, ctx, `של "${slotLabel(slot)}"`);
+    return {
+      title: `הסרת "${slotLabel(slot)}" מתבנית הקרטון`,
+      details: [
+        `כמות לקרטון כיום: ${slot.quantity}${slot.alternatives.length ? ` · כולל ${slot.alternatives.length} חלופות שיוסרו איתה` : ""}`,
+        ...outcome.details,
+      ],
+      ...(outcome.warnings.length ? { warnings: outcome.warnings } : {}),
+    };
+  },
+  async prerequisites(p, _actor, ctx) {
+    const { slot } = await getSlot(p.equipmentItemId);
+    const rows = afterEarlierSteps(await boxRowsFor(slotItemIds(slot)), ctx);
+    return clearingSteps(rows.map((row) => ({ row, quantity: row.quantity })), p.boxContents);
+  },
+  async execute(p) {
+    await run(removeBoxTemplateItemAction(form({ equipmentItemId: p.equipmentItemId })));
+  },
+});
+
+const boxTemplateAddAlternative = define({
+  name: "box_template_add_alternative",
+  description:
+    "Let another item fill an existing template row, e.g. a second helmet model (הוספת חלופה לשורה בתבנית). Units of either item then count toward the row.",
+  schema: z.object({
+    equipmentItemId: id("Main item of the template row (from get_box_template)"),
+    alternativeItemId: id("The item to accept as an alternative"),
+  }),
+  async preview(p) {
+    const { slot, slots } = await getSlot(p.equipmentItemId);
+    if (p.alternativeItemId === slot.equipmentItemId) throw new PlanError("לא ניתן להוסיף את הפריט הראשי כחלופה של עצמו.");
+    const alt = await getItem(p.alternativeItemId);
+    const taken = slotAccepting(slots, alt.id);
+    if (taken) throw new PlanError(`${alt.name} כבר מוגדר בתבנית, בשורה "${slotLabel(taken)}".`);
+    const inBoxes = usage(await boxRowsFor([alt.id]));
+    return {
+      title: `הוספת ${alt.name} כחלופה בשורה "${slotLabel(slot)}"`,
+      details: [
+        `כמות לקרטון בשורה: ${slot.quantity} (מכל הפריטים שבשורה יחד)`,
+        ...(inBoxes.units > 0 ? [`${inBoxes.units} יחידות של ${alt.name} שכבר נמצאות ב-${inBoxes.boxes} קרטונים ייספרו מעכשיו בשורה הזאת.`] : []),
+      ],
+    };
+  },
+  async execute(p) {
+    const { slot } = await getSlot(p.equipmentItemId);
+    await run(addAlternativeAction(form({ templateItemId: slot.templateItemId, alternativeItemId: p.alternativeItemId })));
+  },
+});
+
+const boxTemplateRemoveAlternative = define({
+  name: "box_template_remove_alternative",
+  description: "Stop accepting an alternative item in a template row (הסרת חלופה משורה בתבנית). The main item of the row stays.",
+  schema: z.object({
+    equipmentItemId: id("Main item of the template row (from get_box_template)"),
+    alternativeItemId: id("The alternative item to remove"),
+    boxContents,
+  }),
+  async preview(p, _actor, ctx) {
+    const { slot } = await getSlot(p.equipmentItemId);
+    const alt = slot.alternatives.find((a) => a.equipmentItemId === p.alternativeItemId);
+    if (!alt) throw new PlanError(`Item "${p.alternativeItemId}" is not an alternative in the row "${slotLabel(slot)}". Call get_box_template.`);
+    const rows = afterEarlierSteps(await boxRowsFor([alt.equipmentItemId]), ctx);
+    const outcome = boxContentsOutcome(usage(rows), p.boxContents, ctx, `של ${alt.name}`);
+    return {
+      title: `הסרת החלופה ${alt.name} מהשורה "${slotLabel(slot)}"`,
+      details: outcome.details,
+      ...(outcome.warnings.length ? { warnings: outcome.warnings } : {}),
+    };
+  },
+  async prerequisites(p, _actor, ctx) {
+    const rows = afterEarlierSteps(await boxRowsFor([p.alternativeItemId]), ctx);
+    return clearingSteps(rows.map((row) => ({ row, quantity: row.quantity })), p.boxContents);
+  },
+  async execute(p) {
+    const { slot } = await getSlot(p.equipmentItemId);
+    const alt = slot.alternatives.find((a) => a.equipmentItemId === p.alternativeItemId);
+    if (!alt) throw new Error("חלופה לא נמצאה.");
+    await run(removeAlternativeAction(form({ altId: alt.altId })));
+  },
+});
+
+const boxTemplateSetGroupName = define({
+  name: "box_template_set_group_name",
+  description: "Set or clear the display name of a template row (שם קבוצה). Only the label changes.",
+  schema: z.object({
+    equipmentItemId: id("Main item of the template row (from get_box_template)"),
+    groupName: z.string().trim().max(80).describe("New name; empty string clears it"),
+  }),
+  async preview(p) {
+    const { slot } = await getSlot(p.equipmentItemId);
+    if ((slot.groupName ?? "") === p.groupName) throw new PlanError("שם השורה כבר כזה.");
+    return {
+      title: `שינוי שם שורה בתבנית הקרטון: ${slot.name}`,
+      details: [`${slot.groupName || "(ללא שם)"} ← ${p.groupName || "(ללא שם)"}`],
+    };
+  },
+  async execute(p) {
+    const { slot } = await getSlot(p.equipmentItemId);
+    await run(updateGroupNameAction(form({ templateItemId: slot.templateItemId, groupName: p.groupName })));
+  },
+});
+
 // ─── storage ──────────────────────────────────────────────────────────────────
 
 const setStorageQuantity = define({
@@ -423,9 +773,19 @@ const setStorageQuantity = define({
     const stock = await yamahStock(item.id);
     if (stock === p.quantity) throw new PlanError(`המלאי של ${item.name} בימ״ח כבר ${stock}. אין מה לשנות.`);
     const delta = p.quantity - stock;
+    const drop = -delta;
+    const bigDrop = drop > 0 && (p.quantity === 0 || (drop >= 5 && drop / stock >= 0.2));
     return {
       title: `עדכון מלאי בימ״ח: ${item.name}`,
-      details: [`${stock} ← ${p.quantity} (${delta > 0 ? "+" : ""}${delta})`],
+      details: [`${stock} ← ${p.quantity} (${delta > 0 ? "תוספת של" : "ירידה של"} ${Math.abs(delta)})`],
+      ...(bigDrop
+        ? {
+            warnings: [
+              `המלאי יורד ב-${drop} יחידות בלי רישום לאן הן הלכו. עדכון ספירה מתאים לתיקון טעות בספירה.`,
+              `אם הציוד נמסר לחיילים, עדיף לבקש "הקצאה" כדי שיירשם על שמם.`,
+            ],
+          }
+        : {}),
     };
   },
   async execute(p) {
@@ -540,11 +900,34 @@ const setUserActive = define({
   name: "set_user_active",
   description: "Activate or deactivate a user account (הפעלה / השבתה של משתמש). A deactivated user cannot sign in.",
   schema: z.object({ userId: id("User"), active: z.boolean() }),
-  async preview(p, actor) {
+  async preview(p, actor, ctx) {
     const user = await getUser(p.userId);
     if (user.active === p.active) throw new PlanError(`${user.name} כבר ${p.active ? "פעיל" : "לא פעיל"}.`);
     if (user.id === actor.id && !p.active) throw new PlanError("לא ניתן להשבית את החשבון של עצמך דרך הסוכן.");
-    return { title: `${p.active ? "הפעלת" : "השבתת"} המשתמש ${user.name}`, details: [`תפקיד: ${roleLabel(user.role)}`] };
+    const warnings: string[] = [];
+    if (!p.active) {
+      const [signed, boxed, open] = await Promise.all([
+        prisma.assignment.aggregate({ where: { userId: user.id, active: true }, _sum: { quantity: true } }),
+        prisma.boxItem.aggregate({ where: { box: { userId: user.id } }, _sum: { quantity: true } }),
+        prisma.request.count({ where: { requesterId: user.id, status: { in: ["OPEN", "IN_PROGRESS"] } } }),
+      ]);
+      // Equipment that earlier steps of this plan already take off him does not count.
+      const pending = pendingForUser(user.id, ctx);
+      const signedUnits = Math.max(0, (signed._sum.quantity ?? 0) - pending.signedLeaving + pending.signedArriving);
+      const boxedUnits = Math.max(0, (boxed._sum.quantity ?? 0) - pending.boxLeaving);
+      if (signedUnits > 0 || boxedUnits > 0) {
+        warnings.push(
+          `על ${user.name} עדיין רשומות ${signedUnits} יחידות ציוד חתומות ו-${boxedUnits} יחידות בקרטון. ההשבתה לא מחזירה אותן, והן יישארו רשומות על משתמש לא פעיל.`,
+          `אפשר לבקש מהסוכן קודם להחזיר את הציוד לימ״ח או להעביר אותו לחייל אחר, ורק אז להשבית.`,
+        );
+      }
+      if (open > 0) warnings.push(`יש לו ${open} בקשות פתוחות שיישארו ממתינות.`);
+    }
+    return {
+      title: `${p.active ? "הפעלת" : "השבתת"} המשתמש ${user.name}`,
+      details: [`תפקיד: ${roleLabel(user.role)}`, ...(p.active ? [] : ["המשתמש לא יוכל להתחבר למערכת."])],
+      ...(warnings.length ? { warnings } : {}),
+    };
   },
   async execute(p) {
     await run(adminUpdateUserActiveAction(form({ userId: p.userId, active: p.active })));
@@ -560,7 +943,17 @@ const setUserRole = define({
     const user = await getUser(p.userId);
     if (user.id === actor.id) throw new PlanError("לא ניתן לשנות את התפקיד של עצמך.");
     if (user.role === p.role) throw new PlanError(`${user.name} כבר בתפקיד ${roleLabel(p.role)}.`);
-    return { title: `שינוי הרשאה למשתמש ${user.name}`, details: [`${roleLabel(user.role)} ← ${roleLabel(p.role)}`] };
+    const warnings: string[] = [];
+    if (p.role === Role.SUPER_ADMIN || p.role === Role.THEME_MASTER) {
+      warnings.push(`זו הרשאה מלאה: ניהול משתמשים והרשאות, גיבויים, והפעלת סוכן ה-AI.`);
+    } else if (p.role === Role.ADMIN) {
+      warnings.push(`מנהל יכול לאשר בקשות, להקצות ולהעביר ציוד ולערוך מלאי.`);
+    }
+    return {
+      title: `שינוי הרשאה למשתמש ${user.name}`,
+      details: [`${roleLabel(user.role)} ← ${roleLabel(p.role)}`],
+      ...(warnings.length ? { warnings } : {}),
+    };
   },
   async execute(p) {
     await run(superAdminUpdateUserRoleAction(form({ userId: p.userId, role: p.role })));
@@ -672,7 +1065,27 @@ const updateItem = define({
     };
     if (flagLabels(next) !== flagLabels(item)) details.push(`סוג: ${flagLabels(item)} ← ${flagLabels(next)}`);
     if (details.length === 0) throw new PlanError(`אין שינוי בפריט ${item.name}.`);
-    return { title: `עריכת הפריט ${item.name}`, details };
+    const warnings: string[] = [];
+    if (p.active === false && item.active) {
+      const [signed, boxed, pending, inStock, slots] = await Promise.all([
+        prisma.assignment.aggregate({ where: { equipmentItemId: item.id, active: true }, _sum: { quantity: true }, _count: true }),
+        prisma.boxItem.aggregate({ where: { equipmentItemId: item.id }, _sum: { quantity: true } }),
+        prisma.requestItem.count({ where: { equipmentItemId: item.id, status: "PENDING" } }),
+        yamahStock(item.id),
+        loadTemplateSlots(),
+      ]);
+      const signedUnits = signed._sum.quantity ?? 0;
+      const boxedUnits = boxed._sum.quantity ?? 0;
+      if (signedUnits + boxedUnits + inStock > 0) {
+        warnings.push(
+          `הפריט עדיין בשימוש: ${signedUnits} יחידות חתומות על חיילים, ${boxedUnits} בקרטונים, ${inStock} בימ״ח. הן יישארו רשומות, אבל לא ניתן יהיה לבקש או להקצות את הפריט מחדש.`,
+        );
+      }
+      if (pending > 0) warnings.push(`יש ${pending} שורות בבקשות פתוחות לפריט הזה, שלא ניתן יהיה לאשר אחרי ההשבתה.`);
+      const slot = slotAccepting(slots, item.id);
+      if (slot) warnings.push(`הפריט מוגדר בתבנית הקרטון (שורה "${slotLabel(slot)}"). כדאי להסיר אותו מהתבנית או להחליף אותו שם.`);
+    }
+    return { title: `עריכת הפריט ${item.name}`, details, ...(warnings.length ? { warnings } : {}) };
   },
   async execute(p) {
     const item = await getItem(p.equipmentItemId);
@@ -804,6 +1217,12 @@ export const AGENT_ACTIONS: readonly AgentAction[] = [
   transferBoxItem,
   addToBoxFromStorage,
   createBox,
+  boxTemplateAddItem,
+  boxTemplateSetQuantity,
+  boxTemplateRemoveItem,
+  boxTemplateAddAlternative,
+  boxTemplateRemoveAlternative,
+  boxTemplateSetGroupName,
   setStorageQuantity,
   handleRequestItems,
   setRequestPriority,
@@ -836,6 +1255,7 @@ export async function previewStep(
   actionName: string,
   rawParams: unknown,
   actor: AgentActor,
+  ctx: PreviewContext = { phase: "draft", earlierSteps: [] },
 ): Promise<{ action: AgentAction; params: Record<string, unknown>; view: StepView }> {
   const action = getAgentAction(actionName);
   if (!action) throw new PlanError(`Unknown action "${actionName}".`);
@@ -845,6 +1265,6 @@ export async function previewStep(
     const issues = parsed.error.issues.map((i) => `${i.path.join(".") || "(input)"}: ${i.message}`).join("; ");
     throw new PlanError(`Invalid parameters – ${issues}`);
   }
-  const view = await action.preview(parsed.data, actor);
+  const view = await action.preview(parsed.data, actor, ctx);
   return { action, params: parsed.data as Record<string, unknown>, view };
 }

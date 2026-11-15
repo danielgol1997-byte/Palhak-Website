@@ -48,7 +48,7 @@ type Person = { id: string; name: string; role: Role };
 type RunView = {
   id: string;
   status: string;
-  steps: { title: string; details: string[] }[];
+  steps: { title: string; details: string[]; warnings?: string[] }[];
   receipt: { title: string; status: string; error?: string }[] | null;
 };
 
@@ -172,6 +172,18 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await db.tashItem.deleteMany({ where: { name: { startsWith: "__agent_spec_" } } });
+  // Catalog items the template tests created (best effort; the branch is disposable).
+  const mine = await db.equipmentItem.findMany({ where: { name: { startsWith: "__agent_spec_" } }, select: { id: true } });
+  const ids = mine.map((i) => i.id);
+  await db.boxTemplateItem.deleteMany({ where: { equipmentItemId: { in: ids } } }).catch(() => undefined);
+  await db.boxTemplateItemAlt.deleteMany({ where: { equipmentItemId: { in: ids } } }).catch(() => undefined);
+  await db.boxItem.deleteMany({ where: { equipmentItemId: { in: ids } } }).catch(() => undefined);
+  await db.assignment.deleteMany({ where: { equipmentItemId: { in: ids } } }).catch(() => undefined);
+  await db.requestItem.deleteMany({ where: { equipmentItemId: { in: ids } } }).catch(() => undefined);
+  await db.storageInventory.deleteMany({ where: { equipmentItemId: { in: ids } } }).catch(() => undefined);
+  // Remove the items themselves; if something still points at one, at least hide it.
+  await db.equipmentItem.deleteMany({ where: { id: { in: ids } } }).catch(() => db.equipmentItem.updateMany({ where: { id: { in: ids } }, data: { active: false } }));
+  await db.user.deleteMany({ where: { email: { startsWith: "agent.spec." } } }).catch(() => undefined);
   await db.$disconnect();
   await mock.stop();
 });
@@ -361,7 +373,8 @@ test("the model is told what really happened, from the database", async ({ reque
     { role: "user", text: "תודה" },
   ]);
   const sent = JSON.stringify(mock.requests[0].messages);
-  expect(sent).toContain("the operator confirmed the plan and the system executed it");
+  expect(sent).toContain("[system note: the operator confirmed the plan");
+  expect(sent).toContain("and the system executed it. Result:");
   expect(sent).toContain(fx.soldierA.name);
 
   // A run id the browser made up, or someone else's, adds nothing.
@@ -665,7 +678,7 @@ test("storage count, catalog and user actions run through the site's own rules",
     `הוספת פריט חדש לקטלוג: ${itemName}`,
     "יצירת משתמש חדש: בדיקת סוכן",
   ]);
-  expect(res.run!.steps[0].details[0]).toBe(`${have} ← ${have + 5} (+5)`);
+  expect(res.run!.steps[0].details[0]).toBe(`${have} ← ${have + 5} (תוספת של 5)`);
   const done = await runAction(request, fx.operator, res.run!.id, "confirm");
   expect(done.run!.status, JSON.stringify(done.run!.receipt)).toBe("DONE");
 
@@ -766,6 +779,352 @@ test("rate limit: an operator who hammers the agent is slowed down without the m
   expect(res.error).toContain("יותר מדי בקשות");
   expect(mock.requests.length).toBe(0);
   await db.agentTurn.deleteMany({ where: { model: "rate-limit-test" } });
+});
+
+// ─── box template: impact, warnings and clean-up ──────────────────────────────
+
+const tpl = {} as { a: { id: string; name: string }; b: { id: string; name: string } };
+
+async function makeCatalogItem(suffix: string, stockQty: number) {
+  const like = await db.equipmentItem.findUniqueOrThrow({ where: { id: fx.item.id } });
+  const yamah = await db.storageLocation.findFirstOrThrow({ where: { name: YAMAH } });
+  const item = await db.equipmentItem.create({ data: { name: `${MARKER}_${suffix}`, categoryId: like.categoryId } });
+  await db.storageInventory.create({ data: { locationId: yamah.id, equipmentItemId: item.id, quantity: stockQty } });
+  return { id: item.id, name: item.name };
+}
+
+async function inBox(userId: string, itemId: string): Promise<number> {
+  const rows = await db.boxItem.findMany({ where: { equipmentItemId: itemId, box: { userId } } });
+  return rows.reduce((s, r) => s + r.quantity, 0);
+}
+
+/** Draft a plan from scripted tool calls (one model call), return the run and the raw tool results. */
+async function draft(request: APIRequestContext, calls: { name: string; input: unknown }[]) {
+  let results: ReturnType<typeof toolResults> = [];
+  mock.script(
+    () => ({ toolUses: calls }),
+    (req) => {
+      results = toolResults(req);
+      return { text: "הכנתי." };
+    },
+  );
+  const res = await chat(request, fx.operator, [{ role: "user", text: "תבנית" }]);
+  expect(res.error).toBeNull();
+  return { run: res.run, results };
+}
+
+async function confirmDone(request: APIRequestContext, run: RunView | null) {
+  expect(run, "a plan was drafted").not.toBeNull();
+  const done = await runAction(request, fx.operator, run!.id, "confirm");
+  expect(done.run!.status, JSON.stringify(done.run!.receipt)).toBe("DONE");
+  return done.run!;
+}
+
+test("template: adding a row says how many existing boxes become short, then adds it with its name", async ({ request }) => {
+  tpl.a = await makeCatalogItem("tplA", 10);
+  tpl.b = await makeCatalogItem("tplB", 5);
+  const boxes = await db.box.count();
+
+  const { run } = await draft(request, [{ name: "box_template_add_item", input: { equipmentItemId: tpl.a.id, quantity: 2, groupName: "שורת בדיקה" } }]);
+  expect(run!.steps).toHaveLength(1);
+  expect(run!.steps[0].title).toBe(`הוספת ${tpl.a.name} לתבנית הקרטון`);
+  expect(run!.steps[0].warnings?.[0]).toContain(`ב-${boxes} מתוך ${boxes} הקרטונים הקיימים`);
+  await confirmDone(request, run);
+
+  const row = await db.boxTemplateItem.findFirst({ where: { equipmentItemId: tpl.a.id } });
+  expect(row).toMatchObject({ quantity: 2, groupName: "שורת בדיקה" });
+
+  // Adding it again, or adding an item that is already an alternative, is refused with the reason.
+  const again = await draft(request, [{ name: "box_template_add_item", input: { equipmentItemId: tpl.a.id, quantity: 1 } }]);
+  expect(again.run).toBeNull();
+  expect(again.results[0].raw).toContain("כבר בתבנית");
+});
+
+test("template: the lookup reports each row with the boxes it affects", async ({ request }) => {
+  // Two soldiers get units of the new row in their boxes, through the agent.
+  const filled = await draft(request, [
+    { name: "add_to_box_from_storage", input: { userId: fx.soldierA.id, items: [{ equipmentItemId: tpl.a.id, quantity: 2 }] } },
+    { name: "add_to_box_from_storage", input: { userId: fx.soldierB.id, items: [{ equipmentItemId: tpl.a.id, quantity: 1 }] } },
+  ]);
+  await confirmDone(request, filled.run);
+  expect(await inBox(fx.soldierA.id, tpl.a.id)).toBe(2);
+  expect(await inBox(fx.soldierB.id, tpl.a.id)).toBe(1);
+
+  let template: { totalBoxes: number; rows: { equipmentItemId: string; rowName: string; quantityPerBox: number; boxesHoldingUnits: number; unitsInBoxes: number; boxesShort: number }[] } | null = null;
+  mock.script(
+    () => ({ toolUses: [{ name: "get_box_template", input: {} }] }),
+    (req) => {
+      template = firstResult(req);
+      return { text: "זו התבנית." };
+    },
+  );
+  await chat(request, fx.operator, [{ role: "user", text: "מה בתבנית?" }]);
+  const row = template!.rows.find((r) => r.equipmentItemId === tpl.a.id)!;
+  expect(row).toMatchObject({ rowName: "שורת בדיקה", quantityPerBox: 2, boxesHoldingUnits: 2, unitsInBoxes: 3 });
+  expect(row.boxesShort).toBe(template!.totalBoxes - 1); // only soldier A's box holds the full 2
+});
+
+test("template: lowering a quantity can take only the excess out of the boxes", async ({ request }) => {
+  const signedBefore = (await db.assignment.findMany({ where: { userId: fx.soldierA.id, equipmentItemId: tpl.a.id, active: true } })).reduce((s, r) => s + r.quantity, 0);
+
+  // "leave": one step, with a warning that names the real numbers.
+  const leave = await draft(request, [{ name: "box_template_set_quantity", input: { equipmentItemId: tpl.a.id, quantity: 1, boxContents: "leave" } }]);
+  expect(leave.run!.steps).toHaveLength(1);
+  expect(leave.run!.steps[0].warnings?.[0]).toContain("ב-1 קרטונים יש 1 יחידות מעבר לכמות החדשה");
+  expect(JSON.stringify(leave.results[0].json)).toContain("operatorWillSeeWarnings");
+  await runAction(request, fx.operator, leave.run!.id, "cancel");
+
+  // "restore_to_soldiers": the excess unit goes back onto soldier A first, then the row changes.
+  const clean = await draft(request, [{ name: "box_template_set_quantity", input: { equipmentItemId: tpl.a.id, quantity: 1, boxContents: "restore_to_soldiers" } }]);
+  expect(clean.run!.steps.map((s) => s.title)).toEqual([
+    `הוצאה מהקרטון של ${fx.soldierA.name} חזרה לחתימתו`,
+    "שינוי כמות בתבנית הקרטון: שורת בדיקה",
+  ]);
+  expect(clean.run!.steps[1].warnings ?? []).toEqual([]);
+  expect((clean.results[0].json as { cleanUpStepsAddedBeforeIt: number }).cleanUpStepsAddedBeforeIt).toBe(1);
+  await confirmDone(request, clean.run);
+
+  expect(await inBox(fx.soldierA.id, tpl.a.id)).toBe(1);
+  expect(await inBox(fx.soldierB.id, tpl.a.id)).toBe(1);
+  expect((await db.boxTemplateItem.findFirstOrThrow({ where: { equipmentItemId: tpl.a.id } })).quantity).toBe(1);
+  const signedAfter = (await db.assignment.findMany({ where: { userId: fx.soldierA.id, equipmentItemId: tpl.a.id, active: true } })).reduce((s, r) => s + r.quantity, 0);
+  expect(signedAfter).toBe(signedBefore + 1);
+
+  // Raising it again warns that boxes become short and needs no clean-up.
+  const up = await draft(request, [{ name: "box_template_set_quantity", input: { equipmentItemId: tpl.a.id, quantity: 3, boxContents: "leave" } }]);
+  expect(up.run!.steps).toHaveLength(1);
+  expect(up.run!.steps[0].warnings?.[0]).toContain("תופיע כחסרה");
+  await runAction(request, fx.operator, up.run!.id, "cancel");
+});
+
+test("template: alternatives are added and removed, and an item cannot sit in two rows", async ({ request }) => {
+  const add = await draft(request, [{ name: "box_template_add_alternative", input: { equipmentItemId: tpl.a.id, alternativeItemId: tpl.b.id } }]);
+  expect(add.run!.steps[0].title).toBe(`הוספת ${tpl.b.name} כחלופה בשורה "שורת בדיקה"`);
+  await confirmDone(request, add.run);
+  expect(await db.boxTemplateItemAlt.count({ where: { equipmentItemId: tpl.b.id } })).toBe(1);
+
+  const dup = await draft(request, [
+    { name: "box_template_add_item", input: { equipmentItemId: tpl.b.id, quantity: 1 } },
+    { name: "box_template_add_alternative", input: { equipmentItemId: tpl.a.id, alternativeItemId: tpl.b.id } },
+    { name: "box_template_add_alternative", input: { equipmentItemId: tpl.a.id, alternativeItemId: tpl.a.id } },
+    { name: "box_template_remove_item", input: { equipmentItemId: tpl.b.id, boxContents: "leave" } },
+  ]);
+  expect(dup.run).toBeNull();
+  expect(dup.results.every((r) => r.isError)).toBe(true);
+  expect(dup.results[0].raw).toContain("כחלופה בשורה");
+  expect(dup.results[3].raw).toContain("get_box_template"); // tplB is an alternative, not a row
+
+  const rename = await draft(request, [{ name: "box_template_set_group_name", input: { equipmentItemId: tpl.a.id, groupName: "שורה אחרת" } }]);
+  await confirmDone(request, rename.run);
+
+  const remove = await draft(request, [{ name: "box_template_remove_alternative", input: { equipmentItemId: tpl.a.id, alternativeItemId: tpl.b.id, boxContents: "leave" } }]);
+  expect(remove.run!.steps[0].warnings ?? []).toEqual([]); // no box holds the alternative
+  await confirmDone(request, remove.run);
+  expect(await db.boxTemplateItemAlt.count({ where: { equipmentItemId: tpl.b.id } })).toBe(0);
+});
+
+test("template: a clean-up step that fails stops the plan before the template is touched", async ({ request }) => {
+  const plan = await draft(request, [{ name: "box_template_remove_item", input: { equipmentItemId: tpl.a.id, boxContents: "return_to_storage" } }]);
+  expect(plan.run!.steps).toHaveLength(3);
+
+  // Between drafting and confirming, someone empties soldier A's box by hand.
+  const rowA = await db.boxItem.findFirstOrThrow({ where: { equipmentItemId: tpl.a.id, box: { userId: fx.soldierA.id } } });
+  await db.boxItem.delete({ where: { id: rowA.id } });
+
+  const res = await runAction(request, fx.operator, plan.run!.id, "confirm");
+  expect(res.run!.status).toBe("FAILED");
+  expect(res.run!.receipt!.map((r) => r.status)).toEqual(["failed", "skipped", "skipped"]);
+  expect(await db.boxTemplateItem.count({ where: { equipmentItemId: tpl.a.id } })).toBe(1); // row still there
+  expect(await inBox(fx.soldierB.id, tpl.a.id)).toBe(1); // nothing else moved
+});
+
+test("template: a step knows what earlier steps of the same plan already do", async ({ request }) => {
+  const rowB = await db.boxItem.findFirstOrThrow({ where: { equipmentItemId: tpl.a.id, box: { userId: fx.soldierB.id } } });
+
+  // The model empties the box by hand and then removes the row with "leave": no false warning.
+  const manual = await draft(request, [
+    { name: "remove_from_box_to_storage", input: { userId: fx.soldierB.id, boxItemId: rowB.id, quantity: rowB.quantity } },
+    { name: "box_template_remove_item", input: { equipmentItemId: tpl.a.id, boxContents: "leave" } },
+  ]);
+  expect(manual.run!.steps).toHaveLength(2);
+  expect(manual.run!.steps[1].warnings ?? []).toEqual([]);
+  expect(manual.run!.steps[1].details.join(" ")).toContain("הצעדים שמעל מוציאים");
+  await runAction(request, fx.operator, manual.run!.id, "cancel");
+
+  // The model empties the box by hand and ALSO asks the system to: the clean-up is not planned twice.
+  const both = await draft(request, [
+    { name: "remove_from_box_to_storage", input: { userId: fx.soldierB.id, boxItemId: rowB.id, quantity: rowB.quantity } },
+    { name: "box_template_remove_item", input: { equipmentItemId: tpl.a.id, boxContents: "return_to_storage" } },
+  ]);
+  expect(both.run!.steps.map((s) => s.title)).toEqual([`הסרה מהקרטון של ${fx.soldierB.name} והחזרה לימ״ח`, 'הסרת "שורה אחרת" מתבנית הקרטון']);
+  await runAction(request, fx.operator, both.run!.id, "cancel");
+
+  // Returning a soldier's equipment earlier in the plan removes the "still holds equipment" warning.
+  const holder = await db.user.findFirstOrThrow({
+    where: { active: true, role: "USER", assignments: { some: { active: true } }, box: null },
+    include: { assignments: { where: { active: true } } },
+  }).catch(() => null);
+  if (holder) {
+    const off = await draft(request, [
+      { name: "return_equipment_to_storage", input: { userId: holder.id, items: holder.assignments.map((a) => ({ assignmentId: a.id, quantity: a.quantity })) } },
+      { name: "set_user_active", input: { userId: holder.id, active: false } },
+    ]);
+    expect(off.run!.steps).toHaveLength(2);
+    expect((off.run!.steps[1].warnings ?? []).some((w) => w.includes("עדיין רשומות"))).toBe(false);
+    await runAction(request, fx.operator, off.run!.id, "cancel");
+  }
+});
+
+test("template: removing a row warns when boxes are left as they are, and can empty them first", async ({ request }) => {
+  const stockBefore = await stock(tpl.a.id);
+
+  const leave = await draft(request, [{ name: "box_template_remove_item", input: { equipmentItemId: tpl.a.id, boxContents: "leave" } }]);
+  expect(leave.run!.steps).toHaveLength(1);
+  expect(leave.run!.steps[0].warnings?.[0]).toContain('ב-1 קרטונים יש 1 יחידות של "שורה אחרת"');
+  expect(leave.run!.steps[0].warnings?.[1]).toContain("להחזיר אותן קודם לימ״ח");
+  await runAction(request, fx.operator, leave.run!.id, "cancel");
+
+  const clean = await draft(request, [{ name: "box_template_remove_item", input: { equipmentItemId: tpl.a.id, boxContents: "return_to_storage" } }]);
+  expect(clean.run!.steps.map((s) => s.title)).toEqual([`הסרה מהקרטון של ${fx.soldierB.name} והחזרה לימ״ח`, 'הסרת "שורה אחרת" מתבנית הקרטון']);
+  expect(clean.run!.steps[1].warnings ?? []).toEqual([]);
+  expect(clean.run!.steps[1].details.join(" ")).toContain("הצעדים שמעל מוציאים את היחידות האלה");
+  const done = await confirmDone(request, clean.run);
+  expect(done.receipt!.map((r) => r.status)).toEqual(["done", "done"]);
+
+  expect(await db.boxItem.count({ where: { equipmentItemId: tpl.a.id } })).toBe(0);
+  expect(await db.boxTemplateItem.count({ where: { equipmentItemId: tpl.a.id } })).toBe(0);
+  expect(await stock(tpl.a.id)).toBe(stockBefore + 1);
+  expect(await db.auditLog.count({ where: { viaAgentRunId: clean.run!.id } })).toBeGreaterThanOrEqual(2);
+});
+
+test("warnings: deactivating a user or an item in use, a large stock drop and a promotion all say what follows", async ({ request }) => {
+  const holder = await db.assignment.findFirstOrThrow({
+    where: { active: true, user: { active: true, role: "USER" } },
+    include: { user: true },
+  });
+  const have = await stock(fx.item.id);
+
+  const { run } = await draft(request, [
+    { name: "set_user_active", input: { userId: holder.userId, active: false } },
+    { name: "update_item", input: { equipmentItemId: fx.item.id, active: false } },
+    { name: "set_storage_quantity", input: { equipmentItemId: fx.item.id, quantity: 0 } },
+    { name: "set_user_role", input: { userId: fx.soldierB.id, role: "SUPER_ADMIN" } },
+    { name: "set_storage_quantity", input: { equipmentItemId: fx.item.id, quantity: have - 1 } },
+  ]);
+  const [user, item, drop, role, small] = run!.steps;
+  expect(user.warnings?.[0]).toContain(`על ${holder.user.name} עדיין רשומות`);
+  expect(user.warnings?.[1]).toContain("להחזיר את הציוד לימ״ח");
+  expect(item.warnings?.[0]).toContain("הפריט עדיין בשימוש");
+  expect(drop.warnings?.[0]).toContain(`המלאי יורד ב-${have} יחידות`);
+  expect(role.warnings?.[0]).toContain("הרשאה מלאה");
+  expect(small.warnings ?? [], "a one-unit correction is not alarming").toEqual([]);
+  await runAction(request, fx.operator, run!.id, "cancel");
+  expect(await stock(fx.item.id)).toBe(have);
+});
+
+test("knowledge: every message carries live totals, and the browse lookups cover the whole app", async ({ request }) => {
+  const out: Record<string, unknown> = {};
+  const calls = [
+    { name: "system_overview", input: {} },
+    { name: "list_users", input: { role: "USER", hasBox: false, limit: 5 } },
+    { name: "get_user_details", input: { userId: fx.soldierA.id } },
+    { name: "list_items", input: { kind: "weapon" } },
+    { name: "list_departments", input: {} },
+    { name: "list_unit_templates", input: {} },
+    { name: "list_serialized_equipment", input: { kind: "all" } },
+    { name: "recent_activity", input: { limit: 5 } },
+    { name: "tash_history", input: { limit: 5 } },
+  ];
+  mock.script(
+    () => ({ toolUses: calls }),
+    (req) => {
+      toolResults(req).forEach((r, i) => {
+        expect(r.isError, `${calls[i].name}: ${r.raw.slice(0, 200)}`).toBe(false);
+        out[calls[i].name] = r.json;
+      });
+      return { text: "הכול ידוע." };
+    },
+  );
+  const res = await chat(request, fx.operator, [{ role: "user", text: "ספר לי על המערכת" }]);
+  expect(res.error).toBeNull();
+  expect(res.run).toBeNull();
+
+  const boxes = await db.box.count();
+  const soldiers = await db.user.count({ where: { active: true, role: "USER" } });
+  const noBox = await db.user.count({ where: { active: true, role: "USER", box: null } });
+
+  // The totals are in the instructions of every message, in the uncached block.
+  const system = mock.requests[0].system as { text: string; cache_control?: unknown }[];
+  expect(system[1].cache_control).toBeUndefined();
+  expect(system[1].text).toContain(`${boxes} boxes exist`);
+  expect(system[1].text).toContain(`${soldiers} soldiers`);
+  expect(system[0].text).not.toContain("boxes exist");
+
+  const overview = out.system_overview as { boxes: { total: number; activeSoldiersWithoutBox: number }; people: { soldiers: number }; organisation: { departments: { name: string }[] } };
+  expect(overview.boxes).toMatchObject({ total: boxes, activeSoldiersWithoutBox: noBox });
+  expect(overview.people.soldiers).toBe(soldiers);
+  expect(overview.organisation.departments.length).toBe(await db.department.count({ where: { active: true } }));
+
+  const users = out.list_users as { totalMatches: number; users: { hasBox: boolean }[] };
+  expect(users.totalMatches).toBe(noBox);
+  expect(users.users.length).toBeLessThanOrEqual(5);
+  expect(users.users.every((u) => u.hasBox === false)).toBe(true);
+
+  const details = out.get_user_details as { name: string; email: string };
+  const realA = await db.user.findUniqueOrThrow({ where: { id: fx.soldierA.id } });
+  expect(details).toMatchObject({ name: realA.name, email: realA.email });
+
+  expect((out.list_items as { totalMatches: number }).totalMatches).toBe(await db.equipmentItem.count({ where: { active: true, isWeapon: true } }));
+  expect((out.list_departments as unknown[]).length).toBe(await db.department.count());
+  expect((out.list_unit_templates as unknown[]).length).toBe(await db.unitTemplate.count());
+  const serials = out.list_serialized_equipment as { signedCount: number };
+  expect(serials.signedCount).toBe(
+    Math.min(300, await db.assignment.count({ where: { active: true, serialNumber: { not: null }, equipmentItem: { OR: [{ isWeapon: true }, { isSight: true }] } } })),
+  );
+  expect((out.recent_activity as { totalMatches: number; actions: unknown[] }).totalMatches).toBe(await db.auditLog.count());
+  expect((out.recent_activity as { actions: unknown[] }).actions).toHaveLength(5);
+  expect(Array.isArray(out.tash_history)).toBe(true);
+  expectNoMockProblems();
+});
+
+test("reports: low stock, who lacks an item, box completeness and waiting requests come from live data", async ({ request }) => {
+  const results: Record<string, unknown> = {};
+  const names = ["stock_report", "who_lacks_item", "box_fill_report", "requests_overview"] as const;
+  mock.script(
+    () => ({
+      toolUses: [
+        { name: "stock_report", input: { atMost: 0 } },
+        { name: "who_lacks_item", input: { equipmentItemIds: [tpl.b.id] } },
+        { name: "box_fill_report", input: { limit: 5 } },
+        { name: "requests_overview", input: {} },
+      ],
+    }),
+    (req) => {
+      toolResults(req).forEach((r, i) => (results[names[i]] = r.json));
+      return { text: "הנה הדוחות." };
+    },
+  );
+  const res = await chat(request, fx.operator, [{ role: "user", text: "דוחות" }]);
+  expect(res.run).toBeNull();
+  expect(res.statuses).toEqual(["מכין דוח מלאי", "בודק למי חסר הפריט", "מכין דוח קרטונים", "מסכם בקשות"]);
+
+  const zero = await db.storageInventory.count({ where: { quantity: 0, location: { name: YAMAH }, equipmentItem: { active: true } } });
+  const stockRep = results.stock_report as { threshold: number; outOfStock: number; items: { inStorage: number }[] };
+  expect(stockRep.threshold).toBe(0);
+  expect(stockRep.items.every((i) => i.inStorage === 0)).toBe(true);
+  expect(stockRep.outOfStock).toBeGreaterThanOrEqual(zero); // items with no storage row at all also count as zero
+
+  const lack = results.who_lacks_item as { peopleChecked: number; lackingCount: number };
+  expect(lack.lackingCount).toBe(lack.peopleChecked); // nobody holds the spec's second test item
+
+  const fill = results.box_fill_report as { totalBoxes: number; completeBoxes: number; incompleteBoxes: number; incomplete: unknown[]; boxesShortPerRow: unknown[] };
+  expect(fill.totalBoxes).toBe(await db.box.count());
+  expect(fill.completeBoxes + fill.incompleteBoxes).toBe(fill.totalBoxes);
+  expect(fill.incomplete.length).toBeLessThanOrEqual(5);
+  expect(fill.boxesShortPerRow.length).toBe(await db.boxTemplateItem.count());
+
+  const waiting = await db.request.count({ where: { status: { in: ["OPEN", "IN_PROGRESS"] }, type: { notIn: ["ADMIN_ASSIGNMENT", "ADMIN_EQUIPMENT_TRANSFER"] } } });
+  expect((results.requests_overview as { totalWaiting: number }).totalWaiting).toBe(waiting);
 });
 
 // ─── the real UI ──────────────────────────────────────────────────────────────
@@ -893,6 +1252,71 @@ for (const viewport of [
     await context.close();
   });
 }
+
+test("UI: a plan with consequences shows them in amber and a long plan folds", async ({ browser }) => {
+  test.setTimeout(120_000);
+  const tash = await db.tashItem.create({ data: { name: `${MARKER}_long`, unit: "יחידה" } });
+  const have = await stock(fx.item.id);
+  for (const viewport of [
+    { label: "desktop", width: 1280, height: 860 },
+    { label: "phone", width: 375, height: 740 },
+  ]) {
+    const context = await browser.newContext({ viewport, locale: "he-IL", baseURL: BASE_URL });
+    await signIn(context, fx.operator);
+    await context.addInitScript(() => {
+      const hide = () => {
+        const style = document.createElement("style");
+        style.textContent = "nextjs-portal{display:none!important}";
+        document.documentElement.appendChild(style);
+      };
+      if (document.documentElement) hide();
+      else document.addEventListener("DOMContentLoaded", hide);
+    });
+    const page = await context.newPage();
+    await page.goto("/admin");
+    await page.getByTestId("agent-open").click();
+
+    scriptTurn(
+      [
+        () => [
+          ...Array.from({ length: 10 }, (_, i) => ({ name: "tash_add_quantity", input: { itemId: tash.id, location: `מיקום ${i + 1}`, quantity: 1 } })),
+          { name: "set_storage_quantity", input: { equipmentItemId: fx.item.id, quantity: 0 } },
+        ],
+      ],
+      "שים לב לאזהרה בצעד האחרון.",
+    );
+    await page.getByTestId("agent-input").fill("תוכנית ארוכה עם אזהרה");
+    await page.getByTestId("agent-input").press("Enter");
+
+    const card = page.getByTestId("agent-run-card").last();
+    await expect(card).toHaveAttribute("data-run-status", "PROPOSED");
+    await expect(card).toHaveAttribute("data-step-count", "11");
+    await expect(card).toHaveAttribute("data-warning-count", "1");
+    // Folded: the first steps, and always the step that carries a warning.
+    await expect(card.locator("ol > li")).toHaveCount(5);
+    await expect(card.getByTestId("agent-step-warning")).toContainText(`המלאי יורד ב-${have} יחידות`);
+    await expect(card.getByTestId("agent-plan-warning")).toBeVisible();
+    await expect(page.getByTestId("agent-confirm")).toHaveText("קראתי את האזהרות, אשר ובצע");
+    await expectInsideViewport(page, "agent-step-warning");
+    await expectInsideViewport(page, "agent-confirm");
+    await card.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${SHOT_DIR}/${viewport.label}-6-warning-folded.png` });
+
+    await card.getByTestId("agent-toggle-steps").click();
+    await expect(card.locator("ol > li")).toHaveCount(11);
+    await card.getByTestId("agent-toggle-steps").click();
+    await expect(card.locator("ol > li")).toHaveCount(5);
+
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(1);
+
+    await page.getByTestId("agent-cancel").click();
+    await expect(card).toHaveAttribute("data-run-status", "CANCELLED");
+    await context.close();
+  }
+  expect(await stock(fx.item.id)).toBe(have);
+  expect(await db.tashInventory.count({ where: { itemId: tash.id } })).toBe(0);
+});
 
 test("a soldier and a regular admin do not get the agent button", async ({ browser }) => {
   for (const who of [fx.soldierA, fx.admin].filter((p): p is Person => Boolean(p))) {

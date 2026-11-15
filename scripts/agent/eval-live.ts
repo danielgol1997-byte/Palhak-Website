@@ -25,7 +25,7 @@ const PRICES: Record<string, [number, number]> = {
   "claude-opus-5-5": [4, 20],
 };
 
-type Step = { action: string; params: Record<string, unknown>; title: string; details: string[] };
+type Step = { action: string; params: Record<string, unknown>; title: string; details: string[]; warnings?: string[] };
 type Turn = { text: string; runId: string | null; steps: Step[]; error: string | null; ms: number };
 type Msg = { role: "user" | "assistant"; text: string; runId?: string };
 
@@ -36,6 +36,18 @@ async function main() {
   const { PrismaClient } = await import("@prisma/client");
   const db = new PrismaClient();
   console.log(`Database: ${dbHost()}   Server: ${BASE}\n`);
+
+  // Leftovers of an interrupted earlier run (test branch only).
+  const stale = (await db.equipmentItem.findMany({ where: { name: { startsWith: "אפוד הערכה " } }, select: { id: true } })).map((i) => i.id);
+  if (stale.length) {
+    await db.boxItem.deleteMany({ where: { equipmentItemId: { in: stale } } });
+    await db.assignment.deleteMany({ where: { equipmentItemId: { in: stale } } });
+    await db.boxTemplateItem.deleteMany({ where: { equipmentItemId: { in: stale } } });
+    await db.requestItem.deleteMany({ where: { equipmentItemId: { in: stale } } });
+    await db.storageInventory.deleteMany({ where: { equipmentItemId: { in: stale } } });
+    await db.equipmentItem.deleteMany({ where: { id: { in: stale } } });
+  }
+  await db.tashItem.deleteMany({ where: { name: { startsWith: "כיסאות הערכה " } } });
 
   // ── fixtures from the branch ────────────────────────────────────────────────
   const operator = await db.user.findFirstOrThrow({ where: { role: { in: ["THEME_MASTER", "SUPER_ADMIN"] }, active: true }, orderBy: { createdAt: "asc" } });
@@ -96,6 +108,38 @@ async function main() {
   };
   const one = (text: string) => ask([{ role: "user", text }]);
   const lines = (step: Step, key: string) => (step.params[key] as { equipmentItemId?: string; quantity: number }[]) ?? [];
+
+  /**
+   * A catalog item that sits in the box template (2 per box) and in three soldiers' boxes
+   * (2, 2 and 1 units), created directly so the template scenarios start from a known state.
+   */
+  async function templateFixture(opts: { inTemplate?: boolean } = {}) {
+    const name = `אפוד הערכה ${Date.now() % 100000}`;
+    const yamah = await db.storageLocation.findFirstOrThrow({ where: { name: YAMAH } });
+    const created = await db.equipmentItem.create({ data: { name, categoryId: item.categoryId } });
+    await db.storageInventory.create({ data: { locationId: yamah.id, equipmentItemId: created.id, quantity: 20 } });
+    if (opts.inTemplate !== false) {
+      const template = (await db.boxTemplate.findFirst()) ?? (await db.boxTemplate.create({ data: {} }));
+      await db.boxTemplateItem.create({ data: { boxTemplateId: template.id, equipmentItemId: created.id, quantity: 2 } });
+      const holders = unique.slice(0, 3);
+      for (const [i, who] of holders.entries()) {
+        const box = (await db.box.findUnique({ where: { userId: who.id } })) ?? (await db.box.create({ data: { userId: who.id } }));
+        await db.boxItem.create({ data: { boxId: box.id, equipmentItemId: created.id, quantity: i < 2 ? 2 : 1, movedById: operator.id } });
+      }
+    }
+    return {
+      id: created.id,
+      name,
+      cleanup: async () => {
+        await db.boxItem.deleteMany({ where: { equipmentItemId: created.id } });
+        await db.assignment.deleteMany({ where: { equipmentItemId: created.id } });
+        await db.boxTemplateItem.deleteMany({ where: { equipmentItemId: created.id } });
+        await db.requestItem.deleteMany({ where: { equipmentItemId: created.id } });
+        await db.storageInventory.deleteMany({ where: { equipmentItemId: created.id } });
+        await db.equipmentItem.delete({ where: { id: created.id } }).catch(() => undefined);
+      },
+    };
+  }
 
   // ── cases ───────────────────────────────────────────────────────────────────
   type Case = { name: string; run: () => Promise<string | null> }; // null = pass, string = why it failed
@@ -384,9 +428,20 @@ async function main() {
     {
       name: "Deactivate a user: the right person, active=false",
       run: async () => {
-        const t = await one(`תשבית את המשתמש ${B.name}, הוא השתחרר`);
+        const ask1 = `תשבית את המשתמש ${B.name}, הוא השתחרר`;
+        let t = await one(ask1);
         if (t.error) return t.error;
-        if (!t.runId) return `no plan: ${t.text}`;
+        if (!t.runId) {
+          // He still holds equipment, so explaining first is right. Insisting must then be honoured.
+          if (!/ציוד|חתומ|קרטון/.test(t.text)) return `no plan and no reason: ${t.text}`;
+          t = await ask([
+            { role: "user", text: ask1 },
+            { role: "assistant", text: t.text },
+            { role: "user", text: "הבנתי. תשבית אותו בכל זאת עכשיו, את הציוד נסדר אחר כך." },
+          ]);
+          if (t.error) return t.error;
+          if (!t.runId) return `refused even after the operator insisted: ${t.text}`;
+        }
         await act(t.runId, "cancel");
         const s = t.steps[0];
         return t.steps.length === 1 && s.action === "set_user_active" && s.params.userId === B.id && s.params.active === false ? null : JSON.stringify(t.steps.map((x) => [x.action, x.params]));
@@ -430,6 +485,237 @@ async function main() {
         const ok = t.steps.length >= 1 && t.steps[0].action === "assign_equipment" && t.steps.every((x) => ["assign_equipment", "transfer_equipment"].includes(x.action));
         // Either the first half only (then asks to continue), or a direct assignment to the final holder is acceptable.
         return ok ? null : JSON.stringify(t.steps.map((x) => [x.action, x.params]));
+      },
+    },
+    // ── wide-reaching changes: explain, offer the clean way, and be able to do it ──
+    {
+      name: "Template: removing a row that boxes hold is explained with real numbers before anything is planned",
+      run: async () => {
+        const fxT = await templateFixture();
+        try {
+          const ask1 = `תסיר את ${fxT.name} מתבנית הקרטון`;
+          const t = await one(ask1);
+          if (t.error) return t.error;
+          if (t.runId) {
+            await act(t.runId, "cancel");
+            const last = t.steps[t.steps.length - 1];
+            // Planning straight away is only acceptable if the card itself carries the warning and the reply mentions the boxes.
+            return last.warnings?.length && /קרטונ/.test(t.text) ? null : `planned without explaining: ${t.text}`;
+          }
+          if (!/3/.test(t.text) || !/קרטונ/.test(t.text)) return `did not say how many boxes are affected: ${t.text}`;
+          if (!/ימ״ח|ימ"ח|חתימ|חייל/.test(t.text)) return `did not offer a way to handle the units: ${t.text}`;
+
+          // The operator picks the clean route; the agent must build it.
+          const t2 = await ask([
+            { role: "user", text: ask1 },
+            { role: "assistant", text: t.text },
+            { role: "user", text: "תחזיר קודם את מה שבקרטונים לימ״ח ואז תסיר" },
+          ]);
+          if (t2.error) return t2.error;
+          if (!t2.runId) return `no plan after the operator chose: ${t2.text}`;
+          const actions = t2.steps.map((x) => x.action);
+          // Three boxes emptied, then the row removed, with no leftover warning on the removal.
+          const ok =
+            actions.length === 4 &&
+            actions.slice(0, 3).every((a) => a === "remove_from_box_to_storage") &&
+            actions[3] === "box_template_remove_item" &&
+            (t2.steps[3].warnings?.length ?? 0) === 0;
+          if (!ok) {
+            await act(t2.runId, "cancel");
+            return `plan: ${JSON.stringify(t2.steps.map((x) => [x.action, x.params]))}`;
+          }
+          const done = await act(t2.runId, "confirm");
+          if (done.run?.status !== "DONE") return `clean-up plan not DONE: ${JSON.stringify(done)}`;
+          const left = await db.boxItem.count({ where: { equipmentItemId: fxT.id } });
+          const row = await db.boxTemplateItem.count({ where: { equipmentItemId: fxT.id } });
+          return left === 0 && row === 0 ? null : `after execution: ${left} box rows, ${row} template rows`;
+        } finally {
+          await fxT.cleanup();
+        }
+      },
+    },
+    {
+      name: "Template: 'remove it and leave the boxes as they are' is planned as asked, with the warning on the card",
+      run: async () => {
+        const fxT = await templateFixture();
+        try {
+          const t = await one(`תסיר את ${fxT.name} מתבנית הקרטון. את מה שכבר נמצא בקרטונים תשאיר שם, לא לגעת.`);
+          if (t.error) return t.error;
+          if (!t.runId) return `no plan: ${t.text}`;
+          await act(t.runId, "cancel");
+          const s = t.steps[0];
+          return t.steps.length === 1 && s.action === "box_template_remove_item" && s.params.boxContents === "leave" && (s.warnings?.length ?? 0) > 0
+            ? null
+            : JSON.stringify(t.steps.map((x) => [x.action, x.params, x.warnings]));
+        } finally {
+          await fxT.cleanup();
+        }
+      },
+    },
+    {
+      name: "Template: lowering a quantity, with the excess sent back to the soldiers",
+      run: async () => {
+        const fxT = await templateFixture();
+        try {
+          const t = await one(`תוריד את הכמות של ${fxT.name} בתבנית הקרטון ל-1. את העודף תחזיר לחתימה של החיילים.`);
+          if (t.error) return t.error;
+          if (!t.runId) return `no plan: ${t.text}`;
+          await act(t.runId, "cancel");
+          const actions = t.steps.map((x) => x.action);
+          const last = t.steps[t.steps.length - 1];
+          // Two of the three boxes hold 2 units, so two units are in excess.
+          return actions.length === 3 && actions.slice(0, 2).every((a) => a === "restore_from_box") && last.action === "box_template_set_quantity" && last.params.quantity === 1 && last.params.boxContents === "restore_to_soldiers"
+            ? null
+            : JSON.stringify(t.steps.map((x) => [x.action, x.params]));
+        } finally {
+          await fxT.cleanup();
+        }
+      },
+    },
+    {
+      name: "Template: adding a row nobody holds is planned directly and the reply says boxes will show it missing",
+      run: async () => {
+        const fxT = await templateFixture({ inTemplate: false });
+        try {
+          const t = await one(`תוסיף את ${fxT.name} לתבנית הקרטון, אחד לכל קרטון`);
+          if (t.error) return t.error;
+          if (!t.runId) return `no plan: ${t.text}`;
+          await act(t.runId, "cancel");
+          const s = t.steps[0];
+          if (!(t.steps.length === 1 && s.action === "box_template_add_item" && s.params.equipmentItemId === fxT.id && s.params.quantity === 1)) {
+            return JSON.stringify(t.steps.map((x) => [x.action, x.params]));
+          }
+          return /חסר|קרטונ/.test(t.text) ? null : `reply did not mention the effect on existing boxes: ${t.text}`;
+        } finally {
+          await fxT.cleanup();
+        }
+      },
+    },
+    {
+      name: "Deactivating a soldier who still holds equipment: says so, then plans return + deactivation when asked",
+      run: async () => {
+        const holder = await db.assignment.findFirst({
+          where: { active: true, status: "ASSIGNED", user: { active: true, role: "USER" } },
+          include: { user: true },
+        });
+        if (!holder || soldiers.filter((x) => x.name === holder.user.name).length > 1) return null;
+        const ask1 = `תשבית את המשתמש ${holder.user.name}`;
+        const t = await one(ask1);
+        if (t.error) return t.error;
+        if (t.runId) await act(t.runId, "cancel");
+        if (!/ציוד|חתומ|קרטון/.test(t.text)) return `did not mention the equipment still on the user: ${t.text}`;
+        const t2 = await ask([
+          { role: "user", text: ask1 },
+          { role: "assistant", text: t.text, ...(t.runId ? { runId: t.runId } : {}) },
+          { role: "user", text: "קודם תחזיר את כל הציוד החתום שלו לימ״ח, ואז תשבית אותו" },
+        ]);
+        if (t2.error) return t2.error;
+        if (!t2.runId) return `no plan: ${t2.text}`;
+        await act(t2.runId, "cancel");
+        const hasReturn = t2.steps.some((x) => x.action === "return_equipment_to_storage" && x.params.userId === holder.userId);
+        const off = t2.steps.find((x) => x.action === "set_user_active");
+        const order = t2.steps.findIndex((x) => x.action === "return_equipment_to_storage") < t2.steps.findIndex((x) => x.action === "set_user_active");
+        // Deactivation may also be left for a second round; then only the return must be planned and the reply must say so.
+        if (hasReturn && off && off.params.userId === holder.userId && off.params.active === false && order) return null;
+        if (hasReturn && !off && /להשבית|השבת/.test(t2.text)) return null;
+        return JSON.stringify(t2.steps.map((x) => [x.action, x.params]));
+      },
+    },
+    {
+      name: "Report: what is out of stock",
+      run: async () => {
+        const zero = await db.storageInventory.findFirst({ where: { quantity: 0, location: { name: YAMAH }, equipmentItem: { active: true } }, include: { equipmentItem: true } });
+        const t = await one("מה אזל במלאי בימ״ח?");
+        if (t.error) return t.error;
+        if (t.runId) return "drafted a plan for a report";
+        if (!zero) return t.text.length > 5 ? null : "empty answer";
+        return t.text.length > 20 ? null : `answer too thin: ${t.text}`;
+      },
+    },
+    {
+      name: "Report: how complete the boxes are, with the real count",
+      run: async () => {
+        const t = await one("כמה קרטונים לא מלאים לפי התבנית, ומה הכי חסר?");
+        if (t.error) return t.error;
+        if (t.runId) return "drafted a plan for a report";
+        const total = await db.box.count();
+        return /\d/.test(t.text) && t.text.length > 20 ? null : `no numbers in the answer (there are ${total} boxes): ${t.text}`;
+      },
+    },
+    {
+      name: "Report: who is missing an item",
+      run: async () => {
+        const t = await one(`למי אין ${item.name}?`);
+        if (t.error) return t.error;
+        return t.runId ? "drafted a plan for a report" : /\d/.test(t.text) ? null : `no count in the answer: ${t.text}`;
+      },
+    },
+    // ── knowing the whole system ─────────────────────────────────────────────────
+    {
+      name: "Knows how many boxes exist, without being told where to look",
+      run: async () => {
+        const boxes = await db.box.count();
+        const t = await one("כמה קרטונים יש לי?");
+        if (t.error) return t.error;
+        if (t.runId) return "drafted a plan for a question";
+        return t.text.includes(String(boxes)) ? null : `expected ${boxes} in: ${t.text}`;
+      },
+    },
+    {
+      name: "Knows how many soldiers there are and how many have no box",
+      run: async () => {
+        const total = await db.user.count({ where: { active: true, role: "USER" } });
+        const noBox = await db.user.count({ where: { active: true, role: "USER", box: null } });
+        const t = await one("כמה חיילים יש במערכת, ולכמה מהם אין קרטון?");
+        if (t.error) return t.error;
+        return t.text.includes(String(total)) && t.text.includes(String(noBox)) ? null : `expected ${total} and ${noBox} in: ${t.text}`;
+      },
+    },
+    {
+      name: "Lists the departments by name",
+      run: async () => {
+        const depts = await db.department.findMany({ where: { active: true }, select: { name: true } });
+        const t = await one("אילו מחלקות יש במערכת?");
+        if (t.error) return t.error;
+        const named = depts.filter((d) => t.text.includes(d.name)).length;
+        return named === depts.length ? null : `named ${named} of ${depts.length}: ${t.text}`;
+      },
+    },
+    {
+      name: "Lists the admins by name",
+      run: async () => {
+        const admins = await db.user.findMany({ where: { active: true, role: "ADMIN" }, select: { name: true } });
+        const t = await one("מי המנהלים במערכת?");
+        if (t.error) return t.error;
+        if (admins.length === 0) return t.text.length > 3 ? null : "empty answer";
+        const named = admins.filter((a) => t.text.includes(a.name)).length;
+        return named >= Math.min(admins.length, 3) ? null : `named ${named} of ${admins.length}: ${t.text}`;
+      },
+    },
+    {
+      name: "Gives a soldier's contact details",
+      run: async () => {
+        const full = await db.user.findUniqueOrThrow({ where: { id: A.id } });
+        const t = await one(`מה המייל והטלפון של ${A.name}?`);
+        if (t.error) return t.error;
+        return t.text.includes(full.email) ? null : `expected ${full.email} in: ${t.text}`;
+      },
+    },
+    {
+      name: "Summarises what happened recently from the audit trail",
+      run: async () => {
+        const t = await one("מה הפעולות האחרונות שבוצעו במערכת?");
+        if (t.error) return t.error;
+        return !t.runId && t.text.length > 40 ? null : `thin answer: ${t.text}`;
+      },
+    },
+    {
+      name: "Total equipment in storage and how many item types are in the catalog",
+      run: async () => {
+        const items = await db.equipmentItem.count({ where: { active: true } });
+        const t = await one("כמה סוגי פריטים יש בקטלוג?");
+        if (t.error) return t.error;
+        return t.text.includes(String(items)) ? null : `expected ${items} in: ${t.text}`;
       },
     },
   ];

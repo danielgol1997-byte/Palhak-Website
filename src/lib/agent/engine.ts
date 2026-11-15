@@ -1,9 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { AGENT_ACTIONS, actionAllowedFor, previewStep } from "./actions";
+import { AGENT_ACTIONS, actionAllowedFor, getAgentAction, previewStep } from "./actions";
 import { READ_TOOLS, getReadTool } from "./readTools";
 import { AGENT_SYSTEM_PROMPT, requestContextBlock } from "./prompt";
+import { loadSystemSnapshot, snapshotLine } from "./snapshot";
 import { createProposedRun, loadRunViews, runOutcomeNote, type RunView } from "./runs";
 import { PlanError, type AgentActor, type PlanStep } from "./types";
 
@@ -17,7 +18,8 @@ import { PlanError, type AgentActor, type PlanStep } from "./types";
 export const DEFAULT_AGENT_MODEL = "claude-haiku-5-5";
 
 const MAX_MODEL_CALLS = 10;
-const MAX_PLAN_STEPS = 12;
+/** High enough for a clean-up that touches every soldier's box, one step per box item. */
+const MAX_PLAN_STEPS = 150;
 const MAX_TOOL_RESULT_CHARS = 14_000;
 const MAX_HISTORY_MESSAGES = 30;
 const DISCARD_TOOL = "discard_draft_plan";
@@ -143,9 +145,13 @@ export async function runAgentTurn(input: {
 
   const model = agentModel();
   const tools = buildTools(actor);
+  // Fresh totals for every message. If the query fails the agent still works, just without them.
+  const snapshot = await loadSystemSnapshot()
+    .then(snapshotLine)
+    .catch(() => null);
   const system: Anthropic.TextBlockParam[] = [
     { type: "text", text: AGENT_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
-    { type: "text", text: requestContextBlock(actor.name, new Date()) },
+    { type: "text", text: requestContextBlock(actor.name, new Date(), snapshot) },
   ];
 
   const draft: PlanStep[] = [];
@@ -258,17 +264,41 @@ async function handleToolCall(
 
   // Everything else is an action: validate it against live data and add it to the draft.
   onStatus?.("מכין תוכנית");
-  if (draft.length >= MAX_PLAN_STEPS) {
-    return { content: `The draft plan already has ${MAX_PLAN_STEPS} steps, the maximum. Tell the operator to confirm this part first.`, isError: true };
-  }
   try {
-    const { params, view } = await previewStep(use.name, use.input, actor);
-    draft.push({ action: use.name, params, title: view.title, details: view.details });
+    // Parse + check first; this also rejects unknown actions and bad input.
+    const first = await previewStep(use.name, use.input, actor, { phase: "draft", earlierSteps: draft });
+
+    // Some actions come with clean-up steps that must run first (e.g. empty the boxes, then change the template).
+    const requested =
+      (await getAgentAction(use.name)?.prerequisites?.(first.params, actor, { phase: "draft", earlierSteps: draft })) ?? [];
+    if (draft.length + requested.length + 1 > MAX_PLAN_STEPS) {
+      return {
+        content: `Step NOT added: it needs ${requested.length + 1} steps and the plan may hold ${MAX_PLAN_STEPS} (it has ${draft.length}). Tell the operator this is too large for one plan and offer to do it in parts.`,
+        isError: true,
+      };
+    }
+    const prerequisites: PlanStep[] = [];
+    for (const pre of requested) {
+      const checked = await previewStep(pre.action, pre.params, actor, { phase: "draft", earlierSteps: [...draft, ...prerequisites] });
+      prerequisites.push({ action: pre.action, params: checked.params, ...checked.view });
+    }
+    // Describe the step again as it will look once the clean-up steps have run.
+    const main = prerequisites.length
+      ? await previewStep(use.name, use.input, actor, { phase: "draft", earlierSteps: [...draft, ...prerequisites] })
+      : first;
+
+    draft.push(...prerequisites, { action: use.name, params: main.params, ...main.view });
     return {
       content: JSON.stringify({
         addedToDraftPlan: true,
         stepNumber: draft.length,
-        willShowOperator: view,
+        ...(prerequisites.length
+          ? { cleanUpStepsAddedBeforeIt: prerequisites.length, firstCleanUpSteps: prerequisites.slice(0, 3).map((p) => p.title) }
+          : {}),
+        willShowOperator: main.view,
+        ...(main.view.warnings?.length
+          ? { operatorWillSeeWarnings: main.view.warnings, note: "Tell the operator about these consequences in your reply, in plain words." }
+          : {}),
         executed: false,
       }),
     };

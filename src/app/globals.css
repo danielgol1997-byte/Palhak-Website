@@ -698,3 +698,16 @@ html[data-theme-reduce-motion="1"] .theme-effects-layer {
   8% { opacity: 1; }
   100% { transform: translateY(110vh) rotate(var(--confetti-rot, 720deg)); opacity: 0.6; }
 }
+
+/* ── Dialog open: rest the page behind it ─────────────────────────────────────
+   Sheets no longer blur the page (a full-screen backdrop blur is re-computed on
+   every frame). While one is open, the decorative background animations pause. */
+html[data-sheet-open] .theme-effects-layer,
+html[data-sheet-open] .theme-effects-layer *,
+html[data-sheet-open] .yuval-immersive-layer,
+html[data-sheet-open] .theme-grain-layer {
+  animation-play-state: paused !important;
+}
+html[data-sheet-open] .theme-effects-layer {
+  visibility: hidden;
+}

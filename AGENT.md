@@ -39,16 +39,57 @@ produce a wrong plan that the operator sees and cancels.
 |---|---|
 | Soldier equipment | sign out from ימ״ח, return to ימ״ח, transfer between soldiers |
 | Boxes (קרטונים) | move to box, take out of box, return from box to ימ״ח, move between boxes, add from ימ״ח, create a box |
+| Box template (תבנית קרטון) | add a row, change its quantity per box, remove it, add / remove an alternative item, rename a row |
 | Storage | set the counted quantity of an item |
 | Requests | approve / deny / cancel / reopen request lines, change priority, change admin notes |
 | Users | create, activate / deactivate, change role |
 | Catalog | add an item type, rename / re-classify / deactivate one |
 | ציוד ת״ש | add an item type, add, deduct, move, write off (lost / stolen / damaged) |
-| Lookups (no confirmation) | people, a soldier's equipment and box, item stock, who holds an item, requests, ת״ש stock, recent admin actions |
 
-**Deliberately not available:** deleting users / items / departments / templates, editing departments,
-positions and templates, database reset and restore, design changes. The agent says so and points to
-the screen. To add an action, add one entry to `src/lib/agent/actions.ts`; nothing else changes.
+**Deliberately not available:** deleting users or items, editing departments, positions and unit
+templates, database reset and restore, design changes. The agent says so and points to the screen.
+To add an action, add one entry to `src/lib/agent/actions.ts`; nothing else changes.
+
+## What the agent knows
+
+Every message starts with a live snapshot of the system's totals, read from the database: people by
+role, boxes, catalog size, units in storage / signed / in boxes, departments with member counts,
+ת״ש totals, waiting requests, last backup. Questions such as "how many boxes do I have" are answered
+from it directly.
+
+For detail it has read-only lookups covering everything the screens show:
+
+| Topic | Lookups |
+|---|---|
+| People | search by name, browse by role / department / box, personal details, equipment and box of a soldier |
+| Equipment | search or browse the catalog with stock, signed and boxed units; who holds an item; every weapon and sight by serial number |
+| Boxes | the box template with how the existing boxes stand against each row; box completeness report |
+| Requests | waiting requests, one request in full, counts by type |
+| Organisation | departments with positions and member counts; unit templates |
+| ציוד ת״ש | quantities by location; the ת״ש log |
+| History | the full audit trail (who did what, when, and whether through the agent); recent admin equipment actions |
+| Reports | low or zero stock; who lacks an item; incomplete boxes; soldiers without a box |
+
+## Changes that reach beyond one record
+
+Some requests touch far more than the record they name. For those the agent explains the
+consequence with real numbers, offers the clean way of doing it, and can carry it out:
+
+- **Box template.** Removing a row, removing an alternative or lowering a quantity strands units in
+  soldiers' boxes. The agent says how many boxes are affected and offers three choices: leave them,
+  return them to the ימ״ח, or sign them back onto the soldiers. With the last two the plan gets one
+  clean-up step per box *before* the template change, and the template change refuses to run if any
+  unit is still in a box.
+- **Deactivating a user** who still holds equipment, **deactivating an item** that is in use, a
+  **large drop in a storage count**, and a **promotion** all carry a warning.
+
+Warnings are written by the server from live data and shown in amber on the plan card, with the
+confirm button changed to "קראתי את האזהרות, אשר ובצע". They do not depend on the model remembering
+to mention them. A step also knows what earlier steps of the same plan already do, so a plan that
+returns a soldier's equipment and then deactivates him shows no false warning.
+
+Plans can be long (up to 150 steps; emptying a row from every box is one step per box). The card
+folds long plans and always keeps warnings and failures visible.
 
 ## Safety properties (each one is covered by a test)
 
@@ -94,23 +135,24 @@ Default model: **Claude Haiku 5.5** (`claude-haiku-5-5`), $0.10 per million inpu
 per million output tokens. It is the cheapest current Claude model, and the design above is what
 makes that safe: correctness of *execution* never depends on the model.
 
-Measured on 2026-11-15 with the live evaluation (`scripts/agent/eval-live.ts`, 23 realistic Hebrew
-requests, run three times on the test branch):
+Measured on 2026-11-15 with the live evaluation (`scripts/agent/eval-live.ts`, realistic Hebrew
+requests on the test branch):
 
 | | Result |
 |---|---|
-| Requests understood and planned correctly | 69 of 69 |
+| Requests understood and planned correctly (first 23 scenarios, three runs) | 69 of 69 |
+| Full set of 38 scenarios, including template changes, warnings, reports and system knowledge (two runs) | 76 of 76 |
 | Time per request | 2 to 10 seconds |
-| Cost per request, cache warm | about $0.0009 |
-| Cost per request, first one after a pause | about $0.002 |
+| Cost per request, cache warm | about $0.0012 |
+| Cost per request, first one after a pause | about $0.003 |
 
-The fixed part of every model call (instructions plus the 32 tool definitions) is about 11,000
+The fixed part of every model call (instructions plus the tool definitions) is about 20,000
 tokens and is cached for five minutes, which is why back-to-back requests are cheaper. A unit that
-uses the agent 50 times a day spends roughly **$1.50 to $3 a month**. The real numbers appear on
+uses the agent 50 times a day spends roughly **$2 to $4 a month**. The real numbers appear on
 `/admin/agent`.
 
 If the cheap model ever turns out to misunderstand requests too often, set `AGENT_MODEL=claude-sonnet-5-5`
-(20 times the price, so roughly $0.02 to $0.04 per request). Measure before deciding:
+(20 times the price, so roughly $0.03 to $0.06 per request). Measure before deciding:
 `scripts/agent/eval-live.ts` runs the same Hebrew requests against either model and prints the pass
 rate and cost.
 
@@ -147,7 +189,7 @@ still names the production endpoint. The branch endpoint id lives in the git-ign
 # 1. a dev server on the test branch, http://localhost:3002 (the "model" is a scripted mock)
 npm run dev:agent-test
 
-# 2. the full agent suite: 30 tests, API and real browser, desktop and phone
+# 2. the full agent suite: 41 tests, API and real browser, desktop and phone
 PW_ALLOW_DATA_MUTATION=1 PW_BASE_URL=http://localhost:3002 \
   scripts/agent/with-test-branch.sh npx playwright test tests/agent.spec.ts --project=chromium
 
@@ -185,7 +227,9 @@ endpoint id (`ep-…`) into `.agent-test-branch`, then
 | Path | What |
 |---|---|
 | `src/lib/agent/actions.ts` | every change the agent can make: check, describe, execute |
-| `src/lib/agent/readTools.ts` | read-only lookups |
+| `src/lib/agent/readTools.ts` | read-only lookups and reports |
+| `src/lib/agent/snapshot.ts` | the live totals given to the model with every message |
+| `src/lib/agent/boxTemplateData.ts` | what a template change does to existing boxes |
 | `src/lib/agent/engine.ts` | one chat turn with the model; drafts, never executes |
 | `src/lib/agent/runs.ts` | plan storage, confirm / cancel, execution, receipts |
 | `src/lib/agent/prompt.ts` | the agent's standing instructions |

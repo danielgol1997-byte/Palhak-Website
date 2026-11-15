@@ -545,15 +545,15 @@ export function TransferForm({ currentUserId, userAssignments, availableUnits, a
                       onClick={() => handleAddItem(item)}
                       className="w-full px-4 py-3 text-right border-b border-zinc-800 last:border-0 hover:bg-zinc-900 transition-all"
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-2">
                           {isSerial && (
                             <span className="flex-shrink-0 px-2 py-0.5 rounded-full bg-orange-900/20 text-orange-400 border border-orange-900/40 text-xs font-bold">
                               צ
                             </span>
                           )}
-                          <div>
-                            <div className="font-bold text-sm text-zinc-50">{item.name}</div>
+                          <div className="min-w-0">
+                            <div className="font-bold text-sm text-zinc-50 [overflow-wrap:anywhere]">{item.name}</div>
                             <div className="text-xs text-zinc-500 mt-0.5">
                               {divisionLabel(item.category.division)} · זמין: {getAvailableQuantity(item.id)}
                             </div>
