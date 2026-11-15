@@ -18,6 +18,7 @@ import {
 import { LocationCombobox } from "./LocationCombobox";
 import type { SavedLocation } from "./LocationCombobox";
 import { Sheet } from "@/components/ui/Sheet";
+import { ViaAgentBadge } from "@/components/agent/ViaAgentBadge";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -36,6 +37,7 @@ type TashLogData = {
   notes: string | null;
   createdAt: Date | string;
   performedBy: { id: string; name: string };
+  viaAgentRunId?: string | null;
 };
 
 type TashItemData = {
@@ -806,7 +808,10 @@ function HistoryModal({
                   )}
 
                   <div className="flex items-center justify-between gap-2 flex-wrap pt-1 border-t border-zinc-800/80">
-                    <p className="text-xs text-zinc-600">{log.performedBy.name}</p>
+                    <p className="text-xs text-zinc-600">
+                      {log.performedBy.name}
+                      {log.viaAgentRunId && <ViaAgentBadge />}
+                    </p>
                     {editingId !== log.id && (
                       <div className="flex gap-1">
                         <button

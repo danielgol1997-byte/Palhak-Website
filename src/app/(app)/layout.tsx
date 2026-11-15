@@ -8,6 +8,7 @@ import { roleLabelHe } from "@/components/layout/nav";
 import { AdminNotificationBell } from "./admin/_components/AdminNotificationBell";
 import { ThemeDesigner } from "./_components/ThemeDesigner";
 import { ThemeEffects } from "./_components/ThemeEffects";
+import { AgentChat } from "@/components/agent/AgentChat";
 import { getSiteTheme } from "@/lib/siteTheme";
 import { getResolvedPreset } from "@/lib/theme";
 
@@ -61,6 +62,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         isPrivileged={isPrivileged}
         accent={preset.accent}
         bell={isAdmin ? <AdminNotificationBell /> : undefined}
+        agent={isPrivileged ? <AgentChat /> : undefined}
         themeDesigner={
           isThemeMaster ? (
             <ThemeDesigner initialPreset={theme.preset} initialEffect={theme.effect} initialTuning={theme.tuning} />

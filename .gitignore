@@ -58,3 +58,6 @@ test-results/
 
 # local database backups (contain personal data)
 /backups/
+
+# Endpoint id of the throwaway Neon branch used by scripts/agent/with-test-branch.sh
+/.agent-test-branch

@@ -543,6 +543,7 @@ async function fetchAdminRequestDetailForModal(requestId: string) {
       createdAt: true,
       updatedAt: true,
       requesterId: true,
+      viaAgentRunId: true,
       requester: {
         select: {
           id: true,
@@ -572,6 +573,7 @@ async function fetchAdminRequestDetailForModal(requestId: string) {
           shoeSize: true,
           resolvedAt: true,
           resolvedById: true,
+          viaAgentRunId: true,
           recipientNotes: true,
           recipientAcceptedAt: true,
           equipmentItemId: true,

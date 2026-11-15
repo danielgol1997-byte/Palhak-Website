@@ -15,7 +15,8 @@ loadDotenv({ path: ".env" });
 
 const SECRET = process.env.NEXTAUTH_SECRET ?? "";
 // NextAuth switches to the __Secure- cookie when NEXTAUTH_URL is https (e.g. after `vercel env pull`).
-const SECURE_COOKIES = (process.env.NEXTAUTH_URL ?? "").startsWith("https://");
+// PW_NEXTAUTH_URL: the NEXTAUTH_URL of the server under test, when it differs from the env files (the agent test server uses http).
+const SECURE_COOKIES = (process.env.PW_NEXTAUTH_URL ?? process.env.NEXTAUTH_URL ?? "").startsWith("https://");
 const SESSION_COOKIE = SECURE_COOKIES ? "__Secure-next-auth.session-token" : "next-auth.session-token";
 const SHOT_DIR = process.env.PW_SHOT_DIR ?? "test-results/mobile-shots";
 mkdirSync(SHOT_DIR, { recursive: true });
@@ -99,6 +100,7 @@ const ADMIN_ROUTES = [
   "/admin/weapons-and-sights",
   "/admin/tash",
   "/admin/backups",
+  "/admin/agent",
 ];
 
 test.describe("mobile layout (admin)", () => {

@@ -5,6 +5,7 @@ import { RequestType, RequestStatus, Priority, Division } from "@prisma/client";
 import { requestTypeLabel, requestStatusLabel, priorityLabel, divisionLabel, requestItemStatusLabel } from "@/lib/he";
 import { cancelRequestAction } from "../requests/actions";
 import { Sheet, SheetActions } from "@/components/ui/Sheet";
+import { ViaAgentBadge } from "@/components/agent/ViaAgentBadge";
 
 interface RequestItem {
   id: string;
@@ -28,6 +29,7 @@ interface RequestItem {
     resolvedAt: Date | null;
     recipientAcceptedAt: Date | null;
     recipientNotes: string | null;
+    viaAgentRunId?: string | null;
     resolvedBy: {
       id: string;
       name: string;
@@ -56,6 +58,7 @@ interface RequestItem {
     id: string;
     name: string;
   } | null;
+  viaAgentRunId?: string | null;
 }
 
 export function RequestsTab({ requests, currentUserId }: { requests: RequestItem[]; currentUserId: string }) {
@@ -327,6 +330,7 @@ export function RequestsTab({ requests, currentUserId }: { requests: RequestItem
                         <div className="flex-1">
                           <div className="text-zinc-300">
                             <span className="font-bold text-zinc-50">{selectedRequest.resolvedBy.name}</span> (מנהל) אישר
+                            {selectedRequest.viaAgentRunId && <ViaAgentBadge />}
                           </div>
                           <div className="text-xs text-zinc-500">{new Date(selectedRequest.resolvedAt).toLocaleString("he-IL")}</div>
                         </div>
@@ -409,6 +413,7 @@ export function RequestsTab({ requests, currentUserId }: { requests: RequestItem
                                   {item.resolvedAt && item.resolvedBy && (
                                     <div key={`resolved-${item.id}`} className="text-amber-300 border-t border-zinc-800 pt-1 mt-1">
                                       אושר ע״י {item.resolvedBy.name}
+                                      {item.viaAgentRunId && <ViaAgentBadge />}
                                       <div className="text-zinc-500 text-[10px]">
                                         {new Date(item.resolvedAt).toLocaleString("he-IL")}
                                       </div>
@@ -524,7 +529,10 @@ export function RequestsTab({ requests, currentUserId }: { requests: RequestItem
                   </div>
                   <div>
                     <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">טופל על ידי</div>
-                    <div className="text-sm font-medium text-zinc-50">{selectedRequest.resolvedBy.name}</div>
+                    <div className="text-sm font-medium text-zinc-50">
+                      {selectedRequest.resolvedBy.name}
+                      {selectedRequest.viaAgentRunId && <ViaAgentBadge />}
+                    </div>
                   </div>
                 </div>
               )}

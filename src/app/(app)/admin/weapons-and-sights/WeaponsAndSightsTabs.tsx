@@ -27,6 +27,7 @@ interface Assignment {
     id: string;
     name: string;
   } | null;
+  viaAgentRunId?: string | null;
 }
 
 type TabType = "weapons" | "sights";

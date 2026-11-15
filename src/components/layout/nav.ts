@@ -13,7 +13,8 @@ export type NavIcon =
   | "export"
   | "target"
   | "tash"
-  | "backup";
+  | "backup"
+  | "agent";
 
 export type NavItem = {
   href: string;
@@ -44,6 +45,7 @@ export const ADMIN_NAV: NavItem[] = [
 /** Only SUPER_ADMIN / THEME_MASTER */
 export const PRIVILEGED_NAV: NavItem[] = [
   { href: "/admin/backups", label: "גיבויים", desc: "גיבוי יומי אוטומטי, גיבוי ידני, בדיקה והורדה.", icon: "backup" },
+  { href: "/admin/agent", label: "סוכן AI", desc: "היסטוריית הפעולות שבוצעו באמצעות הסוכן, עם הקבלות.", icon: "agent" },
 ];
 
 export function isActivePath(pathname: string, href: string): boolean {

@@ -13,6 +13,7 @@ import {
 import { useRouter } from "next/navigation";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { Sheet, SheetActions } from "@/components/ui/Sheet";
+import { ViaAgentBadge } from "@/components/agent/ViaAgentBadge";
 
 interface Request {
   id: string;
@@ -43,6 +44,7 @@ interface Request {
     id: string;
     name: string;
   } | null;
+  viaAgentRunId?: string | null;
   items: {
     id: string;
     quantity: number;
@@ -52,6 +54,7 @@ interface Request {
     shoeSize: string | null;
     resolvedAt?: Date | null;
     resolvedById?: string | null;
+    viaAgentRunId?: string | null;
     recipientNotes?: string | null;
     recipientAcceptedAt?: Date | null;
     resolvedBy?: {
@@ -542,6 +545,7 @@ export function RequestDetailModal({
                     <div className="flex-1">
                       <div className="text-zinc-300">
                         <span className="font-bold text-zinc-50">{request.resolvedBy.name}</span> (מנהל) אישר
+                        {request.viaAgentRunId && <ViaAgentBadge />}
                       </div>
                       <div className="text-xs text-zinc-500">{new Date(request.resolvedAt).toLocaleString("he-IL")}</div>
                     </div>
@@ -573,6 +577,7 @@ export function RequestDetailModal({
                 {request.resolvedBy && (
                   <>
                     : <span className="font-bold text-zinc-50">{request.resolvedBy.name}</span>
+                    {request.viaAgentRunId && <ViaAgentBadge />}
                   </>
                 )}
                 {request.resolvedAt && (
@@ -738,6 +743,7 @@ export function RequestDetailModal({
                               {item.resolvedAt && item.resolvedBy && (
                                 <div className="text-amber-300 border-t border-zinc-800 pt-1 mt-1">
                                   אושר ע״י {item.resolvedBy.name}
+                                  {item.viaAgentRunId && <ViaAgentBadge />}
                                   <div className="text-zinc-500 text-[10px]">
                                     {new Date(item.resolvedAt).toLocaleString("he-IL")}
                                   </div>
@@ -896,6 +902,7 @@ export function RequestDetailModal({
                       {item.resolvedAt && item.resolvedBy && (
                         <div className="text-amber-300">
                           אושר ע״י {item.resolvedBy.name}
+                                  {item.viaAgentRunId && <ViaAgentBadge />}
                           <div className="text-zinc-500 text-[10px]">
                             {new Date(item.resolvedAt).toLocaleString("he-IL")}
                           </div>
@@ -1067,7 +1074,10 @@ export function RequestDetailModal({
               </div>
               <div>
                 <div className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">טופל על ידי</div>
-                <div className="text-sm font-medium text-zinc-50">{request.resolvedBy.name}</div>
+                <div className="text-sm font-medium text-zinc-50">
+                  {request.resolvedBy.name}
+                  {request.viaAgentRunId && <ViaAgentBadge />}
+                </div>
               </div>
             </div>
           )}

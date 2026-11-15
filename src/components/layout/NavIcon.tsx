@@ -81,6 +81,12 @@ const PATHS: Record<NavIconName, React.ReactNode> = {
       <path d="M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3" />
     </>
   ),
+  agent: (
+    <>
+      <path d="M12 3l1.8 4.9a2 2 0 0 0 1.2 1.2L20 11l-5 1.9a2 2 0 0 0-1.2 1.2L12 19l-1.8-4.9a2 2 0 0 0-1.2-1.2L4 11l5-1.9a2 2 0 0 0 1.2-1.2L12 3z" />
+      <path d="M19 3v3M20.5 4.5h-3M5 17v3M6.5 18.5h-3" />
+    </>
+  ),
 };
 
 export function NavIcon({ name, size = 22, className = "" }: { name: NavIconName; size?: number; className?: string }) {

@@ -16,6 +16,7 @@ export function AppHeader({
   isPrivileged,
   accent,
   bell,
+  agent,
   themeDesigner,
 }: {
   userName: string;
@@ -25,6 +26,8 @@ export function AppHeader({
   isPrivileged: boolean;
   accent: string;
   bell?: ReactNode;
+  /** AI agent launcher (privileged operators only). */
+  agent?: ReactNode;
   themeDesigner?: ReactNode;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -114,6 +117,7 @@ export function AppHeader({
             <div className="hidden max-w-[12rem] truncate text-sm font-medium lg:block" style={{ color: "var(--t-fg-muted, #a1a1aa)" }}>
               {userName}
             </div>
+            {agent}
             {bell}
             {themeDesigner}
             <button

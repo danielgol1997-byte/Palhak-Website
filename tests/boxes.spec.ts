@@ -6,7 +6,8 @@ import { config as loadDotenv } from "dotenv";
 loadDotenv({ path: ".env.local" });
 loadDotenv({ path: ".env" });
 // NextAuth switches to the __Secure- cookie when NEXTAUTH_URL is https (e.g. after `vercel env pull`).
-const SECURE_COOKIES = (process.env.NEXTAUTH_URL ?? "").startsWith("https://");
+// PW_NEXTAUTH_URL: the NEXTAUTH_URL of the server under test, when it differs from the env files (the agent test server uses http).
+const SECURE_COOKIES = (process.env.PW_NEXTAUTH_URL ?? process.env.NEXTAUTH_URL ?? "").startsWith("https://");
 const SESSION_COOKIE = SECURE_COOKIES ? "__Secure-next-auth.session-token" : "next-auth.session-token";
 
 // SAFETY: this spec CREATES, MOVES and DELETES real rows (box template, box items, ת״ש items).

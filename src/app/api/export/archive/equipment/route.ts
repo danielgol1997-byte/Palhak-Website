@@ -38,6 +38,7 @@ export async function GET(req: Request) {
       entity: true,
       entityId: true,
       action: true,
+      viaAgentRunId: true,
       actor: { select: { name: true, email: true } },
     },
   });
@@ -51,8 +52,9 @@ export async function GET(req: Request) {
       פעולה: r.action,
       "שם מבצע": r.actor?.name ?? "",
       "מייל מבצע": r.actor?.email ?? "",
+      "אופן ביצוע": r.viaAgentRunId ? "באמצעות סוכן AI" : "ידני",
     })),
-    ["מזהה", "נוצר בתאריך", "ישות", "מזהה ישות", "פעולה", "שם מבצע", "מייל מבצע"],
+    ["מזהה", "נוצר בתאריך", "ישות", "מזהה ישות", "פעולה", "שם מבצע", "מייל מבצע", "אופן ביצוע"],
   );
 
   return new NextResponse(csv, {

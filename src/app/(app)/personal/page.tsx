@@ -69,6 +69,7 @@ export default async function PersonalPage() {
             resolvedAt: true,
             recipientAcceptedAt: true,
             recipientNotes: true,
+            viaAgentRunId: true,
             resolvedBy: {
               select: {
                 id: true,
@@ -106,6 +107,7 @@ export default async function PersonalPage() {
             name: true,
           },
         },
+        viaAgentRunId: true,
       },
     }),
     // Requests received by the user (transfers to them)
@@ -138,6 +140,7 @@ export default async function PersonalPage() {
             resolvedAt: true,
             recipientAcceptedAt: true,
             recipientNotes: true,
+            viaAgentRunId: true,
             resolvedBy: {
               select: {
                 id: true,
@@ -175,6 +178,7 @@ export default async function PersonalPage() {
             name: true,
           },
         },
+        viaAgentRunId: true,
       },
     }),
     prisma.user.findUnique({

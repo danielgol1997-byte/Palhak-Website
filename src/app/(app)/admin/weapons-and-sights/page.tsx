@@ -49,6 +49,7 @@ export default async function WeaponsAndSightsPage() {
             name: true,
           },
         },
+        viaAgentRunId: true,
       },
     }),
     prisma.assignment.findMany({
@@ -90,6 +91,7 @@ export default async function WeaponsAndSightsPage() {
             name: true,
           },
         },
+        viaAgentRunId: true,
       },
     }),
   ]);

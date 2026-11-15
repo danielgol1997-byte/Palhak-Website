@@ -51,6 +51,7 @@ Open `http://localhost:3000`.
    - Use Neon **pooled** URL for `DATABASE_URL` (runtime connection)
    - Use Neon **direct** URL for `DIRECT_URL` (for Prisma migrations)
    - Backups: a daily application-level backup runs via Vercel Cron and super admins manage them at `/admin/backups`. See **BACKUPS.md** for setup, retention and the restore procedure.
+   - AI agent: super admins can ask a built-in assistant to look things up and carry out actions; every change is shown as a plan, confirmed, and followed by a receipt. See **AGENT.md**.
 
 2. **Google OAuth Setup**
    - Create a Google OAuth application in [Google Cloud Console](https://console.cloud.google.com/)

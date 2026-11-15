@@ -99,6 +99,9 @@ The local dev server uses the **production** database. `tests/desktop.spec.ts`, 
 real rows (box template, box items, ת״ש items), so they are skipped unless you set `PW_ALLOW_DATA_MUTATION=1`,
 and should only run with `DATABASE_URL`/`DIRECT_URL` pointed at a Neon branch.
 
+`tests/agent.spec.ts` (the AI agent) also writes data. It only runs through `scripts/agent/with-test-branch.sh`, which
+points at a throwaway Neon branch and refuses production; see AGENT.md.
+
 If they ever run against production by mistake, creating a backup is not enough – compare with the last backup and
 revert. `scripts/backup/revert-test-run-2026-11-05.ts` is a worked example of such a targeted, self-checking revert.
 

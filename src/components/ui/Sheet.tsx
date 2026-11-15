@@ -114,7 +114,7 @@ export function Sheet({
 
           {footer && (
             <div
-              className="shrink-0 border-t border-zinc-800 bg-zinc-900/95 px-4 py-3 backdrop-blur sm:px-6 sm:py-4"
+              className="shrink-0 border-t border-zinc-800 bg-zinc-900 px-4 py-3 sm:px-6 sm:py-4"
               style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
             >
               {footer}

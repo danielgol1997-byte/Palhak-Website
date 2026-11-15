@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { Division } from "@prisma/client";
 import { divisionLabel } from "@/lib/he";
 import Link from "next/link";
+import { ViaAgentBadge } from "@/components/agent/ViaAgentBadge";
 
 interface Assignment {
   id: string;
@@ -27,6 +28,7 @@ interface Assignment {
     id: string;
     name: string;
   } | null;
+  viaAgentRunId?: string | null;
 }
 
 type SortField = "weapon" | "serialNumber" | "user" | "personalNumber" | "division" | "assignedAt" | "assignedBy";
@@ -253,6 +255,7 @@ export function WeaponsTable({ assignments }: { assignments: Assignment[] }) {
                   </td>
                   <td className="px-4 py-4 text-sm text-zinc-400">
                     {assignment.assignedBy?.name || "מערכת"}
+                    {assignment.assignedBy && assignment.viaAgentRunId && <ViaAgentBadge />}
                   </td>
                 </tr>
               ))}

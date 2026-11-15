@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { RequestType, RequestStatus, Priority, Division } from "@prisma/client";
 import { requestTypeLabel, requestStatusLabel, priorityLabel, priorityColor, divisionLabel } from "@/lib/he";
 import { RequestDetailModal } from "./RequestDetailModal";
+import { ViaAgentBadge } from "@/components/agent/ViaAgentBadge";
 
 interface Request {
   id: string;
@@ -29,6 +30,7 @@ interface Request {
     id: string;
     name: string;
   } | null;
+  viaAgentRunId?: string | null;
   recipient?: {
     id: string;
     name: string;
@@ -450,6 +452,7 @@ export function ClosedRequestsTable({
                       </td>
                       <td className="px-4 py-3 text-sm text-zinc-400">
                         {req.resolvedBy?.name || "-"}
+                        {req.resolvedBy && req.viaAgentRunId && <ViaAgentBadge />}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span

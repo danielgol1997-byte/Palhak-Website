@@ -23,6 +23,7 @@ const requestSelect = {
   createdAt: true,
   updatedAt: true,
   requesterId: true,
+  viaAgentRunId: true,
   requester: {
     select: {
       id: true,
@@ -52,6 +53,7 @@ const requestSelect = {
       shoeSize: true,
       resolvedAt: true,
       resolvedById: true,
+      viaAgentRunId: true,
       recipientNotes: true,
       recipientAcceptedAt: true,
       resolvedBy: {
