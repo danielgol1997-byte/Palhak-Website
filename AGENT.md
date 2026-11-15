@@ -166,6 +166,16 @@ AGENT_REAL_MODEL=1 npm run dev:agent-test                                 # term
 scripts/agent/with-test-branch.sh npx tsx scripts/agent/eval-live.ts      # terminal B
 ```
 
+### Checking live production safely
+
+```bash
+npx tsx scripts/agent/prod-smoke.ts
+```
+
+This asks the live site two questions and drafts one plan, which it cancels. It never confirms a
+plan, and it counts the rows of every business table before and after to prove nothing changed. The
+only rows it adds are the agent's own log (usage, and one cancelled plan).
+
 To create a fresh test branch: Neon console → Branches → Create branch from `main`, copy its
 endpoint id (`ep-…`) into `.agent-test-branch`, then
 `scripts/agent/with-test-branch.sh npx prisma migrate deploy`.
