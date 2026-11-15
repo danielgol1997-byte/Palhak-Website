@@ -637,7 +637,18 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
                     >
                       <td className="px-4 py-4">
                         <div className="flex flex-col">
-                          <span className="font-bold text-sm text-zinc-50">{row.userName}</span>
+                          <span className="font-bold text-sm text-zinc-50">
+                            {row.userName}
+                            {!row.userActive && (
+                              <span
+                                data-testid="box-owner-inactive"
+                                title="המשתמש אינו פעיל. אפשר להעביר את הקרטון לחייל אחר דרך עריכה."
+                                className="ms-2 inline-flex items-center rounded-full border border-zinc-700 bg-zinc-800 px-2 py-0.5 align-middle text-[10px] font-bold text-zinc-300"
+                              >
+                                לא פעיל
+                              </span>
+                            )}
+                          </span>
                           {row.personalNumber && (
                             <span className="text-xs text-zinc-500 mt-0.5">מ״א: {row.personalNumber}</span>
                           )}
@@ -792,6 +803,7 @@ export function BoxList({ rows, allUsers, templateItemsForAdd, yamahStockByItemI
           <BoxEditModal
             box={{ id: boxRow.id, userId: boxRow.userId, userName: boxRow.userName, personalNumber: boxRow.personalNumber, items: boxRow.items }}
             allUsers={allUsers}
+            boxUnitsByUserId={Object.fromEntries(rows.map((r) => [r.userId, r.inBoxTotal]))}
             addableItems={(() => {
               return templateItemsForAdd.flatMap((tplItem) => {
                 const groupIds = [tplItem.equipmentItemId, ...tplItem.alternatives.map((a) => a.equipmentItemId)];

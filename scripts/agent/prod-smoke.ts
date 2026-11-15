@@ -3,11 +3,12 @@
  *
  *   npx tsx scripts/agent/prod-smoke.ts
  *
- * It asks three questions and drafts one plan, which it then CANCELS. It never
- * confirms a plan, so no equipment, stock, request or user data can change.
- * To prove that, it counts the rows of every business table before and after.
- * The only rows it adds are the agent's own log: AgentTurn (usage) and one
- * cancelled AgentRun, on the first privileged operator's name.
+ * It asks a few questions and drafts two plans (signing out an item, handing a
+ * box over), which it then CANCELS. It never confirms a plan, so no equipment,
+ * stock, box, request or user data can change. To prove that, it counts the rows
+ * of every business table and records who owns every box, before and after.
+ * The only rows it adds are the agent's own log: AgentTurn (usage) and the
+ * cancelled AgentRuns, on the first privileged operator's name.
  *
  * Needs the Vercel CLI signed in (deployments are behind Vercel Authentication)
  * and the production NEXTAUTH_SECRET in .env.
@@ -61,7 +62,7 @@ async function main() {
   console.log(`Deployment: ${base}\nDatabase:   ${dbHost()} (read-only queries)\n`);
 
   const snapshot = async () => {
-    const [requests, requestItems, assignments, boxItems, transfers, tashLogs, tashInv, users, items, audit, storage] = await Promise.all([
+    const [requests, requestItems, assignments, boxItems, transfers, tashLogs, tashInv, users, items, audit, storage, boxOwners, departments, positions, unitTemplates] = await Promise.all([
       db.request.count(),
       db.requestItem.count(),
       db.assignment.aggregate({ _count: true, _sum: { quantity: true } }),
@@ -73,8 +74,12 @@ async function main() {
       db.equipmentItem.count(),
       db.auditLog.count(),
       db.storageInventory.aggregate({ _count: true, _sum: { quantity: true } }),
+      db.box.findMany({ orderBy: { id: "asc" }, select: { id: true, userId: true } }),
+      db.department.count(),
+      db.position.count(),
+      db.unitTemplate.count(),
     ]);
-    return JSON.stringify({ requests, requestItems, assignments, boxItems, transfers, tashLogs, tashInv, users, items, audit, storage });
+    return JSON.stringify({ requests, requestItems, assignments, boxItems, transfers, tashLogs, tashInv, users, items, audit, storage, boxOwners, departments, positions, unitTemplates });
   };
   const before = await snapshot();
 
@@ -136,6 +141,34 @@ async function main() {
     const stored = await db.agentRun.findUnique({ where: { id: plan.run.id } });
     check("the plan is stored as CANCELLED with no receipt", stored?.status === "CANCELLED" && stored.receipt === null);
   }
+
+  // box hand-over: a question, then a plan that is drafted and cancelled
+  const orphaned = await db.box.findMany({ where: { user: { active: false } }, orderBy: { user: { name: "asc" } }, select: { id: true, userId: true, user: { select: { name: true } } } });
+  const orphanAnswer = parseChat(chat(opCookie, "כמה קרטונים רשומים על משתמשים שכבר לא פעילים?").body);
+  check(
+    "knows which boxes belong to people who are no longer active",
+    !orphanAnswer.error && !orphanAnswer.run && (orphaned.length === 0 ? /אין|אף|0/.test(orphanAnswer.text) : orphanAnswer.text.includes(String(orphaned.length)) || orphaned.some((b) => orphanAnswer.text.includes(b.user.name))),
+    orphanAnswer.error ?? orphanAnswer.text.slice(0, 200),
+  );
+  const allBoxes = await db.box.findMany({ orderBy: { user: { name: "asc" } }, select: { id: true, userId: true, user: { select: { name: true } } } });
+  const names = (await db.user.groupBy({ by: ["name"], _count: { _all: true } })).filter((g) => g._count._all === 1).map((g) => g.name);
+  const from = (orphaned.length ? orphaned : allBoxes).find((b) => names.includes(b.user.name));
+  const to = (await db.user.findMany({ where: { active: true, box: null }, orderBy: { name: "asc" } })).find((u) => names.includes(u.name));
+  if (from && to) {
+    const handover = parseChat(chat(opCookie, `תחליף את השם על הקרטון של ${from.user.name} ל${to.name}`).body);
+    check("a box hand-over comes back as a plan awaiting confirmation", handover.run?.status === "PROPOSED", handover.error ?? handover.text.slice(0, 200));
+    if (handover.run) {
+      check("the plan names the real owner and the real new owner", handover.run.steps.length === 1 && handover.run.steps[0].title.includes(from.user.name) && handover.run.steps[0].title.includes(to.name), JSON.stringify(handover.run.steps[0]));
+      const cancelled = call(`${base}/api/agent/runs/${handover.run.id}/cancel`, { method: "POST", cookie: opCookie });
+      check("the hand-over plan was cancelled", cancelled.status === 200 && cancelled.body.includes('"CANCELLED"'));
+      check("the box still belongs to its owner", (await db.box.findUnique({ where: { id: from.id } }))?.userId === from.userId);
+    }
+  } else {
+    console.log("– skipped the hand-over plan: no box and no box-less active user with a unique name");
+  }
+
+  const boxesPage = call(`${base}/admin/boxes`, { cookie: opCookie });
+  check("the boxes screen loads with the hand-over option", boxesPage.status === 200);
 
   const page = call(`${base}/admin/agent`, { cookie: opCookie });
   check("the agent history page loads", page.status === 200 && page.body.includes("היסטוריית הסוכן"));

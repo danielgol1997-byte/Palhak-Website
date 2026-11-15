@@ -50,7 +50,9 @@ export async function POST(req: NextRequest) {
   try {
     await assertWithinRateLimit(access.actor);
   } catch (err) {
-    return NextResponse.json({ message: friendlyError(err) }, { status: 429 });
+    // 429 only when the operator really is over the allowance; anything else (the database is unreachable) is a server fault.
+    if (!(err instanceof AgentUnavailableError)) console.error("[agent] rate-limit check failed", err);
+    return NextResponse.json({ message: friendlyError(err) }, { status: err instanceof AgentUnavailableError ? 429 : 503 });
   }
 
   const encoder = new TextEncoder();

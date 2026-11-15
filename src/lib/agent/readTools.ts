@@ -385,17 +385,22 @@ const searchTash = define({
     const where: Prisma.TashItemWhereInput = query
       ? { AND: tokens(query).map((t) => ({ OR: variants(t).map((v) => ({ name: { contains: v, mode: insensitive } })) })) }
       : {};
-    const items = await prisma.tashItem.findMany({
-      where,
-      orderBy: { name: "asc" },
-      take: 40,
-      select: { id: true, name: true, unit: true, inventory: { where: { quantity: { gt: 0 } }, select: { location: true, quantity: true } } },
-    });
+    const [items, saved] = await Promise.all([
+      prisma.tashItem.findMany({
+        where,
+        orderBy: { name: "asc" },
+        take: 40,
+        select: { id: true, name: true, unit: true, description: true, inventory: { where: { quantity: { gt: 0 } }, select: { location: true, quantity: true } } },
+      }),
+      prisma.tashLocation.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
+    ]);
     return {
+      savedLocations: saved.map((l) => l.name),
       items: items.map((i) => ({
         itemId: i.id,
         name: i.name,
         unit: i.unit,
+        ...(i.description ? { description: i.description } : {}),
         total: i.inventory.reduce((s, x) => s + x.quantity, 0),
         byLocation: Object.fromEntries(i.inventory.map((x) => [x.location, x.quantity])),
       })),
@@ -502,6 +507,51 @@ const whoLacksItem = define({
       peopleChecked: people.length,
       lackingCount: lacking.length,
       lacking: lacking.slice(0, 150).map((u) => ({ userId: u.id, name: u.name, personalNumber: u.personalNumber })),
+    };
+  },
+});
+
+const listBoxes = define({
+  name: "list_boxes",
+  description:
+    "The boxes themselves: whose name is on each box, whether that person is still an active user, and how much is inside. " +
+    "Use it for 'which boxes belong to people who left', 'which boxes are empty', and to prepare handing boxes over to other soldiers (reassign_box). " +
+    "For how complete the boxes are against the template use box_fill_report; for the contents of one box use get_user_equipment.",
+  statusLabel: "מביא רשימת קרטונים",
+  schema: z.object({
+    ownerActive: z.boolean().optional().describe("false = only boxes whose owner is a deactivated user; true = only boxes of active users. Omit for all."),
+    onlyEmpty: z.boolean().optional().describe("true = only boxes with nothing inside"),
+    limit: z.number().int().min(1).max(200).optional().describe("Default 100"),
+  }),
+  async run({ ownerActive, onlyEmpty, limit }) {
+    const where: Prisma.BoxWhereInput = {
+      ...(ownerActive === undefined ? {} : { user: { active: ownerActive } }),
+      ...(onlyEmpty ? { items: { none: {} } } : {}),
+    };
+    const [boxes, total, activeWithoutBox] = await Promise.all([
+      prisma.box.findMany({
+        where,
+        orderBy: { user: { name: "asc" } },
+        take: limit ?? 100,
+        select: {
+          user: { select: { id: true, name: true, personalNumber: true, active: true, role: true } },
+          items: { select: { quantity: true } },
+        },
+      }),
+      prisma.box.count({ where }),
+      prisma.user.count({ where: { active: true, box: null } }),
+    ]);
+    return {
+      totalMatches: total,
+      activeUsersWithoutBox: activeWithoutBox,
+      boxes: boxes.map((b) => ({
+        ownerUserId: b.user.id,
+        owner: b.user.name,
+        personalNumber: b.user.personalNumber,
+        ownerActive: b.user.active,
+        ownerRole: roleLabel(b.user.role),
+        unitsInside: b.items.reduce((s, i) => s + i.quantity, 0),
+      })),
     };
   },
 });
@@ -740,41 +790,49 @@ const listItems = define({
 
 const listDepartments = define({
   name: "list_departments",
-  description: "Departments (מחלקות) with their divisions, positions (תפקידים) and how many active members each has.",
+  description:
+    "Departments (מחלקות) in display order, with their ids, divisions, positions (תפקידים, with ids) and how many active members each has. Gives the ids for the department, position and user-assignment actions.",
   statusLabel: "מביא מחלקות ותפקידים",
   schema: z.object({}),
   async run() {
     const departments = await prisma.department.findMany({
       orderBy: { sortOrder: "asc" },
       select: {
+        id: true,
         name: true,
         active: true,
         divisions: { select: { division: true } },
-        positions: { where: { active: true }, orderBy: { sortOrder: "asc" }, select: { name: true, _count: { select: { userPositions: { where: { user: { active: true } } } } } } },
+        positions: { orderBy: { sortOrder: "asc" }, select: { id: true, name: true, active: true, _count: { select: { userPositions: { where: { user: { active: true } } } } } } },
         _count: { select: { userDepartments: { where: { user: { active: true } } } } },
       },
     });
     return departments.map((d) => ({
+      departmentId: d.id,
       name: d.name,
       active: d.active,
       activeMembers: d._count.userDepartments,
       divisions: d.divisions.map((x) => divisionLabel(x.division)),
-      positions: d.positions.map((p) => ({ name: p.name, holders: p._count.userPositions })),
+      positions: d.positions.map((p) => ({ positionId: p.id, name: p.name, holders: p._count.userPositions, ...(p.active ? {} : { active: false }) })),
     }));
   },
 });
 
 const listUnitTemplates = define({
   name: "list_unit_templates",
-  description: "Unit templates (תבניות יחידה): each template with the items and quantities it requires. Read-only; they are edited in the inventory screen.",
+  description: "Unit templates (תבניות יחידה): each template with its id and the items and quantities it requires. Gives the ids for the unit-template actions.",
   statusLabel: "מביא תבניות יחידה",
   schema: z.object({}),
   async run() {
     const templates = await prisma.unitTemplate.findMany({
       orderBy: { name: "asc" },
-      select: { name: true, active: true, items: { select: { quantityRequired: true, equipmentItem: { select: { name: true } } } } },
+      select: { id: true, name: true, active: true, items: { orderBy: { equipmentItem: { name: "asc" } }, select: { equipmentItemId: true, quantityRequired: true, equipmentItem: { select: { name: true } } } } },
     });
-    return templates.map((t) => ({ name: t.name, active: t.active, items: t.items.map((i) => `${i.quantityRequired} × ${i.equipmentItem.name}`) }));
+    return templates.map((t) => ({
+      unitTemplateId: t.id,
+      name: t.name,
+      active: t.active,
+      items: t.items.map((i) => ({ equipmentItemId: i.equipmentItemId, item: i.equipmentItem.name, quantityRequired: i.quantityRequired })),
+    }));
   },
 });
 
@@ -852,7 +910,7 @@ const recentActivity = define({
 
 const tashHistory = define({
   name: "tash_history",
-  description: "The ציוד ת״ש log: additions, deductions, moves and write-offs, newest first, optionally for one item.",
+  description: "The ציוד ת״ש log: additions, deductions, moves and write-offs, newest first, optionally for one item. Each line has a logId, used to edit its note or to undo it.",
   statusLabel: "קורא את יומן הת״ש",
   schema: z.object({ itemId: z.string().min(1).optional(), limit: z.number().int().min(1).max(80).optional().describe("Default 25") }),
   async run({ itemId, limit }) {
@@ -861,6 +919,7 @@ const tashHistory = define({
       orderBy: { createdAt: "desc" },
       take: limit ?? 25,
       select: {
+        id: true,
         createdAt: true,
         action: true,
         quantity: true,
@@ -873,6 +932,7 @@ const tashHistory = define({
       },
     });
     return rows.map((r) => ({
+      logId: r.id,
       when: r.createdAt.toISOString().slice(0, 16).replace("T", " "),
       item: r.item.name,
       action: r.action,
@@ -935,6 +995,7 @@ export const READ_TOOLS: readonly ReadTool[] = [
   getRequest,
   searchTash,
   getBoxTemplate,
+  listBoxes,
   stockReport,
   whoLacksItem,
   boxFillReport,

@@ -37,18 +37,43 @@ produce a wrong plan that the operator sees and cancels.
 
 | Area | Actions |
 |---|---|
-| Soldier equipment | sign out from ימ״ח, return to ימ״ח, transfer between soldiers |
-| Boxes (קרטונים) | move to box, take out of box, return from box to ימ״ח, move between boxes, add from ימ״ח, create a box |
+The aim is that the agent can do whatever an administrator can do on the site.
+
+| Area | Actions |
+|---|---|
+| Soldier equipment | sign out from ימ״ח, return to ימ״ח, transfer between soldiers, bring written-off equipment (lost, stolen, damaged, used) back into stock |
+| Boxes (קרטונים) | move to box, take out of box, return from box to ימ״ח, move between boxes, add from ימ״ח, create a box, **hand a whole box over to another person** |
 | Box template (תבנית קרטון) | add a row, change its quantity per box, remove it, add / remove an alternative item, rename a row |
 | Storage | set the counted quantity of an item |
-| Requests | approve / deny / cancel / reopen request lines, change priority, change admin notes |
-| Users | create, activate / deactivate, change role |
-| Catalog | add an item type, rename / re-classify / deactivate one |
-| ציוד ת״ש | add an item type, add, deduct, move, write off (lost / stolen / damaged) |
+| Requests | approve / deny / cancel / reopen request lines, cancel a whole request, change priority, change admin notes |
+| Users | create, activate / deactivate, change role, edit personal details (name, email, personal number, phone, sizes), set departments and positions |
+| Organisation | add / rename / deactivate / delete / reorder departments, add / rename / move / deactivate positions |
+| Catalog | add an item type, rename / re-classify / deactivate one, delete one |
+| Unit templates (תבניות יחידה) | create, rename, deactivate, delete, add an item or change its quantity, remove an item |
+| ציוד ת״ש | add / rename / delete an item type, add, deduct, move, write off, set a counted quantity, edit a log note, undo a log line, remove a saved location |
+| Backup | take a full backup now |
 
-**Deliberately not available:** deleting users or items, editing departments, positions and unit
-templates, database reset and restore, design changes. The agent says so and points to the screen.
-To add an action, add one entry to `src/lib/agent/actions.ts`; nothing else changes.
+**Deliberately not available:** restoring a backup and resetting the database, downloading export
+files, the site's design, and the operator's own profile. Users are never deleted, on the site or
+by the agent; they are deactivated. The agent says so and points to the screen.
+
+To add an action, add one entry to `src/lib/agent/actions.ts` or `actionsAdmin.ts`; nothing else
+changes.
+
+### Handing a box over (שינוי השם על הקרטון)
+
+When someone leaves the unit, their box can be put on another person's name. The box and everything
+in it stay as they are; only the owner changes, and the previous owner is left without a box. No
+equipment moves and stock does not change.
+
+- On the site: **קרטונים → עריכה → העבר קרטון לחייל אחר**.
+- Through the agent: "תחליף את השם על הקרטון של X ל-Y", for one box or for many in one plan (one
+  step per box).
+
+Rules, enforced by the server action (`reassignBoxAction`) for both paths: the new owner must be an
+active user; a box that holds equipment is never overwritten; an empty box on the new owner is
+replaced. The change is written to the audit trail as `REASSIGN_BOX`, marked as done through the
+agent when it was.
 
 ## What the agent knows
 
@@ -63,7 +88,7 @@ For detail it has read-only lookups covering everything the screens show:
 |---|---|
 | People | search by name, browse by role / department / box, personal details, equipment and box of a soldier |
 | Equipment | search or browse the catalog with stock, signed and boxed units; who holds an item; every weapon and sight by serial number |
-| Boxes | the box template with how the existing boxes stand against each row; box completeness report |
+| Boxes | every box with its owner, whether the owner is still active, and how much is inside; the box template with how the existing boxes stand against each row; box completeness report |
 | Requests | waiting requests, one request in full, counts by type |
 | Organisation | departments with positions and member counts; unit templates |
 | ציוד ת״ש | quantities by location; the ת״ש log |
@@ -82,6 +107,13 @@ consequence with real numbers, offers the clean way of doing it, and can carry i
   unit is still in a box.
 - **Deactivating a user** who still holds equipment, **deactivating an item** that is in use, a
   **large drop in a storage count**, and a **promotion** all carry a warning.
+- **Deletions** say exactly what disappears. Deleting an item follows the site's own stages: an
+  item with history is only marked as discontinued, and a second delete erases the history too; the
+  plan states which stage it is, how much stock is wiped from the count and which templates lose
+  the item. Deleting a ת״ש item lists the quantities and log lines that go with it. The milder
+  choice (deactivating) is offered where one exists.
+- **Handing over a box** of someone who is still an active user warns that they will be left
+  without one.
 
 Warnings are written by the server from live data and shown in amber on the plan card, with the
 confirm button changed to "קראתי את האזהרות, אשר ובצע". They do not depend on the model remembering
@@ -142,13 +174,14 @@ requests on the test branch):
 |---|---|
 | Requests understood and planned correctly (first 23 scenarios, three runs) | 69 of 69 |
 | Full set of 38 scenarios, including template changes, warnings, reports and system knowledge (two runs) | 76 of 76 |
+| Current set of 50 scenarios, adding box hand-over (one box, three, a pasted list of six pairs), organisation, deletions, undoing a ת״ש entry and backup | 50 of 50 |
 | Time per request | 2 to 10 seconds |
-| Cost per request, cache warm | about $0.0012 |
-| Cost per request, first one after a pause | about $0.003 |
+| Cost per request, cache warm | about $0.0015 |
+| Cost per request, first one after a pause | about $0.004 |
 
-The fixed part of every model call (instructions plus the tool definitions) is about 20,000
+The fixed part of every model call (instructions plus the tool definitions) is about 29,000
 tokens and is cached for five minutes, which is why back-to-back requests are cheaper. A unit that
-uses the agent 50 times a day spends roughly **$2 to $4 a month**. The real numbers appear on
+uses the agent 50 times a day spends roughly **$2 to $6 a month**. The real numbers appear on
 `/admin/agent`.
 
 If the cheap model ever turns out to misunderstand requests too often, set `AGENT_MODEL=claude-sonnet-5-5`
@@ -189,7 +222,7 @@ still names the production endpoint. The branch endpoint id lives in the git-ign
 # 1. a dev server on the test branch, http://localhost:3002 (the "model" is a scripted mock)
 npm run dev:agent-test
 
-# 2. the full agent suite: 41 tests, API and real browser, desktop and phone
+# 2. the full agent suite: 49 tests, API and real browser, desktop and phone
 PW_ALLOW_DATA_MUTATION=1 PW_BASE_URL=http://localhost:3002 \
   scripts/agent/with-test-branch.sh npx playwright test tests/agent.spec.ts --project=chromium
 
@@ -226,7 +259,9 @@ endpoint id (`ep-…`) into `.agent-test-branch`, then
 
 | Path | What |
 |---|---|
-| `src/lib/agent/actions.ts` | every change the agent can make: check, describe, execute |
+| `src/lib/agent/actions.ts` | changes to equipment, boxes, the box template, stock, requests, users, the catalog and ת״ש quantities: check, describe, execute |
+| `src/lib/agent/actionsAdmin.ts` | the rest of the admin screens: organisation, personal details, unit templates, deletions, the ת״ש log, backup |
+| `src/lib/agent/actionKit.ts` | shared building blocks for actions |
 | `src/lib/agent/readTools.ts` | read-only lookups and reports |
 | `src/lib/agent/snapshot.ts` | the live totals given to the model with every message |
 | `src/lib/agent/boxTemplateData.ts` | what a template change does to existing boxes |

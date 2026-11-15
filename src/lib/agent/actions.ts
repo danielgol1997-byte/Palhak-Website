@@ -27,7 +27,8 @@ import {
   restoreFromBoxAction,
   transferBoxItemAction,
 } from "@/app/(app)/admin/users/[id]/equipment-actions";
-import { createEmptyBoxAction } from "@/app/(app)/admin/boxes/actions";
+import { createEmptyBoxAction, reassignBoxAction } from "@/app/(app)/admin/boxes/actions";
+import { ADMIN_ACTIONS } from "./actionsAdmin";
 import {
   addAlternativeAction,
   addBoxTemplateItemAction,
@@ -63,9 +64,12 @@ import {
  * permission checks as the buttons in the UI. Nothing here writes to the
  * database directly.
  *
- * Deliberately NOT available to the agent: deleting users / items / departments,
- * editing departments / positions / unit templates, database reset and restore,
- * and theme changes.
+ * The catalogue is split in two files: equipment, boxes, the box template, stock,
+ * requests, users and ת״ש quantities here; organisation, unit templates,
+ * deletions and the rest of the admin screens in actionsAdmin.ts.
+ *
+ * Deliberately NOT available to the agent: restoring a backup, resetting the
+ * database, and personal settings (the operator's own profile and theme).
  *
  * Steps that reach beyond the record they name (a template change affects every
  * box, deactivating a user leaves equipment signed on them…) return `warnings`,
@@ -73,126 +77,27 @@ import {
  * also plan it: see `prerequisites`.
  */
 
-const YAMAH = "ימ״ח";
-export const DEFAULT_NOTE = "בוצע באמצעות סוכן ה-AI";
+import {
+  DEFAULT_NOTE,
+  YAMAH,
+  define,
+  form,
+  getAssignment,
+  getBoxItem,
+  getItem,
+  getTashItem,
+  getUser,
+  id,
+  notes,
+  qty,
+  run,
+  serialSuffix,
+  tashQtyAt,
+  yamahStock,
+} from "./actionKit";
 
-// ─── helpers ──────────────────────────────────────────────────────────────────
+export { DEFAULT_NOTE };
 
-const id = (what: string) => z.string().min(1).describe(`${what} – an id returned by a lookup tool. Never invent ids.`);
-const qty = z.number().int().min(1).max(1000).describe("Quantity (whole number, at least 1)");
-const notes = z
-  .string()
-  .trim()
-  .max(500)
-  .optional()
-  .describe("Short reason in Hebrew, shown in the history. Use the operator's own reason when they gave one.");
-
-function form(fields: Record<string, string | number | boolean | undefined | null>): FormData {
-  const fd = new FormData();
-  for (const [k, v] of Object.entries(fields)) {
-    if (v !== undefined && v !== null) fd.set(k, String(v));
-  }
-  return fd;
-}
-
-/** Server actions either return { success, error } or throw. Normalise to "throws on failure". */
-async function run(result: Promise<unknown>): Promise<void> {
-  const r = await result;
-  if (r && typeof r === "object" && "success" in r && (r as { success: unknown }).success === false) {
-    throw new Error(String((r as { error?: unknown }).error ?? "הפעולה נכשלה."));
-  }
-}
-
-function serialSuffix(serial: string | null | undefined) {
-  return serial ? ` (מס׳ סידורי ${serial})` : "";
-}
-
-async function getUser(userId: string, opts: { mustBeActive?: boolean } = {}) {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { id: true, name: true, active: true, role: true, personalNumber: true, email: true },
-  });
-  if (!user) throw new PlanError(`No user with id "${userId}". Look the person up with search_users first.`);
-  if (opts.mustBeActive && !user.active) throw new PlanError(`המשתמש ${user.name} אינו פעיל.`);
-  return user;
-}
-
-async function getItem(equipmentItemId: string) {
-  const item = await prisma.equipmentItem.findUnique({
-    where: { id: equipmentItemId },
-    select: {
-      id: true,
-      name: true,
-      active: true,
-      isWeapon: true,
-      isSight: true,
-      isClothing: true,
-      isShoe: true,
-      category: { select: { division: true } },
-    },
-  });
-  if (!item) throw new PlanError(`No equipment item with id "${equipmentItemId}". Look it up with search_items first.`);
-  return item;
-}
-
-async function yamahStock(equipmentItemId: string): Promise<number> {
-  const inv = await prisma.storageInventory.findFirst({
-    where: { equipmentItemId, location: { name: YAMAH, active: true } },
-    select: { quantity: true },
-  });
-  return inv?.quantity ?? 0;
-}
-
-async function getAssignment(assignmentId: string, userId: string) {
-  const a = await prisma.assignment.findUnique({
-    where: { id: assignmentId },
-    select: {
-      id: true,
-      userId: true,
-      quantity: true,
-      active: true,
-      status: true,
-      serialNumber: true,
-      equipmentItem: { select: { id: true, name: true } },
-    },
-  });
-  if (!a) throw new PlanError(`No assignment with id "${assignmentId}". Call get_user_equipment to get current ids.`);
-  if (a.userId !== userId) throw new PlanError(`Assignment "${assignmentId}" does not belong to that user.`);
-  return a;
-}
-
-async function getBoxItem(boxItemId: string, userId: string) {
-  const b = await prisma.boxItem.findUnique({
-    where: { id: boxItemId },
-    select: {
-      id: true,
-      quantity: true,
-      serialNumber: true,
-      box: { select: { userId: true } },
-      equipmentItem: { select: { id: true, name: true } },
-    },
-  });
-  if (!b) throw new PlanError(`No box item with id "${boxItemId}". Call get_user_equipment to get current ids.`);
-  if (b.box.userId !== userId) throw new PlanError(`Box item "${boxItemId}" is not in that user's box.`);
-  return b;
-}
-
-async function getTashItem(itemId: string) {
-  const item = await prisma.tashItem.findUnique({
-    where: { id: itemId },
-    select: { id: true, name: true, unit: true, inventory: { select: { location: true, quantity: true } } },
-  });
-  if (!item) throw new PlanError(`No ת״ש item with id "${itemId}". Look it up with search_tash first.`);
-  return item;
-}
-
-function tashQtyAt(item: Awaited<ReturnType<typeof getTashItem>>, location: string) {
-  return item.inventory.find((i) => i.location === location)?.quantity ?? 0;
-}
-
-function define<S extends z.ZodType>(action: AgentAction<S>): AgentAction {
-  return action as unknown as AgentAction;
-}
 
 // ─── equipment: storage ⇄ soldier ─────────────────────────────────────────────
 
@@ -431,6 +336,80 @@ const createBox = define({
   },
   async execute(p) {
     await run(createEmptyBoxAction(p.userId));
+  },
+});
+
+/** Boxes that earlier steps of the plan hand over: who gives one away and who receives one. */
+function boxHandovers(ctx: PreviewContext): { gaveAway: Set<string>; received: Set<string> } {
+  const gaveAway = new Set<string>();
+  const received = new Set<string>();
+  for (const step of ctx.earlierSteps) {
+    if (step.action !== "reassign_box") continue;
+    gaveAway.add(String(step.params.fromUserId ?? ""));
+    received.add(String(step.params.toUserId ?? ""));
+  }
+  return { gaveAway, received };
+}
+
+const reassignBox = define({
+  name: "reassign_box",
+  description:
+    "Hand a whole box over to another person: the box keeps everything inside it and only the name on it changes " +
+    "(שינוי השם על הקרטון / העברת קרטון לחייל אחר). Use it when someone left the unit and another soldier takes over their box. " +
+    "No equipment moves and stock does not change. The new owner must be an active user who has no box, or only an empty one (it is replaced). " +
+    "One step per box. To find the boxes use list_boxes (ownerActive: false lists boxes of deactivated users) and for people without a box use list_users (hasBox: false). " +
+    "When the operator did not say who receives which box, ask, unless they said the pairing does not matter.",
+  schema: z.object({
+    fromUserId: id("The person whose name is on the box now"),
+    toUserId: id("The person who takes the box over"),
+  }),
+  async preview(p, _actor, ctx) {
+    if (p.fromUserId === p.toUserId) throw new PlanError("הקרטון כבר רשום על המשתמש הזה.");
+    const from = await getUser(p.fromUserId);
+    const to = await getUser(p.toUserId, { mustBeActive: true });
+    const moves = boxHandovers(ctx);
+    if (moves.gaveAway.has(from.id)) throw new PlanError(`הקרטון של ${from.name} כבר מועבר בצעד קודם באותה תוכנית.`);
+    if (moves.received.has(from.id)) {
+      throw new PlanError(`${from.name} רק מקבל קרטון בצעד קודם באותה תוכנית. Plan each box once, straight to its final owner.`);
+    }
+    if (moves.received.has(to.id)) throw new PlanError(`${to.name} כבר מקבל קרטון בצעד קודם באותה תוכנית. לכל אדם יכול להיות קרטון אחד.`);
+
+    const box = await prisma.box.findUnique({
+      where: { userId: from.id },
+      select: { items: { orderBy: { equipmentItem: { name: "asc" } }, select: { quantity: true, serialNumber: true, equipmentItem: { select: { name: true } } } } },
+    });
+    if (!box) throw new PlanError(`ל${from.name} אין קרטון.`);
+
+    const targetBox = moves.gaveAway.has(to.id)
+      ? null
+      : await prisma.box.findUnique({ where: { userId: to.id }, select: { items: { select: { quantity: true } } } });
+    const targetUnits = targetBox
+      ? Math.max(0, targetBox.items.reduce((s, i) => s + i.quantity, 0) - pendingForUser(to.id, ctx).boxLeaving)
+      : 0;
+    if (targetUnits > 0) {
+      throw new PlanError(
+        `ל${to.name} כבר יש קרטון עם ${targetUnits} יחידות ציוד, ולא דורסים קרטון עם ציוד. ` +
+          `Options to offer the operator: pick someone who has no box; empty ${to.name}'s box first (to the ימ״ח or back to their signature); or move single items with transfer_box_item.`,
+      );
+    }
+
+    const units = box.items.reduce((s, i) => s + i.quantity, 0);
+    const lines = box.items.map((i) => `${i.quantity} × ${i.equipmentItem.name}${serialSuffix(i.serialNumber)}`);
+    const details = [
+      units === 0 ? "הקרטון ריק." : `הקרטון עובר כמו שהוא: ${units} יחידות ב-${box.items.length} שורות. הציוד לא זז והמלאי לא משתנה.`,
+      ...lines.slice(0, 8),
+      ...(lines.length > 8 ? [`ועוד ${lines.length - 8} שורות`] : []),
+      ...(targetBox ? [`הקרטון הריק שרשום היום על ${to.name} יוסר ויוחלף בקרטון הזה.`] : []),
+    ];
+    const warnings = from.active ? [`${from.name} עדיין משתמש פעיל, ואחרי ההעברה לא יהיה לו קרטון.`] : [];
+    return {
+      title: `העברת הקרטון של ${from.name} אל ${to.name}`,
+      details,
+      ...(warnings.length ? { warnings } : {}),
+    };
+  },
+  async execute(p) {
+    await run(reassignBoxAction(p.fromUserId, p.toUserId));
   },
 });
 
@@ -914,11 +893,11 @@ const setUserActive = define({
       // Equipment that earlier steps of this plan already take off him does not count.
       const pending = pendingForUser(user.id, ctx);
       const signedUnits = Math.max(0, (signed._sum.quantity ?? 0) - pending.signedLeaving + pending.signedArriving);
-      const boxedUnits = Math.max(0, (boxed._sum.quantity ?? 0) - pending.boxLeaving);
+      const boxedUnits = boxHandovers(ctx).gaveAway.has(user.id) ? 0 : Math.max(0, (boxed._sum.quantity ?? 0) - pending.boxLeaving);
       if (signedUnits > 0 || boxedUnits > 0) {
         warnings.push(
           `על ${user.name} עדיין רשומות ${signedUnits} יחידות ציוד חתומות ו-${boxedUnits} יחידות בקרטון. ההשבתה לא מחזירה אותן, והן יישארו רשומות על משתמש לא פעיל.`,
-          `אפשר לבקש מהסוכן קודם להחזיר את הציוד לימ״ח או להעביר אותו לחייל אחר, ורק אז להשבית.`,
+          `אפשר לבקש מהסוכן קודם להחזיר את הציוד לימ״ח או להעביר אותו לחייל אחר (כולל העברת הקרטון כולו על שם חייל אחר), ורק אז להשבית.`,
         );
       }
       if (open > 0) warnings.push(`יש לו ${open} בקשות פתוחות שיישארו ממתינות.`);
@@ -1217,6 +1196,7 @@ export const AGENT_ACTIONS: readonly AgentAction[] = [
   transferBoxItem,
   addToBoxFromStorage,
   createBox,
+  reassignBox,
   boxTemplateAddItem,
   boxTemplateSetQuantity,
   boxTemplateRemoveItem,
@@ -1237,6 +1217,7 @@ export const AGENT_ACTIONS: readonly AgentAction[] = [
   tashDeduct,
   tashMove,
   tashMarkLoss,
+  ...ADMIN_ACTIONS,
 ];
 
 const BY_NAME = new Map(AGENT_ACTIONS.map((a) => [a.name, a]));

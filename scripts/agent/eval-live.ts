@@ -48,6 +48,14 @@ async function main() {
     await db.equipmentItem.deleteMany({ where: { id: { in: stale } } });
   }
   await db.tashItem.deleteMany({ where: { name: { startsWith: "כיסאות הערכה " } } });
+  const dropEvalPeople = async () => {
+    await db.box.deleteMany({ where: { user: { email: { startsWith: "agent.eval." } } } });
+    await db.assignment.deleteMany({ where: { user: { email: { startsWith: "agent.eval." } } } });
+    await db.user.deleteMany({ where: { email: { startsWith: "agent.eval." } } }).catch(() => undefined);
+  };
+  await dropEvalPeople();
+  await db.department.deleteMany({ where: { name: { startsWith: "מחלקת הערכה " } } }).catch(() => undefined);
+  await db.unitTemplate.deleteMany({ where: { name: { startsWith: "ערכת הערכה " } } }).catch(() => undefined);
 
   // ── fixtures from the branch ────────────────────────────────────────────────
   const operator = await db.user.findFirstOrThrow({ where: { role: { in: ["THEME_MASTER", "SUPER_ADMIN"] }, active: true }, orderBy: { createdAt: "asc" } });
@@ -140,6 +148,19 @@ async function main() {
       },
     };
   }
+
+  /** A throwaway person, optionally holding a box with `boxUnits` of the test item. */
+  const tag = Date.now() % 10000;
+  async function evalPerson(name: string, opts: { active?: boolean; boxUnits?: number } = {}) {
+    const person = await db.user.create({
+      data: { email: `agent.eval.${Date.now()}.${Math.floor(Math.random() * 1e6)}@example.com`, name: `${name} ${tag}`, role: "USER", active: opts.active ?? true, onboardedAt: new Date() },
+    });
+    if (opts.boxUnits !== undefined) {
+      await db.box.create({ data: { userId: person.id, ...(opts.boxUnits > 0 ? { items: { create: { equipmentItemId: item.id, quantity: opts.boxUnits } } } : {}) } });
+    }
+    return person;
+  }
+  const boxOwner = async (boxId: string) => (await db.box.findUnique({ where: { id: boxId } }))?.userId ?? null;
 
   // ── cases ───────────────────────────────────────────────────────────────────
   type Case = { name: string; run: () => Promise<string | null> }; // null = pass, string = why it failed
@@ -668,7 +689,10 @@ async function main() {
         const noBox = await db.user.count({ where: { active: true, role: "USER", box: null } });
         const t = await one("כמה חיילים יש במערכת, ולכמה מהם אין קרטון?");
         if (t.error) return t.error;
-        return t.text.includes(String(total)) && t.text.includes(String(noBox)) ? null : `expected ${total} and ${noBox} in: ${t.text}`;
+        // Small numbers are often written as words in Hebrew ("לחייל אחד אין קרטון").
+        const words: Record<number, RegExp> = { 0: /אין|אף/, 1: /אחד|אחת/, 2: /שני|שתי|שניים|שתיים/, 3: /שלוש/ };
+        const says = (n: number) => t.text.includes(String(n)) || Boolean(words[n]?.test(t.text));
+        return says(total) && says(noBox) ? null : `expected ${total} and ${noBox} in: ${t.text}`;
       },
     },
     {
@@ -718,10 +742,255 @@ async function main() {
         return t.text.includes(String(items)) ? null : `expected ${items} in: ${t.text}`;
       },
     },
+    {
+      name: "Box hand-over: 'change the name on the box' from someone who left (deactivated) to a new soldier",
+      run: async () => {
+        const left = await evalPerson("גלעד עוזב", { active: false, boxUnits: 2 });
+        const fresh = await evalPerson("נדב מצטרף");
+        const box = await db.box.findUniqueOrThrow({ where: { userId: left.id } });
+        try {
+          const t = await one(`${left.name} עזב את היחידה. תחליף את השם על הקרטון שלו ל${fresh.name}`);
+          if (t.error) return t.error;
+          if (!t.runId) return `no plan: ${t.text}`;
+          if (t.steps.length !== 1 || t.steps[0].action !== "reassign_box") {
+            await act(t.runId, "cancel");
+            return `steps: ${t.steps.map((s) => s.action).join(",")}`;
+          }
+          if (t.steps[0].params.fromUserId !== left.id || t.steps[0].params.toUserId !== fresh.id) {
+            await act(t.runId, "cancel");
+            return JSON.stringify(t.steps[0].params);
+          }
+          const done = await act(t.runId, "confirm");
+          if (done.run?.status !== "DONE") return `confirm: ${JSON.stringify(done)}`;
+          if ((await boxOwner(box.id)) !== fresh.id) return "the box did not change hands";
+          const items = await db.boxItem.findMany({ where: { boxId: box.id } });
+          return items.length === 1 && items[0].quantity === 2 ? null : "the contents changed";
+        } finally {
+          await dropEvalPeople();
+        }
+      },
+    },
+    {
+      name: "Box hand-over: an owner who is still active gets a warning on the plan",
+      run: async () => {
+        const leaving = await evalPerson("אלון עוזב", { boxUnits: 1 });
+        const fresh = await evalPerson("תומר מצטרף");
+        try {
+          const t = await one(`יש קרטון על שם ${leaving.name}, הוא עוזב את היחידה. תעביר את הקרטון על שם ${fresh.name}`);
+          if (t.error) return t.error;
+          if (!t.runId) return `no plan: ${t.text}`;
+          await act(t.runId, "cancel");
+          if (t.steps.length !== 1 || t.steps[0].action !== "reassign_box") return `steps: ${t.steps.map((s) => s.action).join(",")}`;
+          if (t.steps[0].params.fromUserId !== leaving.id || t.steps[0].params.toUserId !== fresh.id) return JSON.stringify(t.steps[0].params);
+          return (t.steps[0].warnings ?? []).some((w) => w.includes("עדיין משתמש פעיל")) ? null : "missing the active-owner warning";
+        } finally {
+          await dropEvalPeople();
+        }
+      },
+    },
+    {
+      name: "Box hand-over, three at once, pairing left to the agent: three steps, each box once, each newcomer once",
+      run: async () => {
+        const left = [await evalPerson("יובל עוזב", { active: false, boxUnits: 2 }), await evalPerson("עידו עוזב", { active: false, boxUnits: 1 }), await evalPerson("רועי עוזב", { active: false, boxUnits: 3 })];
+        const fresh = [await evalPerson("איתי מצטרף"), await evalPerson("עומר מצטרף"), await evalPerson("יונתן מצטרף")];
+        const boxes = await db.box.findMany({ where: { userId: { in: left.map((u) => u.id) } } });
+        try {
+          const t = await one(
+            `${left.map((u) => u.name).join(", ")} כבר לא ביחידה. תעביר את הקרטונים שלהם לחיילים החדשים ${fresh.map((u) => u.name).join(", ")}. לא משנה מי מקבל איזה קרטון.`,
+          );
+          if (t.error) return t.error;
+          if (!t.runId) return `no plan: ${t.text}`;
+          const from = t.steps.map((s) => String(s.params.fromUserId)).sort();
+          const to = t.steps.map((s) => String(s.params.toUserId)).sort();
+          const want = (list: { id: string }[]) => list.map((u) => u.id).sort().join();
+          if (t.steps.length !== 3 || t.steps.some((s) => s.action !== "reassign_box") || from.join() !== want(left) || to.join() !== want(fresh)) {
+            await act(t.runId, "cancel");
+            return `steps: ${t.steps.map((s) => `${s.action} ${s.title}`).join(" | ")}`;
+          }
+          const done = await act(t.runId, "confirm");
+          if (done.run?.status !== "DONE") return `confirm: ${JSON.stringify(done)}`;
+          const owners = await Promise.all(boxes.map((b) => boxOwner(b.id)));
+          return owners.slice().sort().join() === want(fresh) ? null : "the boxes did not all change hands";
+        } finally {
+          await dropEvalPeople();
+        }
+      },
+    },
+    {
+      name: "Box hand-over from a pasted list of six pairs: six steps, every pair exactly as written",
+      run: async () => {
+        const firsts = ["אביתר", "בועז", "גיא", "דניאל", "הלל", "זיו"];
+        type P = Awaited<ReturnType<typeof evalPerson>>;
+        const left: P[] = [];
+        const fresh: P[] = [];
+        for (const [i, f] of firsts.entries()) {
+          left.push(await evalPerson(`${f} יוצא`, { active: i % 2 === 0, boxUnits: 1 + (i % 3) }));
+          fresh.push(await evalPerson(`${f} נכנס`));
+        }
+        // Pair them crosswise, so matching first names would be the wrong answer.
+        const pairs = left.map((l, i) => ({ from: l, to: fresh[(i + 2) % fresh.length] }));
+        const boxes = await Promise.all(pairs.map((p) => db.box.findUniqueOrThrow({ where: { userId: p.from.id } })));
+        try {
+          const t = await one(`תחליף את השמות על הקרטונים לפי הרשימה:\n${pairs.map((p) => `${p.from.name} -> ${p.to.name}`).join("\n")}`);
+          if (t.error) return t.error;
+          if (!t.runId) return `no plan: ${t.text}`;
+          const got = t.steps.map((s) => `${s.action}:${s.params.fromUserId}>${s.params.toUserId}`).sort().join();
+          const want = pairs.map((p) => `reassign_box:${p.from.id}>${p.to.id}`).sort().join();
+          if (got !== want) {
+            await act(t.runId, "cancel");
+            return `steps: ${t.steps.map((s) => s.title).join(" | ")}`;
+          }
+          const done = await act(t.runId, "confirm");
+          if (done.run?.status !== "DONE") return `confirm: ${JSON.stringify(done)}`;
+          const owners = await Promise.all(boxes.map((b) => boxOwner(b.id)));
+          return owners.every((o, i) => o === pairs[i].to.id) ? null : "a box ended up with the wrong person";
+        } finally {
+          await dropEvalPeople();
+        }
+      },
+    },
+    {
+      name: "Box hand-over with nobody named: shows who left and who has no box, and asks, instead of guessing",
+      run: async () => {
+        const left = [await evalPerson("אסף עוזב", { active: false, boxUnits: 1 }), await evalPerson("שחר עוזב", { active: false, boxUnits: 1 })];
+        await evalPerson("ליאור מצטרף");
+        await evalPerson("אריאל מצטרף");
+        try {
+          const t = await one("תעביר את הקרטונים של מי שעזב את היחידה לחיילים שאין להם קרטון");
+          if (t.error) return t.error;
+          if (t.runId) {
+            await act(t.runId, "cancel");
+            return `planned without asking: ${t.steps.map((s) => s.title).join(" | ")}`;
+          }
+          return left.some((u) => t.text.includes(u.name)) ? null : `did not list the boxes of people who left: ${t.text}`;
+        } finally {
+          await dropEvalPeople();
+        }
+      },
+    },
+    {
+      name: "Box hand-over to someone whose box already holds equipment: explains, plans nothing",
+      run: async () => {
+        const left = await evalPerson("מתן עוזב", { active: false, boxUnits: 1 });
+        const holder = await evalPerson("דור ותיק", { boxUnits: 2 });
+        try {
+          const t = await one(`תעביר את הקרטון של ${left.name} על שם ${holder.name}`);
+          if (t.error) return t.error;
+          if (t.runId) {
+            await act(t.runId, "cancel");
+            return `planned: ${t.steps.map((s) => s.title).join(" | ")}`;
+          }
+          return t.text.includes("קרטון") && t.text.length > 30 ? null : `thin answer: ${t.text}`;
+        } finally {
+          await dropEvalPeople();
+        }
+      },
+    },
+    {
+      name: "New department is planned with the given name",
+      run: async () => {
+        const name = `מחלקת הערכה ${tag}`;
+        const t = await one(`תפתח מחלקה חדשה בשם "${name}"`);
+        if (t.error) return t.error;
+        if (!t.runId) return `no plan: ${t.text}`;
+        await act(t.runId, "cancel");
+        return t.steps.length === 1 && t.steps[0].action === "create_department" && t.steps[0].params.name === name ? null : `steps: ${JSON.stringify(t.steps.map((s) => [s.action, s.params]))}`;
+      },
+    },
+    {
+      name: "Phone number and shoe size of a person are changed in one step, nothing else touched",
+      run: async () => {
+        const person = await evalPerson("הראל פרטים");
+        try {
+          const t = await one(`תעדכן ל${person.name} טלפון 052-7654321 ומידת נעליים 44`);
+          if (t.error) return t.error;
+          if (!t.runId) return `no plan: ${t.text}`;
+          await act(t.runId, "cancel");
+          const p = t.steps[0]?.params ?? {};
+          const ok = t.steps.length === 1 && t.steps[0].action === "update_user_details" && p.userId === person.id && String(p.phoneNumber).replace(/\D/g, "") === "0527654321" && p.shoeSize === 44 && p.name === undefined && p.email === undefined;
+          return ok ? null : `steps: ${JSON.stringify(t.steps.map((s) => [s.action, s.params]))}`;
+        } finally {
+          await dropEvalPeople();
+        }
+      },
+    },
+    {
+      name: "Deleting a catalog item with stock: warns about what disappears before or on the plan, and deletes only that item",
+      run: async () => {
+        const fx = await templateFixture({ inTemplate: false });
+        try {
+          const history: Msg[] = [{ role: "user", text: `תמחק את הפריט ${fx.name} מהקטלוג` }];
+          let t = await ask(history);
+          if (t.error) return t.error;
+          if (!t.runId) {
+            // Explaining first is fine. It must mention the stock that would disappear, then act when told to.
+            if (!t.text.includes("20")) return `asked without saying what is lost: ${t.text}`;
+            history.push({ role: "assistant", text: t.text }, { role: "user", text: "כן, תמחק אותו לגמרי" });
+            t = await ask(history);
+            if (t.error) return t.error;
+            if (!t.runId) return `still no plan: ${t.text}`;
+          }
+          await act(t.runId, "cancel");
+          if (t.steps.length !== 1 || t.steps[0].action !== "delete_item" || t.steps[0].params.equipmentItemId !== fx.id) return `steps: ${JSON.stringify(t.steps.map((s) => [s.action, s.params]))}`;
+          return (t.steps[0].warnings ?? []).some((w) => w.includes("20 יחידות")) ? null : "the plan lacks the stock warning";
+        } finally {
+          await fx.cleanup();
+        }
+      },
+    },
+    {
+      name: "Backup on request is one step that changes no data",
+      run: async () => {
+        const t = await one("תעשה גיבוי של המערכת עכשיו");
+        if (t.error) return t.error;
+        if (!t.runId) return `no plan: ${t.text}`;
+        await act(t.runId, "cancel");
+        return t.steps.length === 1 && t.steps[0].action === "create_backup" ? null : `steps: ${t.steps.map((s) => s.action).join(",")}`;
+      },
+    },
+    {
+      name: "Undoing the last ת״ש action picks that log line and nothing else",
+      run: async () => {
+        const name = `כיסאות הערכה ${tag}`;
+        const tash = await db.tashItem.create({ data: { name, unit: "יחידה", inventory: { create: { location: YAMAH, quantity: 25 } } } });
+        await db.tashLog.create({ data: { itemId: tash.id, action: "ADDED", quantity: 20, toLocation: YAMAH, performedById: operator.id, createdAt: new Date(Date.now() - 3600_000) } });
+        const last = await db.tashLog.create({ data: { itemId: tash.id, action: "ADDED", quantity: 5, toLocation: YAMAH, performedById: operator.id } });
+        try {
+          const t = await one(`הוספתי בטעות 5 ${name} בת״ש. תבטל את הפעולה האחרונה על הפריט הזה`);
+          if (t.error) return t.error;
+          if (!t.runId) return `no plan: ${t.text}`;
+          await act(t.runId, "cancel");
+          return t.steps.length === 1 && t.steps[0].action === "tash_delete_log_entry" && t.steps[0].params.logId === last.id ? null : `steps: ${JSON.stringify(t.steps.map((s) => [s.action, s.params]))}`;
+        } finally {
+          await db.tashItem.delete({ where: { id: tash.id } }).catch(() => undefined);
+        }
+      },
+    },
+    {
+      name: "Unit template: an item is added with the requested quantity",
+      run: async () => {
+        const template = await db.unitTemplate.create({ data: { name: `ערכת הערכה ${tag}` } });
+        try {
+          const t = await one(`תוסיף 4 ${item.name} לתבנית היחידה "${template.name}"`);
+          if (t.error) return t.error;
+          if (!t.runId) return `no plan: ${t.text}`;
+          await act(t.runId, "cancel");
+          const p = t.steps[0]?.params ?? {};
+          return t.steps.length === 1 && t.steps[0].action === "unit_template_set_item" && p.unitTemplateId === template.id && p.equipmentItemId === item.id && p.quantity === 4
+            ? null
+            : `steps: ${JSON.stringify(t.steps.map((s) => [s.action, s.params]))}`;
+        } finally {
+          await db.unitTemplate.delete({ where: { id: template.id } }).catch(() => undefined);
+        }
+      },
+    },
   ];
 
+  // AGENT_EVAL_ONLY="box hand-over" runs just the cases whose name contains that text.
+  const only = (process.env.AGENT_EVAL_ONLY ?? "").toLowerCase();
+  const selected = only ? cases.filter((c) => c.name.toLowerCase().includes(only)) : cases;
   let passed = 0;
-  for (const c of cases) {
+  for (const c of selected) {
     const t0 = Date.now();
     let why: string | null;
     try {
@@ -744,12 +1013,12 @@ async function main() {
   const cost = (input * pi + cached * pi * 0.1 + output * po) / 1_000_000;
   const restored = (await stock()) === baseline.stock && (await signed(A.id)) === baseline.a && (await signed(B.id)) === baseline.b;
 
-  console.log(`\n${passed}/${cases.length} passed · model ${model}`);
+  console.log(`\n${passed}/${selected.length} passed · model ${model}`);
   console.log(`${turns.length} turns · ${input.toLocaleString()} input tokens + ${cached.toLocaleString()} read from cache · ${output.toLocaleString()} output tokens`);
   if (pi) console.log(`Cost of this run ≈ $${cost.toFixed(4)}  (≈ $${(cost / Math.max(turns.length, 1)).toFixed(5)} per request)`);
   console.log(restored ? "Branch state restored." : "⚠ Branch state differs from the start (the branch is disposable).");
   await db.$disconnect();
-  if (passed !== cases.length) process.exit(1);
+  if (passed !== selected.length) process.exit(1);
 }
 
 main().catch((e) => {

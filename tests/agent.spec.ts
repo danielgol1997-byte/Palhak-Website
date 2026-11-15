@@ -183,6 +183,16 @@ test.afterAll(async () => {
   await db.storageInventory.deleteMany({ where: { equipmentItemId: { in: ids } } }).catch(() => undefined);
   // Remove the items themselves; if something still points at one, at least hide it.
   await db.equipmentItem.deleteMany({ where: { id: { in: ids } } }).catch(() => db.equipmentItem.updateMany({ where: { id: { in: ids } }, data: { active: false } }));
+  // Boxes, organisation rows and unit templates the later tests created.
+  await db.box.deleteMany({ where: { user: { email: { startsWith: "agent.spec." } } } }).catch(() => undefined);
+  await db.assignment.deleteMany({ where: { user: { email: { startsWith: "agent.spec." } } } }).catch(() => undefined);
+  await db.userPosition.deleteMany({ where: { position: { name: { startsWith: "__agent_spec_" } } } }).catch(() => undefined);
+  await db.userDepartment.deleteMany({ where: { department: { name: { startsWith: "__agent_spec_" } } } }).catch(() => undefined);
+  await db.position.deleteMany({ where: { name: { startsWith: "__agent_spec_" } } }).catch(() => undefined);
+  await db.department.deleteMany({ where: { name: { startsWith: "__agent_spec_" } } }).catch(() => undefined);
+  await db.unitTemplate.deleteMany({ where: { name: { startsWith: "__agent_spec_" } } }).catch(() => undefined);
+  await db.tashLocation.deleteMany({ where: { name: { startsWith: "__agent_spec_" } } }).catch(() => undefined);
+  await db.databaseBackup.deleteMany({ where: { label: { startsWith: "__agent_spec_" } } }).catch(() => undefined);
   await db.user.deleteMany({ where: { email: { startsWith: "agent.spec." } } }).catch(() => undefined);
   await db.$disconnect();
   await mock.stop();
@@ -237,10 +247,16 @@ test("request shape: stable cached prompt, lookup + action tools, cheap default 
   expect(system[0].text).not.toContain(fx.operator.name); // volatile facts stay out of the cached block
   expect(system[1].text).toContain(fx.operator.name);
   const names = req.tools.map((t) => t.name);
-  for (const n of ["search_users", "get_user_equipment", "assign_equipment", "transfer_equipment", "handle_request_items", "discard_draft_plan"]) {
+  for (const n of ["search_users", "get_user_equipment", "list_boxes", "assign_equipment", "transfer_equipment", "reassign_box", "handle_request_items", "discard_draft_plan"]) {
     expect(names).toContain(n);
   }
-  expect(names.some((n) => /delete|reset|restore_database|theme/.test(n)), "no destructive tools are exposed").toBe(false);
+  expect(new Set(names).size, "tool names are unique").toBe(names.length);
+  // Restoring, resetting, deleting users and design changes stay with the screens.
+  expect(names.some((n) => /reset|restore_(database|backup)|theme|delete_user/.test(n)), "no reset / restore / user-deletion tools are exposed").toBe(false);
+  // Everything that deletes is an action (so it is planned, shown and confirmed), never a lookup.
+  const lookups = req.tools.filter((t) => (t.description ?? "").startsWith("[lookup]")).map((t) => t.name);
+  expect(lookups.length).toBeGreaterThan(20);
+  expect(lookups.some((n) => /delete|remove|set_|create|update|cancel|reassign/.test(n))).toBe(false);
 });
 
 // ─── lookups ──────────────────────────────────────────────────────────────────
@@ -1330,6 +1346,473 @@ test("a soldier and a regular admin do not get the agent button", async ({ brows
   }
 });
 
+// ─── boxes change hands ───────────────────────────────────────────────────────
+
+/** A throwaway user, optionally with a box holding `units` of the test item. */
+async function specUser(tag: string, opts: { active?: boolean; boxUnits?: number } = {}): Promise<Person> {
+  const stamp = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+  const user = await db.user.create({
+    data: { email: `agent.spec.${tag}.${stamp}@example.com`, name: `${MARKER}_${tag}`, role: "USER", active: opts.active ?? true, onboardedAt: new Date() },
+  });
+  if (opts.boxUnits !== undefined) {
+    await db.box.create({
+      data: { userId: user.id, ...(opts.boxUnits > 0 ? { items: { create: { equipmentItemId: fx.item.id, quantity: opts.boxUnits } } } : {}) },
+    });
+  }
+  return { id: user.id, name: user.name, role: user.role };
+}
+
+test("boxes: a whole box is handed to another person, contents untouched, marked via AI", async ({ request }) => {
+  const leaving = await specUser("leaving", { active: false, boxUnits: 2 });
+  const newcomer = await specUser("newcomer");
+  const box = await db.box.findUniqueOrThrow({ where: { userId: leaving.id }, include: { items: true } });
+  const stockBefore = await stock(fx.item.id);
+
+  let boxes: { boxes: { ownerUserId: string; ownerActive: boolean; unitsInside: number }[] } | null = null;
+  let people: { users: { userId: string; hasBox: boolean }[] } | null = null;
+  scriptTurn([
+    () => [
+      { name: "list_boxes", input: { ownerActive: false } },
+      { name: "list_users", input: { hasBox: false, limit: 150 } },
+    ],
+    (req) => {
+      boxes = toolResults(req)[0].json as typeof boxes;
+      people = toolResults(req)[1].json as typeof people;
+      return [{ name: "reassign_box", input: { fromUserId: leaving.id, toUserId: newcomer.id } }];
+    },
+  ]);
+  const res = await chat(request, fx.operator, [{ role: "user", text: "תחליף את השם על הקרטון" }]);
+  expect(boxes!.boxes.find((b) => b.ownerUserId === leaving.id)).toMatchObject({ ownerActive: false, unitsInside: 2 });
+  expect(people!.users.find((u) => u.userId === newcomer.id)).toMatchObject({ hasBox: false });
+  const step = res.run!.steps[0];
+  expect(step.title).toBe(`העברת הקרטון של ${leaving.name} אל ${newcomer.name}`);
+  expect(step.details[0]).toContain("2 יחידות");
+  expect(step.details).toContain(`2 × ${fx.item.name}`);
+  expect(step.warnings ?? [], "an owner who already left needs no warning").toEqual([]);
+  // Drafting moved nothing.
+  expect((await db.box.findUnique({ where: { id: box.id } }))!.userId).toBe(leaving.id);
+
+  const done = await runAction(request, fx.operator, res.run!.id, "confirm");
+  expect(done.run!.status, JSON.stringify(done.run!.receipt)).toBe("DONE");
+  const after = await db.box.findUniqueOrThrow({ where: { id: box.id }, include: { items: true } });
+  expect(after.userId).toBe(newcomer.id);
+  expect(after.items.map((i) => [i.id, i.quantity])).toEqual(box.items.map((i) => [i.id, i.quantity]));
+  expect(await db.box.findUnique({ where: { userId: leaving.id } })).toBeNull();
+  expect(await stock(fx.item.id), "handing a box over never touches stock").toBe(stockBefore);
+  const audit = await db.auditLog.findFirst({ where: { action: "REASSIGN_BOX", entityId: box.id } });
+  expect(audit).toMatchObject({ actorId: fx.operator.id, viaAgentRunId: res.run!.id });
+  expect(audit!.metadataJson).toMatchObject({ fromUserName: leaving.name, toUserName: newcomer.name, units: 2 });
+  expectNoMockProblems();
+});
+
+test("boxes: a box with equipment is never overwritten; an empty one is replaced; an active owner is warned about", async ({ request }) => {
+  const holder = await db.user.findFirstOrThrow({ where: { name: `${MARKER}_newcomer` } }); // active, holds the box from the previous test
+  const full = await specUser("fullbox", { boxUnits: 1 });
+  const empty = await specUser("emptybox", { boxUnits: 0 });
+  const boxless = await specUser("boxless");
+  const third = await specUser("third");
+  const emptyBox = await db.box.findUniqueOrThrow({ where: { userId: empty.id } });
+  const movingBox = await db.box.findUniqueOrThrow({ where: { userId: holder.id } });
+
+  const errors: string[] = [];
+  mock.script(
+    () => ({
+      toolUses: [
+        { name: "reassign_box", input: { fromUserId: boxless.id, toUserId: third.id } }, // no box to hand over
+        { name: "reassign_box", input: { fromUserId: holder.id, toUserId: full.id } }, // target holds equipment
+        { name: "reassign_box", input: { fromUserId: holder.id, toUserId: holder.id } }, // same person
+        { name: "reassign_box", input: { fromUserId: holder.id, toUserId: empty.id } }, // fine
+        { name: "reassign_box", input: { fromUserId: full.id, toUserId: empty.id } }, // empty already receives one in this plan
+        { name: "reassign_box", input: { fromUserId: holder.id, toUserId: third.id } }, // this box is already moving
+      ],
+    }),
+    (req) => {
+      toolResults(req).forEach((r) => errors.push(r.isError ? r.raw : "ok"));
+      return { text: "הכנתי תוכנית." };
+    },
+  );
+  const res = await chat(request, fx.operator, [{ role: "user", text: "כמה העברות" }]);
+  expect(errors[0]).toContain("אין קרטון");
+  expect(errors[1]).toContain("כבר יש קרטון עם 1 יחידות ציוד");
+  expect(errors[2]).toContain("כבר רשום על המשתמש הזה");
+  expect(errors[3]).toBe("ok");
+  expect(errors[4]).toContain("כבר מקבל קרטון בצעד קודם");
+  expect(errors[5]).toContain("כבר מועבר בצעד קודם");
+  expect(res.run!.steps).toHaveLength(1);
+  const step = res.run!.steps[0];
+  expect(step.details).toContain(`הקרטון הריק שרשום היום על ${empty.name} יוסר ויוחלף בקרטון הזה.`);
+  expect(step.warnings).toEqual([`${holder.name} עדיין משתמש פעיל, ואחרי ההעברה לא יהיה לו קרטון.`]);
+
+  const done = await runAction(request, fx.operator, res.run!.id, "confirm");
+  expect(done.run!.status, JSON.stringify(done.run!.receipt)).toBe("DONE");
+  expect((await db.box.findUniqueOrThrow({ where: { id: movingBox.id } })).userId).toBe(empty.id);
+  expect(await db.box.findUnique({ where: { id: emptyBox.id } }), "the empty box was replaced").toBeNull();
+  expect(await db.box.count({ where: { userId: full.id } })).toBe(1);
+
+  // If the target's box fills up between drafting and confirming, the step stops instead of overwriting.
+  scriptTurn([() => [{ name: "reassign_box", input: { fromUserId: full.id, toUserId: third.id } }]]);
+  const late = await chat(request, fx.operator, [{ role: "user", text: "עוד אחת" }]);
+  await db.box.create({ data: { userId: third.id, items: { create: { equipmentItemId: fx.item.id, quantity: 1 } } } });
+  const stopped = await runAction(request, fx.operator, late.run!.id, "confirm");
+  expect(stopped.run!.status).toBe("FAILED");
+  expect(stopped.run!.receipt![0].error).toContain("כבר יש קרטון עם 1 יחידות ציוד");
+  expect((await db.box.findUniqueOrThrow({ where: { userId: full.id } })).userId).toBe(full.id);
+  expectNoMockProblems();
+});
+
+for (const viewport of [
+  { label: "desktop", width: 1280, height: 860 },
+  { label: "phone", width: 375, height: 740 },
+]) {
+  test(`boxes UI (${viewport.label}): an admin hands a box over from the boxes screen, by hand`, async ({ browser }) => {
+    const owner = await specUser(`uiowner_${viewport.label}`, { boxUnits: 3 });
+    const target = await specUser(`uitarget_${viewport.label}`);
+    const blocked = await specUser(`uiblocked_${viewport.label}`, { boxUnits: 1 });
+    const box = await db.box.findUniqueOrThrow({ where: { userId: owner.id } });
+
+    const context = await browser.newContext({ viewport, locale: "he-IL", baseURL: BASE_URL });
+    await signIn(context, fx.operator);
+    await context.addInitScript(() => {
+      const hide = () => {
+        const style = document.createElement("style");
+        style.textContent = "nextjs-portal{display:none!important}";
+        document.documentElement.appendChild(style);
+      };
+      if (document.documentElement) hide();
+      else document.addEventListener("DOMContentLoaded", hide);
+    });
+    const page = await context.newPage();
+    await page.goto("/admin/boxes");
+    // A box whose owner was deactivated is marked, so it is easy to spot.
+    const gone = await specUser(`uigone_${viewport.label}`, { active: false, boxUnits: 1 });
+    await page.reload();
+    await page.getByPlaceholder("חיפוש לפי שם, מ״א או מחלקה...").fill(gone.name);
+    await expect(page.getByTestId("box-owner-inactive")).toHaveCount(1);
+    await page.getByPlaceholder("חיפוש לפי שם, מ״א או מחלקה...").fill(owner.name);
+    await expect(page.getByTestId("box-owner-inactive")).toHaveCount(0);
+    await page.getByRole("button", { name: "עריכה" }).first().click();
+    await page.getByTestId("box-reassign-open").click();
+    const panel = page.getByTestId("box-reassign-panel");
+    await expect(panel).toContainText("3 פריטים");
+    await expect(page.getByTestId("box-reassign-confirm")).toBeDisabled();
+
+    // Someone who already holds a box with equipment cannot be picked.
+    await page.getByTestId("box-reassign-search").fill(blocked.name);
+    await expect(panel.getByTestId("box-reassign-target")).toHaveCount(1);
+    await expect(panel.getByTestId("box-reassign-target")).toBeDisabled();
+    await expect(panel.getByTestId("box-reassign-target")).toContainText("יש קרטון עם 1 פריטים");
+
+    await page.getByTestId("box-reassign-search").fill(target.name);
+    await expect(panel.getByTestId("box-reassign-target")).toContainText("אין קרטון");
+    await panel.getByTestId("box-reassign-target").click();
+    await expect(panel).toContainText(`הקרטון יירשם על שם: ${target.name}`);
+    await expectInsideViewport(page, "box-reassign-panel");
+    await expectInsideViewport(page, "box-reassign-confirm");
+    await page.screenshot({ path: `${SHOT_DIR}/${viewport.label}-7-box-handover.png` });
+    await page.getByTestId("box-reassign-confirm").click();
+    await expect(panel).toHaveCount(0);
+
+    await expect.poll(async () => (await db.box.findUniqueOrThrow({ where: { id: box.id } })).userId).toBe(target.id);
+    const audit = await db.auditLog.findFirst({ where: { action: "REASSIGN_BOX", entityId: box.id } });
+    expect(audit, "done by hand: recorded on the admin, not marked as AI").toMatchObject({ actorId: fx.operator.id, viaAgentRunId: null });
+    await page.getByPlaceholder("חיפוש לפי שם, מ״א או מחלקה...").fill(target.name);
+    await expect(page.getByRole("button", { name: "עריכה" })).toHaveCount(1);
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(1);
+    await context.close();
+  });
+}
+
+// ─── the rest of the admin screens ────────────────────────────────────────────
+
+/** One scripted turn with a single batch of steps, confirmed. Returns the plan. */
+async function planAndConfirm(request: APIRequestContext, steps: { name: string; input: unknown }[]): Promise<RunView> {
+  const results: string[] = [];
+  mock.script(
+    () => ({ toolUses: steps }),
+    (req) => {
+      toolResults(req).forEach((r) => results.push(r.isError ? r.raw : "ok"));
+      return { text: "הכנתי תוכנית." };
+    },
+  );
+  const res = await chat(request, fx.operator, [{ role: "user", text: "בצע" }]);
+  expect(results, "every step was accepted into the plan").toEqual(steps.map(() => "ok"));
+  const done = await runAction(request, fx.operator, res.run!.id, "confirm");
+  expect(done.run!.status, JSON.stringify(done.run!.receipt)).toBe("DONE");
+  return res.run!;
+}
+
+/** Steps that must be refused while drafting; returns the reasons given to the model. */
+async function refusals(request: APIRequestContext, steps: { name: string; input: unknown }[]): Promise<string[]> {
+  const results: string[] = [];
+  mock.script(
+    () => ({ toolUses: steps }),
+    (req) => {
+      toolResults(req).forEach((r) => results.push(r.isError ? r.raw : "ok"));
+      return { text: "לא ניתן." };
+    },
+  );
+  const res = await chat(request, fx.operator, [{ role: "user", text: "נסה" }]);
+  expect(res.run, "nothing reached a plan").toBeNull();
+  return results;
+}
+
+test("organisation: departments, positions, who belongs where and personal details", async ({ request }) => {
+  const person = await specUser("orgperson");
+  const dept = `${MARKER}_dept`;
+  const pos = `${MARKER}_pos`;
+
+  const first = await planAndConfirm(request, [{ name: "create_department", input: { name: dept, divisions: ["LOGISTICS"] } }]);
+  expect(first.steps[0]).toMatchObject({ title: `הוספת מחלקה חדשה: ${dept}`, details: ["סוגי ציוד: ציוד משקי"] });
+  const d = await db.department.findUniqueOrThrow({ where: { name: dept }, include: { divisions: true } });
+  expect(d.divisions.map((x) => x.division)).toEqual(["LOGISTICS"]);
+
+  await planAndConfirm(request, [{ name: "create_position", input: { departmentId: d.id, name: pos } }]);
+  const p = await db.position.findFirstOrThrow({ where: { departmentId: d.id, name: pos } });
+
+  // The lookup hands out the ids the actions need.
+  let listed: { departmentId: string; positions: { positionId: string }[] }[] = [];
+  mock.script(
+    () => ({ toolUses: [{ name: "list_departments", input: {} }] }),
+    (req) => {
+      listed = firstResult(req);
+      return { text: "ok" };
+    },
+  );
+  await chat(request, fx.operator, [{ role: "user", text: "מחלקות" }]);
+  expect(listed.find((x) => x.departmentId === d.id)!.positions.map((x) => x.positionId)).toEqual([p.id]);
+
+  const plan = await planAndConfirm(request, [
+    { name: "set_user_departments", input: { userId: person.id, departmentIds: [d.id], positionIds: [p.id] } },
+    { name: "update_user_details", input: { userId: person.id, phoneNumber: "050-0000000", shirtSize: "L", shoeSize: 43 } },
+    { name: "update_position", input: { positionId: p.id, name: `${pos}_2` } },
+    { name: "update_department", input: { departmentId: d.id, name: `${dept}_2`, divisions: ["LOGISTICS", "MEDICAL"] } },
+  ]);
+  expect(plan.steps[0].details).toEqual([`מחלקות: ללא ← ${dept}`, `תפקידים: ללא ← ${pos}`]);
+  expect(plan.steps[1].details).toEqual(["טלפון: ריק ← 050-0000000", "מידת חולצה: ריק ← L", "מידת נעליים: ריק ← 43"]);
+  const u = await db.user.findUniqueOrThrow({ where: { id: person.id }, include: { userDepartments: true, userPositions: true } });
+  expect(u).toMatchObject({ phoneNumber: "050-0000000", shirtSize: "L", shoeSize: "SIZE_43", role: "USER", active: true, name: person.name });
+  expect(u.userDepartments.map((x) => x.departmentId)).toEqual([d.id]);
+  expect(u.userPositions.map((x) => x.positionId), "editing details keeps the department and position").toEqual([p.id]);
+  expect((await db.position.findUniqueOrThrow({ where: { id: p.id } })).name).toBe(`${pos}_2`);
+  const d2 = await db.department.findUniqueOrThrow({ where: { id: d.id }, include: { divisions: true } });
+  expect(d2.name).toBe(`${dept}_2`);
+  expect(d2.divisions.map((x) => x.division).sort()).toEqual(["LOGISTICS", "MEDICAL"]);
+  expect(await db.auditLog.count({ where: { viaAgentRunId: plan.id } })).toBeGreaterThanOrEqual(4);
+
+  // Deactivating a position someone holds says who is affected.
+  scriptTurn([() => [{ name: "update_position", input: { positionId: p.id, active: false } }]]);
+  const posOff = await chat(request, fx.operator, [{ role: "user", text: "השבת תפקיד" }]);
+  expect(posOff.run!.steps[0].warnings).toEqual(["1 משתמשים מחזיקים בתפקיד, והם יישארו רשומים עליו."]);
+  await runAction(request, fx.operator, posOff.run!.id, "cancel");
+
+  // Display order: every department exactly once, applied as given, then put back.
+  const currentOrder = async () => (await db.department.findMany({ orderBy: [{ sortOrder: "asc" }, { id: "asc" }], select: { id: true } })).map((x) => x.id);
+  const order = await currentOrder();
+  const reversed = [...order].reverse();
+  const reordered = await planAndConfirm(request, [{ name: "reorder_departments", input: { orderedDepartmentIds: reversed } }]);
+  expect(reordered.steps[0].details).toHaveLength(order.length);
+  expect(await currentOrder()).toEqual(reversed);
+  await planAndConfirm(request, [{ name: "reorder_departments", input: { orderedDepartmentIds: order } }]);
+  expect(await currentOrder()).toEqual(order);
+  expect((await refusals(request, [{ name: "reorder_departments", input: { orderedDepartmentIds: order.slice(1) } }]))[0]).toContain("exactly once");
+
+  // What the site refuses, the agent refuses, with a reason and a way out.
+  const no = await refusals(request, [
+    { name: "delete_department", input: { departmentId: d.id } },
+    { name: "create_department", input: { name: `${dept}_2` } },
+    { name: "set_user_departments", input: { userId: person.id, departmentIds: [], positionIds: [p.id] } },
+    { name: "update_user_details", input: { userId: person.id, email: fx.operator.id === person.id ? "x@example.com" : (await db.user.findUniqueOrThrow({ where: { id: fx.operator.id } })).email } },
+    { name: "update_user_details", input: { userId: person.id, shirtSize: "L" } },
+  ]);
+  expect(no[0]).toContain("יש בה 1 תפקידים");
+  expect(no[1]).toContain("כבר קיימת מחלקה");
+  expect(no[2]).toContain("לא שייך לאף אחת מהמחלקות");
+  expect(no[3]).toContain("כבר קיים משתמש עם כתובת אימייל זו");
+  expect(no[4]).toContain("אין שינוי");
+
+  // Deactivating a department people belong to says so.
+  scriptTurn([() => [{ name: "update_department", input: { departmentId: d.id, active: false } }]]);
+  const off = await chat(request, fx.operator, [{ role: "user", text: "השבת" }]);
+  expect(off.run!.steps[0].warnings).toEqual(["1 משתמשים משויכים למחלקה. הם יישארו משויכים למחלקה לא פעילה."]);
+  await runAction(request, fx.operator, off.run!.id, "cancel");
+
+  // An empty department can be deleted.
+  await db.userPosition.deleteMany({ where: { positionId: p.id } });
+  await db.userDepartment.deleteMany({ where: { departmentId: d.id } });
+  await db.position.delete({ where: { id: p.id } });
+  const gone = await planAndConfirm(request, [{ name: "delete_department", input: { departmentId: d.id } }]);
+  expect(gone.steps[0].warnings).toEqual(["הפעולה לא ניתנת לביטול, מלבד שחזור מגיבוי."]);
+  expect(await db.department.findUnique({ where: { id: d.id } })).toBeNull();
+  expectNoMockProblems();
+});
+
+test("unit templates and item deletion go through the site's own rules", async ({ request }) => {
+  const name = `${MARKER}_unit`;
+  await planAndConfirm(request, [{ name: "create_unit_template", input: { name } }]);
+  const t = await db.unitTemplate.findUniqueOrThrow({ where: { name } });
+
+  const plan = await planAndConfirm(request, [
+    { name: "unit_template_set_item", input: { unitTemplateId: t.id, equipmentItemId: fx.item.id, quantity: 3 } },
+    { name: "update_unit_template", input: { unitTemplateId: t.id, name: `${name}_2` } },
+  ]);
+  expect(plan.steps[0]).toMatchObject({ title: `תבנית היחידה ${name}: הוספת ${fx.item.name}`, details: ["כמות נדרשת: 3"] });
+  const change = await planAndConfirm(request, [{ name: "unit_template_set_item", input: { unitTemplateId: t.id, equipmentItemId: fx.item.id, quantity: 5 } }]);
+  expect(change.steps[0].details).toEqual(["כמות נדרשת: 3 ← 5"]);
+  expect(await db.unitTemplateItem.findMany({ where: { unitTemplateId: t.id } })).toMatchObject([{ equipmentItemId: fx.item.id, quantityRequired: 5 }]);
+
+  let listed: { unitTemplateId: string; items: { equipmentItemId: string; quantityRequired: number }[] }[] = [];
+  mock.script(
+    () => ({ toolUses: [{ name: "list_unit_templates", input: {} }] }),
+    (req) => {
+      listed = firstResult(req);
+      return { text: "ok" };
+    },
+  );
+  await chat(request, fx.operator, [{ role: "user", text: "תבניות" }]);
+  expect(listed.find((x) => x.unitTemplateId === t.id)!.items).toEqual([{ equipmentItemId: fx.item.id, item: fx.item.name, quantityRequired: 5 }]);
+
+  // Deleting says what goes with it.
+  scriptTurn([() => [{ name: "delete_unit_template", input: { unitTemplateId: t.id } }]]);
+  const del = await chat(request, fx.operator, [{ role: "user", text: "מחק" }]);
+  expect(del.run!.steps[0].warnings![0]).toContain("תימחק יחד עם 1 הפריטים");
+  await runAction(request, fx.operator, del.run!.id, "cancel");
+  await planAndConfirm(request, [
+    { name: "unit_template_remove_item", input: { unitTemplateId: t.id, equipmentItemId: fx.item.id } },
+    { name: "delete_unit_template", input: { unitTemplateId: t.id } },
+  ]);
+  expect(await db.unitTemplate.findUnique({ where: { id: t.id } })).toBeNull();
+
+  // Catalog: an item in use cannot be deleted; an unused one disappears; one with history is only discontinued.
+  const category = await db.equipmentItem.findUniqueOrThrow({ where: { id: fx.item.id }, select: { categoryId: true } });
+  const unused = await db.equipmentItem.create({ data: { name: `${MARKER}_del_unused`, categoryId: category.categoryId } });
+  const used = await db.equipmentItem.create({ data: { name: `${MARKER}_del_used`, categoryId: category.categoryId } });
+  const yamah = await db.storageLocation.findFirstOrThrow({ where: { name: YAMAH } });
+  await db.storageInventory.create({ data: { locationId: yamah.id, equipmentItemId: used.id, quantity: 4 } });
+  await db.request.create({ data: { requesterId: fx.soldierB.id, type: "NEW_EQUIPMENT", status: "DENIED", items: { create: { equipmentItemId: used.id, quantity: 1, status: "DENIED" } } } });
+
+  const no = await refusals(request, [{ name: "delete_item", input: { equipmentItemId: fx.item.id } }]);
+  expect(no[0]).toMatch(/לא ניתן למחוק את .*(רשומות על חיילים|נמצאות בקרטונים)/);
+
+  scriptTurn([
+    () => [
+      { name: "delete_item", input: { equipmentItemId: unused.id } },
+      { name: "delete_item", input: { equipmentItemId: used.id } },
+    ],
+  ]);
+  const res = await chat(request, fx.operator, [{ role: "user", text: "מחק פריטים" }]);
+  expect(res.run!.steps[0].title).toBe(`מחיקת הפריט ${unused.name}`);
+  expect(res.run!.steps[1].title).toBe(`הוצאת הפריט ${used.name} משימוש`);
+  expect(res.run!.steps[1].warnings![0]).toBe("רישום המלאי של הפריט יימחק: 4 יחידות ייעלמו מספירת הימ״ח.");
+  const done = await runAction(request, fx.operator, res.run!.id, "confirm");
+  expect(done.run!.status, JSON.stringify(done.run!.receipt)).toBe("DONE");
+  expect(await db.equipmentItem.findUnique({ where: { id: unused.id } })).toBeNull();
+  expect(await db.equipmentItem.findUniqueOrThrow({ where: { id: used.id } })).toMatchObject({ discontinued: true, active: false });
+  expect(await db.requestItem.count({ where: { equipmentItemId: used.id } }), "history is kept").toBe(1);
+
+  // A second delete of a discontinued item erases its history, and the plan says so before anything happens.
+  scriptTurn([() => [{ name: "delete_item", input: { equipmentItemId: used.id } }]]);
+  const purge = await chat(request, fx.operator, [{ role: "user", text: "מחק סופית" }]);
+  expect(purge.run!.steps[0].title).toBe(`מחיקה סופית של הפריט ${used.name}`);
+  expect(purge.run!.steps[0].warnings![0]).toContain("יימחקו לצמיתות גם 1 שורות מבקשות");
+  await runAction(request, fx.operator, purge.run!.id, "cancel");
+  expect(await db.requestItem.count({ where: { equipmentItemId: used.id } })).toBe(1);
+  // Leave no stray request on the real soldier of the test branch.
+  await db.request.deleteMany({ where: { items: { some: { equipmentItemId: used.id } } } });
+  expectNoMockProblems();
+});
+
+test("ת״ש: count correction, undoing a log line, renaming and deleting, with the log as the source", async ({ request }) => {
+  const name = `${MARKER}_tash2`;
+  const loc = `${MARKER}_loc`;
+  const item = await db.tashItem.create({ data: { name, unit: "יחידה" } });
+  await planAndConfirm(request, [{ name: "tash_add_quantity", input: { itemId: item.id, location: loc, quantity: 5 } }]);
+  const set = await planAndConfirm(request, [{ name: "tash_set_quantity", input: { itemId: item.id, location: loc, newQuantity: 8, notes: "ספירה" } }]);
+  expect(set.steps[0].details).toEqual(["5 ← 8 יחידה (תוספת של 3)"]);
+  const qty = async () => (await db.tashInventory.findUnique({ where: { itemId_location: { itemId: item.id, location: loc } } }))?.quantity ?? 0;
+  expect(await qty()).toBe(8);
+
+  let history: { logId: string; quantity: number; action: string }[] = [];
+  let saved: { savedLocations: string[] } | null = null;
+  mock.script(
+    () => ({ toolUses: [{ name: "tash_history", input: { itemId: item.id } }, { name: "search_tash", input: { query: name } }] }),
+    (req) => {
+      history = toolResults(req)[0].json as typeof history;
+      saved = toolResults(req)[1].json as typeof saved;
+      return { text: "ok" };
+    },
+  );
+  await chat(request, fx.operator, [{ role: "user", text: "יומן" }]);
+  expect(saved!.savedLocations).toContain(loc);
+  const correction = history.find((h) => h.quantity === 3)!;
+  expect(correction.action).toBe("ADDED");
+
+  const undo = await planAndConfirm(request, [
+    { name: "tash_edit_log_note", input: { logId: history.find((h) => h.quantity === 5)!.logId, notes: "קליטה ראשונה" } },
+    { name: "tash_delete_log_entry", input: { logId: correction.logId } },
+    { name: "tash_update_item", input: { itemId: item.id, name: `${name}_b`, unit: "קרטון" } },
+    { name: "tash_delete_saved_location", input: { name: loc } },
+  ]);
+  expect(undo.steps[1].details[1]).toBe(`${loc}: 8 ← 5 יחידה`);
+  expect(undo.steps[3].warnings![0]).toContain("רשומים כרגע");
+  expect(await qty(), "undoing the correction puts the count back").toBe(5);
+  expect(await db.tashLog.findMany({ where: { itemId: item.id }, select: { notes: true, quantity: true } })).toEqual([{ notes: "קליטה ראשונה", quantity: 5 }]);
+  expect(await db.tashItem.findUniqueOrThrow({ where: { id: item.id } })).toMatchObject({ name: `${name}_b`, unit: "קרטון" });
+  expect(await db.tashLocation.findUnique({ where: { name: loc } })).toBeNull();
+
+  // An undo that would drive a count below zero is refused while drafting.
+  const first = await db.tashLog.findFirstOrThrow({ where: { itemId: item.id } });
+  await planAndConfirm(request, [{ name: "tash_deduct_quantity", input: { itemId: item.id, location: loc, quantity: 4 } }]);
+  const no = await refusals(request, [{ name: "tash_delete_log_entry", input: { logId: first.id } }]);
+  expect(no[0]).toContain("לא ניתן לבטל את הרשומה");
+
+  scriptTurn([() => [{ name: "tash_delete_item", input: { itemId: item.id } }]]);
+  const del = await chat(request, fx.operator, [{ role: "user", text: "מחק" }]);
+  expect(del.run!.steps[0].warnings![0]).toBe("יימחקו 1 קרטון ב-1 מיקומים, וגם 2 רשומות ביומן הת״ש של הפריט.");
+  const done = await runAction(request, fx.operator, del.run!.id, "confirm");
+  expect(done.run!.status, JSON.stringify(done.run!.receipt)).toBe("DONE");
+  expect(await db.tashItem.findUnique({ where: { id: item.id } })).toBeNull();
+  expectNoMockProblems();
+});
+
+test("requests can be cancelled, written-off equipment recovered, and a backup taken", async ({ request }) => {
+  const person = await specUser("recover");
+  const open = await db.request.create({
+    data: { requesterId: person.id, type: "NEW_EQUIPMENT", status: "OPEN", items: { create: { equipmentItemId: fx.item.id, quantity: 2 } } },
+  });
+  const lost = await db.assignment.create({ data: { userId: person.id, equipmentItemId: fx.item.id, quantity: 2, status: "STOLEN", active: true } });
+  const before = await stock(fx.item.id);
+  const backups = await db.databaseBackup.count();
+
+  const plan = await planAndConfirm(request, [
+    { name: "cancel_request", input: { requestId: open.id } },
+    { name: "recover_written_off_equipment", input: { assignmentId: lost.id, quantity: 1 } },
+    { name: "create_backup", input: { label: `${MARKER}_backup` } },
+  ]);
+  expect(plan.steps[0].details).toEqual([`2 × ${fx.item.name} – יבוטל`]);
+  expect(plan.steps[1].details[1]).toBe(`מלאי בימ״ח: ${before} ← ${before + 1}`);
+  expect(plan.steps[2].details).toContain("שום נתון לא משתנה.");
+  expect(await db.request.findUniqueOrThrow({ where: { id: open.id }, include: { items: true } })).toMatchObject({ status: "CANCELLED", items: [{ status: "CANCELLED" }] });
+  expect(await stock(fx.item.id)).toBe(before + 1);
+  expect((await db.assignment.findUniqueOrThrow({ where: { id: lost.id } })).quantity).toBe(1);
+  expect(await db.databaseBackup.count()).toBe(backups + 1);
+  const backup = await db.databaseBackup.findFirstOrThrow({ where: { label: `${MARKER}_backup` } });
+  expect(backup).toMatchObject({ kind: "MANUAL", blobUrl: null });
+
+  const no = await refusals(request, [
+    { name: "cancel_request", input: { requestId: open.id } },
+    { name: "recover_written_off_equipment", input: { assignmentId: lost.id, quantity: 5 } },
+  ]);
+  expect(no[0]).toContain("לא ניתן לבטל אותה");
+  expect(no[1]).toContain("בשורה יש רק 1 יחידות");
+
+  // Put the storage count back the way the spec found it.
+  await db.storageInventory.updateMany({ where: { equipmentItemId: fx.item.id, location: { name: YAMAH } }, data: { quantity: before } });
+  await db.assignment.delete({ where: { id: lost.id } });
+  await db.request.delete({ where: { id: open.id } });
+  expectNoMockProblems();
+});
+
 // ─── leave the branch as it was ───────────────────────────────────────────────
 
 test("return: everything the spec signed out goes back to storage, through the agent", async ({ request }) => {
@@ -1343,9 +1826,18 @@ test("return: everything the spec signed out goes back to storage, through the a
     scriptTurn([
       () => [{ name: "get_user_equipment", input: { userId: soldier.id } }],
       (req) => {
-        const eq = firstResult<{ signedEquipment: { assignmentId: string; equipmentItemId: string; serialNumber: string | null }[] }>(req);
-        const row = eq.signedEquipment.find((e) => e.equipmentItemId === fx.item.id && !e.serialNumber)!;
-        return [{ name: "return_equipment_to_storage", input: { userId: soldier.id, items: [{ assignmentId: row.assignmentId, quantity: extra }], notes: "סיום בדיקה" } }];
+        const eq = firstResult<{ signedEquipment: { assignmentId: string; equipmentItemId: string; quantity: number; serialNumber: string | null }[] }>(req);
+        // The soldier's units of one item can sit in several rows; take the extra from as many as needed.
+        const rows = eq.signedEquipment.filter((e) => e.equipmentItemId === fx.item.id && !e.serialNumber).sort((x, y) => y.quantity - x.quantity);
+        const items: { assignmentId: string; quantity: number }[] = [];
+        let left = extra;
+        for (const row of rows) {
+          if (left <= 0) break;
+          const quantity = Math.min(row.quantity, left);
+          items.push({ assignmentId: row.assignmentId, quantity });
+          left -= quantity;
+        }
+        return [{ name: "return_equipment_to_storage", input: { userId: soldier.id, items, notes: "סיום בדיקה" } }];
       },
     ]);
     const res = await chat(request, fx.operator, [{ role: "user", text: "החזרה" }]);
@@ -1354,7 +1846,7 @@ test("return: everything the spec signed out goes back to storage, through the a
     expect(done.run!.status, JSON.stringify(done.run!.receipt)).toBe("DONE");
     expect(await stock(fx.item.id)).toBe(before + extra);
     const history = await db.request.findFirst({ where: { viaAgentRunId: res.run!.id }, include: { items: true } });
-    expect(history!.items[0].quantity).toBe(-extra);
+    expect(history!.items.reduce((sum, i) => sum + i.quantity, 0)).toBe(-extra);
   }
   expect(await signedQty(fx.soldierA.id, fx.item.id)).toBe(fx.baseline.signedA);
   expect(await signedQty(fx.soldierB.id, fx.item.id)).toBe(fx.baseline.signedB);

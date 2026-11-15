@@ -10,6 +10,7 @@ import {
   restoreFromBoxAction,
   transferBoxItemAction,
 } from "../users/[id]/equipment-actions";
+import { reassignBoxAction } from "./actions";
 
 interface BoxItemRow {
   id: string;
@@ -45,6 +46,8 @@ interface BoxEditModalProps {
   box: BoxData;
   allUsers: TransferUser[];
   addableItems: AddableItem[];
+  /** userId → units in that user's box. A user with no entry has no box. */
+  boxUnitsByUserId: Record<string, number>;
   onClose: () => void;
 }
 
@@ -56,7 +59,7 @@ interface PendingAction {
   quantity: number;
 }
 
-export function BoxEditModal({ box, allUsers, addableItems, onClose }: BoxEditModalProps) {
+export function BoxEditModal({ box, allUsers, addableItems, boxUnitsByUserId, onClose }: BoxEditModalProps) {
   const router = useRouter();
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -69,6 +72,11 @@ export function BoxEditModal({ box, allUsers, addableItems, onClose }: BoxEditMo
   /** equipmentItemId -> draft qty + optional serial */
   const [addSelection, setAddSelection] = useState<Record<string, { qty: number; serial: string }>>({});
   const [addNotes, setAddNotes] = useState("");
+
+  // Hand the whole box over to another person (the name on the box changes, the contents stay).
+  const [showReassign, setShowReassign] = useState(false);
+  const [reassignSearch, setReassignSearch] = useState("");
+  const [reassignToUserId, setReassignToUserId] = useState<string | null>(null);
 
   const selectedCount = Object.keys(addSelection).length;
 
@@ -122,7 +130,17 @@ export function BoxEditModal({ box, allUsers, addableItems, onClose }: BoxEditMo
     );
   }, [transferTargets, transferSearch]);
 
+  const filteredReassignTargets = useMemo(() => {
+    const q = reassignSearch.trim().toLowerCase();
+    const list = q
+      ? transferTargets.filter((t) => t.name.toLowerCase().includes(q) || (t.personalNumber && t.personalNumber.toLowerCase().includes(q)))
+      : transferTargets;
+    // People without a box first: they are the usual choice.
+    return [...list].sort((a, b) => Number(a.id in boxUnitsByUserId) - Number(b.id in boxUnitsByUserId));
+  }, [transferTargets, reassignSearch, boxUnitsByUserId]);
+
   const openAction = (mode: ActionMode, item: BoxItemRow) => {
+    setShowReassign(false);
     setPendingAction({ mode, item, quantity: item.quantity });
     setError(null);
     setTransferSearch("");
@@ -212,10 +230,32 @@ export function BoxEditModal({ box, allUsers, addableItems, onClose }: BoxEditMo
     }
   }, [selectedCount, addSelection, addNotes, box.userId, router, onClose]);
 
+  const handleReassign = useCallback(async () => {
+    if (!reassignToUserId) return;
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const result = await reassignBoxAction(box.userId, reassignToUserId);
+      if (!result.success) {
+        setError(result.error || "אירעה שגיאה");
+      } else {
+        router.refresh();
+        onClose();
+      }
+    } catch {
+      setError("אירעה שגיאה בלתי צפויה");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [box.userId, reassignToUserId, router, onClose]);
+
+  const reassignTargetName = transferTargets.find((t) => t.id === reassignToUserId)?.name;
+
   // Escape / backdrop / X: while an action is pending, step back to the list; otherwise close.
   const handleSheetClose = () => {
     if (isSubmitting) return;
     if (pendingAction) closeAction();
+    else if (showReassign) setShowReassign(false);
     else onClose();
   };
 
@@ -274,6 +314,25 @@ export function BoxEditModal({ box, allUsers, addableItems, onClose }: BoxEditMo
         ביטול
       </button>
     </SheetActions>
+  ) : showReassign ? (
+    <SheetActions>
+      <button
+        onClick={handleReassign}
+        disabled={isSubmitting || !reassignToUserId}
+        data-testid="box-reassign-confirm"
+        className="h-12 w-full sm:w-auto sm:min-w-[160px] inline-flex items-center justify-center gap-2 rounded-2xl bg-amber-600 px-6 text-sm font-bold text-white hover:bg-amber-500 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {isSubmitting ? <LoadingSpinner size="sm" /> : "העבר את הקרטון"}
+      </button>
+      <button
+        type="button"
+        onClick={() => { setShowReassign(false); setError(null); }}
+        disabled={isSubmitting}
+        className="h-12 w-full sm:w-auto inline-flex items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-800 px-6 text-sm font-bold text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50 transition-all cursor-pointer disabled:opacity-50"
+      >
+        ביטול
+      </button>
+    </SheetActions>
   ) : showAddPanel ? (
     <SheetActions>
       <button
@@ -325,16 +384,36 @@ export function BoxEditModal({ box, allUsers, addableItems, onClose }: BoxEditMo
         </>
       }
       headerExtra={
-        addableItems.length > 0 ? (
-          <div className="mt-2">
-            <button
-              onClick={() => { setShowAddPanel((v) => !v); setPendingAction(null); setError(null); }}
-              disabled={isSubmitting}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-900/20 text-emerald-400 border border-emerald-900/40 hover:bg-emerald-900/40 transition-all cursor-pointer disabled:opacity-50"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-              {showAddPanel ? "סגור" : "הוסף פריט"}
-            </button>
+        addableItems.length > 0 || transferTargets.length > 0 ? (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {addableItems.length > 0 && (
+              <button
+                onClick={() => { setShowAddPanel((v) => !v); setShowReassign(false); setPendingAction(null); setError(null); }}
+                disabled={isSubmitting}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-900/20 text-emerald-400 border border-emerald-900/40 hover:bg-emerald-900/40 transition-all cursor-pointer disabled:opacity-50"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                {showAddPanel ? "סגור" : "הוסף פריט"}
+              </button>
+            )}
+            {transferTargets.length > 0 && (
+              <button
+                onClick={() => {
+                  setShowReassign((v) => !v);
+                  setShowAddPanel(false);
+                  setPendingAction(null);
+                  setError(null);
+                  setReassignSearch("");
+                  setReassignToUserId(null);
+                }}
+                disabled={isSubmitting}
+                data-testid="box-reassign-open"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-900/20 text-amber-400 border border-amber-900/40 hover:bg-amber-900/40 transition-all cursor-pointer disabled:opacity-50"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 3l4 4-4 4M20 7H4M8 21l-4-4 4-4M4 17h16"/></svg>
+                {showReassign ? "סגור" : "העבר קרטון לחייל אחר"}
+              </button>
+            )}
           </div>
         ) : undefined
       }
@@ -447,6 +526,54 @@ export function BoxEditModal({ box, allUsers, addableItems, onClose }: BoxEditMo
 
               {error && <div className="text-xs text-red-400 bg-red-900/10 border border-red-900/30 rounded-lg px-3 py-2">{error}</div>}
             </div>
+          </div>
+        )}
+
+        {/* Hand the whole box over to another person */}
+        {showReassign && (
+          <div className="rounded-2xl border border-amber-900/30 bg-amber-950/10 px-4 pt-4 pb-4 sm:px-5" data-testid="box-reassign-panel">
+            <h3 className="text-sm font-bold text-zinc-50">העברת הקרטון לחייל אחר</h3>
+            <p className="mt-1 mb-3 text-xs text-zinc-400 [overflow-wrap:anywhere]">
+              הקרטון וכל מה שבתוכו ({totalInBox} פריטים) יירשמו על שם החייל שתבחר. {box.userName} יישאר בלי קרטון. שום ציוד לא זז ולא משתנה במלאי.
+            </p>
+            <input
+              type="text"
+              value={reassignSearch}
+              onChange={(e) => { setReassignSearch(e.target.value); setReassignToUserId(null); }}
+              placeholder="חיפוש לפי שם או מ״א..."
+              data-testid="box-reassign-search"
+              className="h-12 sm:h-10 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-50 placeholder:text-zinc-600 outline-none focus:ring-2 focus:ring-zinc-500 mb-1"
+            />
+            <div className="max-h-48 overflow-y-auto rounded-xl border border-zinc-800 divide-y divide-zinc-800">
+              {filteredReassignTargets.length === 0 ? (
+                <div className="py-3 text-center text-xs text-zinc-500">לא נמצאו חיילים</div>
+              ) : filteredReassignTargets.map((t) => {
+                const units = boxUnitsByUserId[t.id];
+                const blocked = units !== undefined && units > 0;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    disabled={blocked || isSubmitting}
+                    onClick={() => setReassignToUserId(t.id)}
+                    data-testid="box-reassign-target"
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-right transition-colors ${blocked ? "opacity-50 cursor-not-allowed text-zinc-500" : reassignToUserId === t.id ? "bg-amber-900/30 text-amber-300 cursor-pointer" : "hover:bg-zinc-800 text-zinc-300 cursor-pointer"}`}
+                  >
+                    <div className="text-right flex-1 min-w-0">
+                      <div className="text-xs font-bold [overflow-wrap:anywhere]">{t.name}</div>
+                      {t.personalNumber && <div className="text-[10px] text-zinc-500">מ״א: {t.personalNumber}</div>}
+                    </div>
+                    <span className="flex-shrink-0 text-[10px] text-zinc-500">
+                      {units === undefined ? "אין קרטון" : units === 0 ? "קרטון ריק (יוחלף)" : `יש קרטון עם ${units} פריטים`}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            {reassignTargetName && (
+              <div className="mt-2 text-xs text-zinc-100 font-bold [overflow-wrap:anywhere]">הקרטון יירשם על שם: {reassignTargetName}</div>
+            )}
+            {error && <div className="mt-2 rounded-xl border border-red-900/40 bg-red-900/10 p-3 text-xs text-red-400">{error}</div>}
           </div>
         )}
 

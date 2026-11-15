@@ -10,6 +10,9 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 export NEXTAUTH_URL="http://localhost:3002"
+# Backups taken on the test server stay inside the test branch: never mirror them
+# to the real off-site backup store (an empty value wins over .env.local).
+export BLOB_READ_WRITE_TOKEN=""
 # The test suite sends far more requests than a person would.
 export AGENT_RATE_PER_MINUTE="${AGENT_RATE_PER_MINUTE:-500}"
 export AGENT_RATE_PER_DAY="${AGENT_RATE_PER_DAY:-100000}"
